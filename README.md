@@ -154,7 +154,7 @@ loaded on every start.
 
 ## Forge Demo (demo websites)
 
-**Forge Demo** (in the top menu) builds a one-page demo website for a local
+**Forge Demo** (in the top menu of the CRM) builds a one-page demo website for a local
 home-services business from just its name (plus trade, city and phone if you
 have them). Each demo gets:
 
@@ -175,11 +175,22 @@ its `?d=` names, so one GHL page serves every demo.
 
 **Standalone app on Cloudflare (free).** `cloudflare/forge/` is Forge Demo as its own
 small app on the Workers Free plan, with its demos in Cloudflare D1: sign-in with a team
-password, new demo, demo list, share links, GoHighLevel setup, and the public sites at
-`/s/<demo>`. Deploy with `npm run forge:deploy` (applies database migrations, then deploys).
+password, new demo, demo list, share links, GoHighLevel setup and chat widget settings.
+Claude Opus 5.5 designs each demo as a five-page website (Home, Services, About, Service
+Areas, Contact) with light and dark modes in the chosen primary colour. It builds in the
+background on a Cloudflare Queue: one job designs the look and writes the home page, then
+the four inner pages are written side by side. The new site goes live only once every page
+is written; a failed build can be retried without paying again for the pages already done.
+
+The sites are served by a second Worker, `forge-sites`, at `/<demo>/<page>` on its own
+origin, so AI-written pages can't reach the team app. Every page gets the GoHighLevel chat
+widget, recoloured to the site's primary colour (set the widget in GoHighLevel setup, or
+per demo under "More details"; `off` turns it off).
+
+Deploy with `npm run forge:deploy` (applies database migrations, then deploys both Workers).
 Secrets, set in Cloudflare → Workers → forge-demo → Settings → Variables and Secrets:
-`FORGE_PASSWORD` (sign-in) and `ANTHROPIC_API_KEY` (optional; Claude Opus 5.5 writes the copy,
-about $0.06 per site; `CLAUDE_MODEL` overrides the model).
+`FORGE_PASSWORD` (sign-in) and `ANTHROPIC_API_KEY` (without it, sites use the built-in
+template; `CLAUDE_MODEL` overrides the model).
 
 Code: `src/forge/` (schema, generator, template, storage), pages in `src/app/forge/`,
 public routes `src/app/p/[slug]` and `src/app/api/forge/[slug]`, Cloudflare app in

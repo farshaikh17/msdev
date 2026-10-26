@@ -56,6 +56,8 @@ export const Intake = z.object({
   websiteUrl: z.union([z.literal(""), z.url()]).default(""),
   /** Photo links (one per line) the site may use: the business's own work, team, premises. */
   photoUrls: z.string().trim().max(4000).default(""),
+  /** GoHighLevel chat widget for this demo (its ID, or the pasted embed code). Empty: the team default. */
+  chatWidget: z.string().trim().max(2000).default(""),
 });
 export type Intake = z.infer<typeof Intake>;
 

@@ -2,7 +2,9 @@
 import { esc } from "../../../src/forge/render";
 import type { Intake } from "../../../src/forge/schema";
 import type { Listed, Stored } from "./db";
-import { SWATCHES } from "./designer";
+import { PAGES, SWATCHES } from "./designer";
+
+const PAGE_COUNT = PAGES.length;
 
 const CSS = `
 :root{--bg:#f5f6f8;--surface:#fff;--ink:#172033;--muted:#5a6478;--line:#dde1e8;--ember:#d9601f;--ember-soft:#fbe9dd;--steel:#1d4f8c;--steel-soft:#e3ecf7;--ok:#217a4b;--ok-soft:#e1f2e8;--bad:#a32b2b;--bad-soft:#fbe4e4;--chrome:#e9ecf1;
@@ -125,6 +127,7 @@ ${a("notes", "Other facts about the business", "e.g. Family owned since 2009, ow
 ${t("websiteUrl", "Their current website (we read it for facts and photos)", "https://…", false, "url")}
 ${a("photoUrls", "Photo links (one per line)", "Links to photos of their work, team or premises, e.g. from their Google listing or Facebook")}
 ${t("logoUrl", "Logo image link", "https://…", false, "url")}${t("heroImageUrl", "Main photo link", "https://…", false, "url")}
+${t("chatWidget", "Chat widget (GoHighLevel)", "Empty: the team's widget. Or paste a widget ID / embed code, or type off")}
 </div></details>`;
 }
 
@@ -140,14 +143,20 @@ export function homePage(demos: Listed[], siteUrl: (slug: string) => string, aiO
   return page(
     "Demos",
     `<main class="main">${flash(ok, err)}
-<div><h1>New demo website</h1><p class="lead">Type in a business and Claude designs a custom website for it. It takes about 3–5 minutes and builds in the background, so you can keep working.${aiOn ? "" : " (AI is off until ANTHROPIC_API_KEY is set, so sites use the built-in template.)"}</p></div>
+<div><h1>New demo website</h1><p class="lead">Type in a business and Claude designs a custom ${PAGE_COUNT}-page website for it, with your GoHighLevel chat widget in the site's colour. It takes about 8–12 minutes and builds in the background, so you can keep working.${aiOn ? "" : " (AI is off until ANTHROPIC_API_KEY is set, so sites use the built-in template.)"}</p></div>
 <form method="post" action="/demos" class="card">${fields()}<div><button class="btn ember" type="submit" data-busy="Starting…">Build demo website</button></div></form>
 <section style="display:grid;gap:14px"><h2>All demos (${demos.length})</h2>${rows}</section></main>`,
     { nav: "new" },
   );
 }
 
-export function demoPage(d: Stored, links: { site: string; ghl: string }, _aiOn: boolean, ok?: string, err?: string): Response {
+export function demoPage(
+  d: Stored,
+  links: { site: string; ghl: string; pages: { name: string; url: string }[] },
+  progress: { done: number; total: number },
+  ok?: string,
+  err?: string,
+): Response {
   const i = d.intake;
   const link = links.ghl || links.site;
   const chat = `✅ Demo site ready: *${i.businessName}*${i.city ? ` (${i.city})` : ""}\n${link}`;
@@ -158,22 +167,25 @@ export function demoPage(d: Stored, links: { site: string; ghl: string }, _aiOn:
     i.businessName,
     `<main class="main">${flash(ok, err)}
 <div class="row" style="justify-content:space-between"><div><h1>${esc(i.businessName)}</h1>
-<p class="lead">${esc(d.content.industry)}${i.city ? ` · ${esc(i.city)}` : ""} · <span class="pill">${d.html ? "Designed by Claude" : d.writtenBy === "ai" ? "Template · copy by Claude" : "Template"}</span> · updated ${esc(d.updatedAt.slice(0, 16).replace("T", " "))} UTC</p></div>
+<p class="lead">${esc(d.content.industry)}${i.city ? ` · ${esc(i.city)}` : ""} · <span class="pill">${d.liveVersion ? `Designed by Claude · ${links.pages.length} pages` : d.html ? "Designed by Claude · 1 page" : "Template"}</span> · updated ${esc(d.updatedAt.slice(0, 16).replace("T", " "))} UTC</p></div>
 <a class="btn" href="${esc(links.site)}" target="_blank" rel="noreferrer">Open site ↗</a></div>
 ${
       d.buildStatus === "building"
-        ? `<div class="status" role="status"><span class="spin"></span><div><b>Claude is designing this site…</b><br><span class="note">Usually 3–5 minutes. This page refreshes itself.${d.html ? " The current version stays live until the new one is ready." : " Until then the link shows a quick template version."}</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
+        ? `<div class="status" role="status"><span class="spin"></span><div><b>${
+            d.buildStage === "pages" ? `Claude is writing the pages… ${progress.done} of ${progress.total} done` : "Claude is designing the look and the home page…"
+          }</b><br><span class="note">Usually 8–12 minutes in all. This page refreshes itself.${d.liveVersion || d.html ? " The current version stays live until the new one is complete." : " Until then the link shows a quick template version."}</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
         : d.buildStatus === "failed"
-          ? `<div class="status bad" role="alert"><div><b>The design build failed.</b> ${esc(d.buildError)}<br>The link still works${d.html ? " with the previous design" : " with the quick template version"}.</div><form method="post" action="/demos/${esc(d.slug)}/rebuild"><button class="btn" type="submit">Try again</button></form></div>`
+          ? `<div class="status bad" role="alert"><div><b>The design build failed.</b> ${esc(d.buildError)}<br>The link still works${d.liveVersion || d.html ? " with the previous design" : " with the quick template version"}. Trying again keeps the pages already written.</div><form method="post" action="/demos/${esc(d.slug)}/rebuild"><button class="btn" type="submit">Try again</button></form></div>`
           : ""
     }
 <section class="card"><h2>Share it</h2><div class="share">
 ${row("Website link", links.site, links.site)}
+${links.pages.length ? `<div class="row note">Pages: ${links.pages.map((p) => `<a href="${esc(p.url)}" target="_blank" rel="noreferrer">${esc(p.name)}</a>`).join(" · ")}</div>` : ""}
 ${links.ghl ? row("On your GoHighLevel page", links.ghl, links.ghl) : row("On your GoHighLevel page", "Set up your GoHighLevel page first (GoHighLevel setup, top menu).", "")}
 ${row("Google Chat message", chat, chat)}
 ${row("Sheet row (date · business · trade · city · phone · link)", sheet.replace(/\t/g, " · "), sheet)}
 </div></section>
-<iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(i.businessName)}" sandbox="allow-scripts allow-forms"></iframe>
+<iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(i.businessName)}"></iframe>
 <form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Edit &amp; redesign</h2><p class="note">Change the details (or just press the button for a fresh design). Claude rebuilds it in the background; the links stay the same.</p>${fields(i)}
 <div><button class="btn" type="submit" data-busy="Starting…"${d.buildStatus === "building" ? " disabled" : ""}>Redesign site</button></div></form>
 <form method="post" action="/demos/${esc(d.slug)}/archive"><button class="btn danger" type="submit">Archive demo (its links stop working)</button></form>
@@ -182,7 +194,7 @@ ${row("Sheet row (date · business · trade · city · phone · link)", sheet.re
   );
 }
 
-export function settingsPage(ghlPage: string, snippet: string, ok?: string, err?: string): Response {
+export function settingsPage(ghlPage: string, snippet: string, widget: string, defaultWidget: string, ok?: string, err?: string): Response {
   return page(
     "GoHighLevel setup",
     `<main class="main">${flash(ok, err)}
@@ -194,6 +206,10 @@ export function settingsPage(ghlPage: string, snippet: string, ok?: string, err?
 <pre>${esc(snippet)}</pre></section>
 <form method="post" action="/settings" class="card"><h2>2. Paste the page's address</h2>
 <label for="ghl">Published page address<input id="ghl" name="ghlPageUrl" type="url" value="${esc(ghlPage)}" placeholder="https://mianrosystems.com/demo"></label>
+<div><button class="btn" type="submit">Save</button></div></form>
+<form method="post" action="/settings/chat" class="card"><h2>Chat widget on every demo</h2>
+<p class="note" style="margin:0">Each demo site shows this GoHighLevel chat widget, recoloured to the site's primary colour. Leave empty for the Mianro default (<span class="pill">${esc(defaultWidget)}</span>), paste another widget's embed code or ID, or type <b>off</b>. A demo can also name its own widget under "More details".</p>
+<label for="cw">Widget ID or embed code<input id="cw" name="chatWidget" value="${esc(widget)}" placeholder="${esc(defaultWidget)}"></label>
 <div><button class="btn" type="submit">Save</button></div></form></main>`,
     { nav: "settings" },
   );

@@ -1,0 +1,21 @@
+{
+  // forge-sites — serves the demo websites at /<slug>/<page>, on an origin of their own so the
+  // AI-written pages (and the GoHighLevel chat widget) can never reach the team app.
+  // Same code and database as forge-demo (wrangler.jsonc); deployed by npm run forge:deploy.
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "forge-sites",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "vars": { "ROLE": "sites" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "forge-demo",
+      "database_id": "30b086b7-ae81-4fe4-aa14-45af57c4f1e3",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
