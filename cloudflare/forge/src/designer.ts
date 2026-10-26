@@ -110,12 +110,17 @@ export async function designPage(env: Env, i: Intake, site: SiteFacts | null): P
   // Streamed: a page takes minutes to write, and a silent connection that long gets cut (HTTP 524).
   // No automatic retry, so one failure never bills twice.
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 0, timeout: 12 * 60 * 1000 });
-  let res;
+  // Read the raw event stream and keep only the text: far less CPU than rebuilding the
+  // message on every event (the free plan's CPU budget matters here).
+  const parts: string[] = [];
+  let model = "";
+  let stop: string | null = null;
+  let usage: Record<string, unknown> = {};
   try {
-    res = await client.beta.messages
-      .stream({
+    const stream = await client.beta.messages.create({
       model: env.CLAUDE_MODEL || MODEL,
       max_tokens: 32000,
+      stream: true,
       system: SYSTEM,
       // Medium effort: real design judgement, without paying for maximum deliberation.
       output_config: { effort: "medium" },
@@ -123,8 +128,17 @@ export async function designPage(env: Env, i: Intake, site: SiteFacts | null): P
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       messages: [{ role: "user", content: `Design and write the website for this business.\n\n${factsBlock(i, site)}` }],
-      })
-      .finalMessage();
+    });
+    for await (const ev of stream) {
+      if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") parts.push(ev.delta.text);
+      else if (ev.type === "message_start") {
+        model = ev.message.model;
+        usage = { ...ev.message.usage };
+      } else if (ev.type === "message_delta") {
+        stop = ev.delta.stop_reason;
+        usage = { ...usage, ...ev.usage };
+      }
+    }
   } catch (e) {
     console.error("claude error", e instanceof Error ? e.message : String(e));
     if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError)
@@ -135,11 +149,10 @@ export async function designPage(env: Env, i: Intake, site: SiteFacts | null): P
     if (e instanceof Anthropic.APIError) throw new Error(`Claude returned an error (${e.status ?? "network"}). Try again.`);
     throw e;
   }
-  console.log("claude usage", JSON.stringify({ model: res.model, usage: res.usage, stop: res.stop_reason }));
-  if (res.stop_reason === "refusal") throw new Error("Claude declined to build this site. Try rewording the details.");
-  if (res.stop_reason === "max_tokens") throw new Error("The page came back incomplete (too long). Try again.");
-  const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("");
-  const html = extractHtml(text);
+  console.log("claude usage", JSON.stringify({ model, usage, stop }));
+  if (stop === "refusal") throw new Error("Claude declined to build this site. Try rewording the details.");
+  if (stop === "max_tokens") throw new Error("The page came back incomplete (too long). Try again.");
+  const html = extractHtml(parts.join(""));
   if (!html) throw new Error("Claude's reply wasn't a complete page. Try again.");
-  return { html, usage: { model: res.model, ...res.usage } };
+  return { html, usage: { model, ...usage } };
 }

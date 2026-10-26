@@ -28,11 +28,15 @@ export interface Listed {
   createdAt: string;
 }
 
+/** A build that has said "building" this long was stopped by the platform (a queue job runs at most 15 minutes). */
+const STALE_MS = 16 * 60_000;
+
 function toDemo(r: Row): Stored {
+  const stale = r.build_status === "building" && Date.now() - Date.parse(r.updated_at) > STALE_MS;
   return {
     html: r.html ?? null,
-    buildStatus: r.build_status === "building" || r.build_status === "failed" ? r.build_status : "ready",
-    buildError: r.build_error ?? "",
+    buildStatus: stale ? "failed" : r.build_status === "building" || r.build_status === "failed" ? r.build_status : "ready",
+    buildError: stale ? "The build stopped before finishing." : (r.build_error ?? ""),
     slug: r.slug,
     intake: Intake.parse(JSON.parse(r.intake)),
     content: SiteContent.parse(JSON.parse(r.content)),
@@ -67,12 +71,13 @@ export async function getDemo(env: Env, slug: string, activeOnly = true): Promis
 
 export async function listDemos(env: Env): Promise<Listed[]> {
   const { results } = await env.DB.prepare(
-    "SELECT slug, business_name, intake, content, created_at, build_status FROM demos WHERE status = 'active' ORDER BY created_at DESC LIMIT 200",
+    "SELECT slug, business_name, intake, content, created_at, updated_at, build_status FROM demos WHERE status = 'active' ORDER BY created_at DESC LIMIT 200",
   ).all<Row>();
   return results.map((r) => {
     const intake = JSON.parse(r.intake) as { city?: string };
     const content = JSON.parse(r.content) as { industry?: string };
-    return { buildStatus: r.build_status, slug: r.slug, businessName: r.business_name, industry: content.industry ?? "", city: intake.city ?? "", createdAt: r.created_at };
+    const stale = r.build_status === "building" && Date.now() - Date.parse(r.created_at) > STALE_MS && Date.now() - Date.parse(r.updated_at ?? r.created_at) > STALE_MS;
+    return { buildStatus: stale ? "failed" : r.build_status, slug: r.slug, businessName: r.business_name, industry: content.industry ?? "", city: intake.city ?? "", createdAt: r.created_at };
   });
 }
 
