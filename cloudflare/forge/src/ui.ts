@@ -143,7 +143,7 @@ export function homePage(demos: Listed[], siteUrl: (slug: string) => string, aiO
   return page(
     "Demos",
     `<main class="main">${flash(ok, err)}
-<div><h1>New demo website</h1><p class="lead">Type in a business and Claude designs a custom ${PAGE_COUNT}-page website for it, with your GoHighLevel chat widget in the site's colour. It takes about 8–12 minutes and builds in the background, so you can keep working.${aiOn ? "" : " (AI is off until ANTHROPIC_API_KEY is set, so sites use the built-in template.)"}</p></div>
+<div><h1>New demo website</h1><p class="lead">Type in a business and Claude designs a custom ${PAGE_COUNT}-page website for it, with your GoHighLevel chat widget in the site's colour. It takes about 15–20 minutes and builds in the background, so you can keep working.${aiOn ? "" : " (AI is off until ANTHROPIC_API_KEY is set, so sites use the built-in template.)"}</p></div>
 <form method="post" action="/demos" class="card">${fields()}<div><button class="btn ember" type="submit" data-busy="Starting…">Build demo website</button></div></form>
 <section style="display:grid;gap:14px"><h2>All demos (${demos.length})</h2>${rows}</section></main>`,
     { nav: "new" },
@@ -173,7 +173,7 @@ ${
       d.buildStatus === "building"
         ? `<div class="status" role="status"><span class="spin"></span><div><b>${
             d.buildStage === "pages" ? `Claude is writing the pages… ${progress.done} of ${progress.total} done` : "Claude is designing the look…"
-          }</b><br><span class="note">Usually 8–12 minutes in all. This page refreshes itself.${d.liveVersion || d.html ? " The current version stays live until the new one is complete." : " Until then the link shows a quick template version."}</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
+          }</b><br><span class="note">Usually 15–20 minutes in all. This page refreshes itself.${d.liveVersion || d.html ? " The current version stays live until the new one is complete." : " Until then the link shows a quick template version."}</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
         : d.buildStatus === "failed"
           ? `<div class="status bad" role="alert"><div><b>The design build failed.</b> ${esc(d.buildError)}<br>The link still works${d.liveVersion || d.html ? " with the previous design" : " with the quick template version"}. Trying again keeps the pages already written.</div><form method="post" action="/demos/${esc(d.slug)}/rebuild"><button class="btn" type="submit">Try again</button></form></div>`
           : ""
