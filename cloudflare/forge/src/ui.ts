@@ -1,7 +1,8 @@
 /** The Forge Demo screens: sign-in, new demo + list, demo ready, settings. Plain HTML, no framework. */
 import { esc } from "../../../src/forge/render";
-import type { Demo, Intake } from "../../../src/forge/schema";
-import type { Listed } from "./db";
+import type { Intake } from "../../../src/forge/schema";
+import type { Listed, Stored } from "./db";
+import { SWATCHES } from "./designer";
 
 const CSS = `
 :root{--bg:#f5f6f8;--surface:#fff;--ink:#172033;--muted:#5a6478;--line:#dde1e8;--ember:#d9601f;--ember-soft:#fbe9dd;--steel:#1d4f8c;--steel-soft:#e3ecf7;--ok:#217a4b;--ok-soft:#e1f2e8;--bad:#a32b2b;--bad-soft:#fbe4e4;--chrome:#e9ecf1;
@@ -48,6 +49,19 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 .pill{font:600 .72rem var(--body);letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:var(--ember-soft);color:var(--ember)}
 .login{max-width:380px;margin:12vh auto;padding-inline:16px}
 .empty{color:var(--muted);text-align:center;padding:28px}
+.look{display:grid;gap:14px}.look-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.choice{position:relative;display:inline-flex}.choice input{position:absolute;opacity:0;pointer-events:none}
+.choice span{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-weight:600;font-size:.88rem;cursor:pointer;background:var(--surface)}
+.choice input:checked+span{border-color:var(--steel);box-shadow:0 0 0 2px var(--steel-soft);color:var(--steel)}
+.choice input:focus-visible+span{outline:2px solid var(--steel)}
+.dot{width:16px;height:16px;border-radius:50%;display:inline-block;border:1px solid rgba(0,0,0,.15)}
+.dot.auto{background:conic-gradient(#e3a92b,#e2622b,#c8323c,#7652d6,#2f5fd0,#11968a,#2f8a4f,#e3a92b)}
+.status{display:flex;gap:14px;align-items:center;padding:18px;border-radius:12px;background:var(--steel-soft)}
+.status.bad{background:var(--bad-soft);color:var(--bad)}
+.spin{width:22px;height:22px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--steel);animation:sp 1s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+.tag{font:600 .72rem var(--body);padding:3px 9px;border-radius:999px;background:var(--steel-soft);color:var(--steel)}
+.tag.bad{background:var(--bad-soft);color:var(--bad)}
 `;
 
 const COPY_JS = `document.addEventListener("click",async e=>{const b=e.target.closest("[data-copy]");if(!b)return;const t=b.getAttribute("data-copy");try{await navigator.clipboard.writeText(t);b.textContent="Copied";setTimeout(()=>b.textContent="Copy",1500)}catch{prompt("Copy this:",t)}});
@@ -89,13 +103,28 @@ function fields(v?: Partial<Intake>): string {
     `<label for="f-${name}">${label}<input id="f-${name}" name="${name}" type="${type}" value="${esc((v?.[name] as string) ?? "")}" placeholder="${esc(ph)}"${required ? " required" : ""}></label>`;
   const a = (name: keyof Intake, label: string, ph: string) =>
     `<label class="full" for="f-${name}">${label}<textarea id="f-${name}" name="${name}" rows="3" placeholder="${esc(ph)}">${esc((v?.[name] as string) ?? "")}</textarea></label>`;
+  const mode = v?.mode ?? "auto";
+  const color = v?.primaryColor ?? "";
+  const custom = !!color && !SWATCHES.some((c) => c.hex.toLowerCase() === color.toLowerCase());
+  const radio = (name: string, value: string, checked: boolean, label: string) =>
+    `<label class="choice"><input type="radio" name="${name}" value="${esc(value)}"${checked ? " checked" : ""}><span>${label}</span></label>`;
+  const look = `<fieldset class="look" style="border:0;padding:0;margin:0"><legend class="note" style="font-weight:600;margin-bottom:8px">Look</legend>
+<div class="look-row">${radio("mode", "auto", mode === "auto", "✨ Let the AI choose")}${radio("mode", "dark", mode === "dark", "🌙 Dark")}${radio("mode", "light", mode === "light", "☀️ Light")}</div>
+<div class="look-row">${radio("primaryColor", "", !color, `<i class="dot auto"></i>Auto colour`)}${SWATCHES.map((c) =>
+    radio("primaryColor", c.hex, c.hex.toLowerCase() === color.toLowerCase(), `<i class="dot" style="background:${c.hex}"></i>${c.name}`),
+  ).join("")}${radio("primaryColor", "custom", custom, `<i class="dot" style="background:${custom ? esc(color) : "#fff"}"></i>Custom`)}
+<input name="customColor" type="color" value="${custom ? esc(color) : "#2f5fd0"}" aria-label="Custom colour" style="width:44px;height:36px;padding:2px"></div>
+<p class="note" style="margin:0">Every site gets a light/dark switch; this sets which one it opens in.</p></fieldset>`;
   return `<div class="grid">${t("businessName", "Business name *", "e.g. Vanguard Pipe & Water", true)}${t("industry", "Trade", "e.g. Plumbing, HVAC, Roofing")}${t("city", "City", "e.g. Myrtle Beach, SC")}${t("phone", "Phone", "e.g. (646) 594-9379")}</div>
+${look}
 <details><summary>More details (optional; the more you add, the more tailored the site)</summary><div class="grid">
 ${a("services", "Services", "Comma or line separated, e.g. Drain cleaning, Water heaters")}
 ${a("serviceAreas", "Service areas", "e.g. Myrtle Beach, Conway, Surfside Beach")}
 ${a("reviews", "Real reviews to quote", "One per paragraph, optionally ending — Name, Town. Leave empty for clearly-marked sample reviews.")}
 ${a("notes", "Other facts about the business", "e.g. Family owned since 2009, owner Matt, free estimates, 24/7")}
-${t("logoUrl", "Logo image link", "https://…", false, "url")}${t("heroImageUrl", "Hero photo link", "https://…", false, "url")}${t("primaryColor", "Brand colour", "#1673c9")}
+${t("websiteUrl", "Their current website (we read it for facts and photos)", "https://…", false, "url")}
+${a("photoUrls", "Photo links (one per line)", "Links to photos of their work, team or premises, e.g. from their Google listing or Facebook")}
+${t("logoUrl", "Logo image link", "https://…", false, "url")}${t("heroImageUrl", "Main photo link", "https://…", false, "url")}
 </div></details>`;
 }
 
@@ -104,21 +133,21 @@ export function homePage(demos: Listed[], siteUrl: (slug: string) => string, aiO
     ? `<div class="table"><table><thead><tr><th>Business</th><th>Trade</th><th>City</th><th>Made</th><th></th></tr></thead><tbody>${demos
         .map(
           (d) =>
-            `<tr><td><a href="/demos/${esc(d.slug)}">${esc(d.businessName)}</a></td><td>${esc(d.industry)}</td><td>${esc(d.city)}</td><td class="note">${esc(d.createdAt.slice(0, 10))}</td><td><a href="${esc(siteUrl(d.slug))}" target="_blank" rel="noreferrer">Open ↗</a> &nbsp;<button class="btn ghost" data-copy="${esc(siteUrl(d.slug))}">Copy</button></td></tr>`,
+            `<tr><td><a href="/demos/${esc(d.slug)}">${esc(d.businessName)}</a> ${d.buildStatus === "building" ? `<span class="tag">Building…</span>` : d.buildStatus === "failed" ? `<span class="tag bad">Build failed</span>` : ""}</td><td>${esc(d.industry)}</td><td>${esc(d.city)}</td><td class="note">${esc(d.createdAt.slice(0, 10))}</td><td><a href="${esc(siteUrl(d.slug))}" target="_blank" rel="noreferrer">Open ↗</a> &nbsp;<button class="btn ghost" data-copy="${esc(siteUrl(d.slug))}">Copy</button></td></tr>`,
         )
         .join("")}</tbody></table></div>`
     : `<div class="card empty">No demos yet. Build the first one above.</div>`;
   return page(
     "Demos",
     `<main class="main">${flash(ok, err)}
-<div><h1>New demo website</h1><p class="lead">Type in a business and get a ready-to-show website in about a minute.${aiOn ? "" : " (AI copy is off until ANTHROPIC_API_KEY is set, so sites use the trade template's wording.)"}</p></div>
-<form method="post" action="/demos" class="card">${fields()}<div><button class="btn ember" type="submit" data-busy="${aiOn ? "Writing the site… up to a minute" : "Building…"}">Build demo website</button></div></form>
+<div><h1>New demo website</h1><p class="lead">Type in a business and Claude designs a custom website for it. It takes about 3–5 minutes and builds in the background, so you can keep working.${aiOn ? "" : " (AI is off until ANTHROPIC_API_KEY is set, so sites use the built-in template.)"}</p></div>
+<form method="post" action="/demos" class="card">${fields()}<div><button class="btn ember" type="submit" data-busy="Starting…">Build demo website</button></div></form>
 <section style="display:grid;gap:14px"><h2>All demos (${demos.length})</h2>${rows}</section></main>`,
     { nav: "new" },
   );
 }
 
-export function demoPage(d: Demo, links: { site: string; ghl: string }, aiOn: boolean, ok?: string, err?: string): Response {
+export function demoPage(d: Stored, links: { site: string; ghl: string }, _aiOn: boolean, ok?: string, err?: string): Response {
   const i = d.intake;
   const link = links.ghl || links.site;
   const chat = `✅ Demo site ready: *${i.businessName}*${i.city ? ` (${i.city})` : ""}\n${link}`;
@@ -129,17 +158,24 @@ export function demoPage(d: Demo, links: { site: string; ghl: string }, aiOn: bo
     i.businessName,
     `<main class="main">${flash(ok, err)}
 <div class="row" style="justify-content:space-between"><div><h1>${esc(i.businessName)}</h1>
-<p class="lead">${esc(d.content.industry)}${i.city ? ` · ${esc(i.city)}` : ""} · <span class="pill">${d.writtenBy === "ai" ? "Written by Claude" : "Template wording"}</span> · updated ${esc(d.updatedAt.slice(0, 16).replace("T", " "))} UTC</p></div>
+<p class="lead">${esc(d.content.industry)}${i.city ? ` · ${esc(i.city)}` : ""} · <span class="pill">${d.html ? "Designed by Claude" : d.writtenBy === "ai" ? "Template · copy by Claude" : "Template"}</span> · updated ${esc(d.updatedAt.slice(0, 16).replace("T", " "))} UTC</p></div>
 <a class="btn" href="${esc(links.site)}" target="_blank" rel="noreferrer">Open site ↗</a></div>
+${
+      d.buildStatus === "building"
+        ? `<div class="status" role="status"><span class="spin"></span><div><b>Claude is designing this site…</b><br><span class="note">Usually 3–5 minutes. This page refreshes itself.${d.html ? " The current version stays live until the new one is ready." : " Until then the link shows a quick template version."}</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
+        : d.buildStatus === "failed"
+          ? `<div class="status bad" role="alert"><div><b>The design build failed.</b> ${esc(d.buildError)}<br>The link still works${d.html ? " with the previous design" : " with the quick template version"}.</div><form method="post" action="/demos/${esc(d.slug)}/rebuild"><button class="btn" type="submit">Try again</button></form></div>`
+          : ""
+    }
 <section class="card"><h2>Share it</h2><div class="share">
 ${row("Website link", links.site, links.site)}
 ${links.ghl ? row("On your GoHighLevel page", links.ghl, links.ghl) : row("On your GoHighLevel page", "Set up your GoHighLevel page first (GoHighLevel setup, top menu).", "")}
 ${row("Google Chat message", chat, chat)}
 ${row("Sheet row (date · business · trade · city · phone · link)", sheet.replace(/\t/g, " · "), sheet)}
 </div></section>
-<iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(i.businessName)}"></iframe>
-<form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Edit &amp; rewrite</h2><p class="note">Change the details and rebuild the site. The links stay the same.</p>${fields(i)}
-<div><button class="btn" type="submit" data-busy="${aiOn ? "Rewriting… up to a minute" : "Rebuilding…"}">Rewrite site</button></div></form>
+<iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(i.businessName)}" sandbox="allow-scripts allow-forms"></iframe>
+<form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Edit &amp; redesign</h2><p class="note">Change the details (or just press the button for a fresh design). Claude rebuilds it in the background; the links stay the same.</p>${fields(i)}
+<div><button class="btn" type="submit" data-busy="Starting…"${d.buildStatus === "building" ? " disabled" : ""}>Redesign site</button></div></form>
 <form method="post" action="/demos/${esc(d.slug)}/archive"><button class="btn danger" type="submit">Archive demo (its links stop working)</button></form>
 </main>`,
     { nav: "new" },

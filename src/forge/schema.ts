@@ -50,6 +50,12 @@ export const Intake = z.object({
   logoUrl: z.union([z.literal(""), z.url()]).default(""),
   heroImageUrl: z.union([z.literal(""), z.url()]).default(""),
   primaryColor: z.union([z.literal(""), hex]).default(""),
+  /** Light or dark as the site's default look ("auto": the AI picks what suits the business). Every site can still switch. */
+  mode: z.enum(["auto", "light", "dark"]).default("auto"),
+  /** The business's current website, read for facts and photos. */
+  websiteUrl: z.union([z.literal(""), z.url()]).default(""),
+  /** Photo links (one per line) the site may use: the business's own work, team, premises. */
+  photoUrls: z.string().trim().max(4000).default(""),
 });
 export type Intake = z.infer<typeof Intake>;
 

@@ -1,7 +1,7 @@
 {
   // Forge Demo — the whole app on the Cloudflare Workers Free plan.
   // Deploy:  npm run forge:deploy        (applies database migrations, then deploys)
-  // Secrets: FORGE_PASSWORD (sign-in), ANTHROPIC_API_KEY (optional, AI copy by Claude Opus 5.5)
+  // Secrets: FORGE_PASSWORD (sign-in), ANTHROPIC_API_KEY (Claude Opus 5.5 designs each page)
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "forge-demo",
   "main": "src/index.ts",
@@ -9,6 +9,12 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "observability": { "enabled": true },
+  // Background page builds: the app queues a job, the same Worker consumes it
+  // (a consumer may run up to 15 minutes; one try only, so a failure never bills twice).
+  "queues": {
+    "producers": [{ "binding": "BUILDS", "queue": "forge-builds" }],
+    "consumers": [{ "queue": "forge-builds", "max_batch_size": 1, "max_retries": 0 }]
+  },
   "d1_databases": [
     {
       "binding": "DB",

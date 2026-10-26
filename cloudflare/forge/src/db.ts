@@ -3,6 +3,9 @@ import { Intake, SiteContent, type Demo } from "../../../src/forge/schema";
 import type { Env } from "./env";
 
 interface Row {
+  html: string | null;
+  build_status: string;
+  build_error: string | null;
   slug: string;
   business_name: string;
   intake: string;
@@ -13,7 +16,11 @@ interface Row {
   updated_at: string;
 }
 
+/** A demo plus its AI-built page (html null: use the built-in template). */
+export type Stored = Demo & { html: string | null; buildStatus: "building" | "ready" | "failed"; buildError: string };
+
 export interface Listed {
+  buildStatus: string;
   slug: string;
   businessName: string;
   industry: string;
@@ -21,8 +28,11 @@ export interface Listed {
   createdAt: string;
 }
 
-function toDemo(r: Row): Demo {
+function toDemo(r: Row): Stored {
   return {
+    html: r.html ?? null,
+    buildStatus: r.build_status === "building" || r.build_status === "failed" ? r.build_status : "ready",
+    buildError: r.build_error ?? "",
     slug: r.slug,
     intake: Intake.parse(JSON.parse(r.intake)),
     content: SiteContent.parse(JSON.parse(r.content)),
@@ -47,7 +57,7 @@ export function makeSlug(name: string): string {
 
 export const SLUG = /^[a-z0-9-]{3,64}$/;
 
-export async function getDemo(env: Env, slug: string, activeOnly = true): Promise<Demo | null> {
+export async function getDemo(env: Env, slug: string, activeOnly = true): Promise<Stored | null> {
   if (!SLUG.test(slug)) return null;
   const r = await env.DB.prepare(`SELECT * FROM demos WHERE slug = ?${activeOnly ? " AND status = 'active'" : ""}`)
     .bind(slug)
@@ -57,12 +67,12 @@ export async function getDemo(env: Env, slug: string, activeOnly = true): Promis
 
 export async function listDemos(env: Env): Promise<Listed[]> {
   const { results } = await env.DB.prepare(
-    "SELECT slug, business_name, intake, content, created_at FROM demos WHERE status = 'active' ORDER BY created_at DESC LIMIT 200",
+    "SELECT slug, business_name, intake, content, created_at, build_status FROM demos WHERE status = 'active' ORDER BY created_at DESC LIMIT 200",
   ).all<Row>();
   return results.map((r) => {
     const intake = JSON.parse(r.intake) as { city?: string };
     const content = JSON.parse(r.content) as { industry?: string };
-    return { slug: r.slug, businessName: r.business_name, industry: content.industry ?? "", city: intake.city ?? "", createdAt: r.created_at };
+    return { buildStatus: r.build_status, slug: r.slug, businessName: r.business_name, industry: content.industry ?? "", city: intake.city ?? "", createdAt: r.created_at };
   });
 }
 
@@ -74,6 +84,25 @@ export async function saveDemo(env: Env, d: Demo): Promise<void> {
        content = excluded.content, written_by = excluded.written_by, updated_at = excluded.updated_at`,
   )
     .bind(d.slug, d.intake.businessName, JSON.stringify(d.intake), JSON.stringify(d.content), d.writtenBy, d.createdAt, d.updatedAt)
+    .run();
+}
+
+/** Queue a fresh AI build (the old page, if any, stays live until the new one is ready). */
+export async function markBuilding(env: Env, slug: string): Promise<void> {
+  await env.DB.prepare("UPDATE demos SET build_status = 'building', build_error = NULL, updated_at = ? WHERE slug = ?")
+    .bind(new Date().toISOString(), slug)
+    .run();
+}
+
+export async function saveBuilt(env: Env, slug: string, html: string, usage: unknown): Promise<void> {
+  await env.DB.prepare("UPDATE demos SET html = ?, build_status = 'ready', build_error = NULL, build_usage = ?, updated_at = ? WHERE slug = ?")
+    .bind(html, JSON.stringify(usage), new Date().toISOString(), slug)
+    .run();
+}
+
+export async function saveFailed(env: Env, slug: string, error: string): Promise<void> {
+  await env.DB.prepare("UPDATE demos SET build_status = 'failed', build_error = ?, updated_at = ? WHERE slug = ?")
+    .bind(error.slice(0, 500), new Date().toISOString(), slug)
     .run();
 }
 
