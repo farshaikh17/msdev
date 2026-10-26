@@ -29,7 +29,7 @@ export interface D1PreparedStatement {
 export interface D1Database { prepare(sql: string): D1PreparedStatement }
 export interface Ctx { waitUntil(p: Promise<unknown>): void }
 
-/** "kit": design the site and write the home page, then queue one "page" job per inner page. */
+/** "kit": design the site (CSS, header, footer, script), then queue one "page" job per page. */
 export type BuildJob = { slug: string; version: string; stage: "kit" } | { slug: string; version: string; stage: "page"; path: string };
 export interface Queue<T> { send(body: T, opts?: { delaySeconds?: number }): Promise<void> }
 export interface Message<T> { body: T; attempts: number; ack(): void; retry(opts?: { delaySeconds?: number }): void }

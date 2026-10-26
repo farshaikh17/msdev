@@ -8,8 +8,8 @@
  *   Team:   /, /demos/<slug>, /settings (signed in with the team password)
  *   Public: GET /s/<slug>[/<page>]  redirects to forge-sites (served here, sandboxed, when SITES_ORIGIN is unset)
  *           GET /api/s/<slug>       template sites as JSON (older GoHighLevel loader)
- *   Queue:  forge-builds — a "kit" job designs the site and writes the home page,
- *           then one "page" job per inner page (each up to 15 min).
+ *   Queue:  forge-builds — a "kit" job designs the site (CSS, header, footer, script),
+ *           then one "page" job per page (each up to 15 min).
  * forge-sites (ROLE=sites, its own origin)
  *   Public: GET /<slug>[/<page>]    the demo website, with the GoHighLevel chat widget
  */
@@ -35,7 +35,7 @@ import {
   setSetting,
   touchBuild,
 } from "./db";
-import { designInnerPage, designKit, factsBlock, PAGES, TryLater } from "./designer";
+import { designKit, designSitePage, factsBlock, PAGES, TryLater } from "./designer";
 import type { BuildJob, Ctx, Env, MessageBatch } from "./env";
 import { readWebsite } from "./scrape";
 import { assemble, chatWidget, DEFAULT_WIDGET_ID, finish, widgetId } from "./site";
@@ -182,20 +182,19 @@ async function build(env: Env, job: BuildJob, attempts: number): Promise<"done" 
   try {
     if (job.stage === "kit") {
       const site = demo.intake.websiteUrl ? await readWebsite(demo.intake.websiteUrl) : null;
-      const { kit, home, usage } = await designKit(env, factsBlock(demo.intake, site, slug));
+      const { kit, usage } = await designKit(env, factsBlock(demo.intake, site, slug));
       await saveKit(env, slug, version, kit, usage);
-      await savePage(env, slug, version, "/", home, null);
       await touchBuild(env, slug, version, "pages");
-      // The inner pages are written side by side (the queue runs a few jobs at once).
-      for (const p of PAGES.slice(1)) await env.BUILDS.send({ slug, version, stage: "page", path: p.path });
+      // The pages are written side by side (the queue runs a few jobs at once).
+      for (const p of PAGES) await env.BUILDS.send({ slug, version, stage: "page", path: p.path });
       return "done";
     }
     const spec = PAGES.find((p) => p.path === job.path);
     if (!spec) return "done";
     if (!(await pagesDone(env, slug, version)).includes(spec.path)) {
-      const [kit, home] = await Promise.all([getKit(env, slug, version), getPage(env, slug, version, "/")]);
-      if (!kit || !home) throw new Error("The site's design went missing. Press Redesign to start again.");
-      const { page, usage } = await designInnerPage(env, kit, home, spec);
+      const kit = await getKit(env, slug, version);
+      if (!kit) throw new Error("The site's design went missing. Press Redesign to start again.");
+      const { page, usage } = await designSitePage(env, kit, spec);
       await savePage(env, slug, version, spec.path, page, usage);
       await touchBuild(env, slug, version, "pages");
     }

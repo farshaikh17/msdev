@@ -178,8 +178,8 @@ small app on the Workers Free plan, with its demos in Cloudflare D1: sign-in wit
 password, new demo, demo list, share links, GoHighLevel setup and chat widget settings.
 Claude Opus 5.5 designs each demo as a five-page website (Home, Services, About, Service
 Areas, Contact) with light and dark modes in the chosen primary colour. It builds in the
-background on a Cloudflare Queue: one job designs the look and writes the home page, then
-the four inner pages are written side by side. The new site goes live only once every page
+background on a Cloudflare Queue: one job designs the look (styles, header, footer),
+then the five pages are written side by side. The new site goes live only once every page
 is written; a failed build can be retried without paying again for the pages already done.
 
 The sites are served by a second Worker, `forge-sites`, at `/<demo>/<page>` on its own

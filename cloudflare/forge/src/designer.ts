@@ -26,7 +26,7 @@ export const SWATCHES: { name: string; hex: string }[] = [
   { name: "Graphite", hex: "#3f4756" },
 ];
 
-/** The pages every site has. Paths are what the header links to; the home page is written with the design kit. */
+/** The pages every site has. Paths are what the header links to. */
 export const PAGES: { path: string; name: string; brief: string }[] = [
   {
     path: "/",
@@ -102,7 +102,7 @@ Our system assembles each page as: <!doctype html><html data-theme="light|dark">
 ## Output format
 Reply with the parts you are asked for, each starting with a line "@@@ NAME" (exactly that, on its own line) followed by its content. Nothing before the first part, no markdown, no code fences, no commentary.`;
 
-const KIT_TASK = `Design this business's website and write its home page. Reply with these parts, in this order:
+const KIT_TASK = `Design this business's website: its design system, header and footer (the pages are written next, one at a time, from what you make here). Reply with these parts, in this order:
 
 @@@ THEME
 light or dark (the default mode)
@@ -111,24 +111,20 @@ the primary colour as #rrggbb
 @@@ FONTS
 the Google Fonts <link> tags (preconnects + one stylesheet)
 @@@ CSS
-the whole site's stylesheet (no <style> tag): tokens for both modes, base, header, footer, buttons, cards, every component the home page uses, plus ones the inner pages will need (page header band with breadcrumb, checklists, contact cards, area cards, forms, FAQ accordion, CTA band). Under about 40 KB.
+the whole site's stylesheet (no <style> tag): tokens for both modes, base, header, footer, buttons, eyebrows, and every component the pages will use — hero, page header band with breadcrumb, marquee ticker, service cards, why-us cards, process steps, reviews, area chips/cards, checklists, contact cards, forms, FAQ accordion, CTA band. Under about 40 KB.
 @@@ HEADER
 the <header> element: logo/name linking to /, nav links to every page, a phone button, the theme toggle, and the mobile menu button.
 @@@ FOOTER
 the <footer> element (and the phone-only sticky Call button, if there is a phone number).
 @@@ SCRIPT
 one small script (no <script> tag) shared by every page: theme toggle, mobile menu, form handling for every form, ticker/reveal niceties. It must not fail on pages without some elements.
-@@@ TITLE
-the home page <title>, like "Business Name | Service in City"
-@@@ DESCRIPTION
-the home page meta description
-@@@ MAIN
-the home page's <main> element. Contents: `;
+@@@ COMPONENTS
+a short reference for the page writers: each component's class names and markup pattern (a line or two each, no full examples).`;
 
-const PAGE_TASK = `Write one more page of this website, reusing the site's design system below: the same CSS classes, components, tokens and tone as the home page. Add new CSS only for components the stylesheet doesn't have yet. Reply with these parts, in this order:
+const PAGE_TASK = `Write one page of this website, using the site's design system below: its CSS classes, components and tokens. Add new CSS only for components the stylesheet doesn't have yet. Reply with these parts, in this order:
 
 @@@ TITLE
-the page <title>, like "Services | Business Name"
+the page <title>: "Business Name | Service in City" for the home page, otherwise like "Services | Business Name"
 @@@ DESCRIPTION
 the page's meta description
 @@@ CSS
@@ -196,6 +192,8 @@ export interface Kit {
   header: string;
   footer: string;
   script: string;
+  /** How to use the CSS components (for the page writers). */
+  components?: string;
   /** The facts block every page was written from. */
   brief: string;
 }
@@ -266,11 +264,11 @@ const need = (parts: Record<string, string>, names: string[]) => {
   if (missing.length) throw new Error(`Claude's reply was missing parts (${missing.join(", ").toLowerCase()}). Try again.`);
 };
 
-/** Stage 1: the design system (fonts, CSS, header, footer, script) and the home page. */
-export async function designKit(env: Env, brief: string): Promise<{ kit: Kit; home: PageDraft; usage: unknown }> {
-  const { text, usage } = await ask(env, `${KIT_TASK}${PAGES[0].brief}\n\n## The business\n${brief}`, 48000);
+/** Stage 1: the design system (fonts, CSS, header, footer, script). */
+export async function designKit(env: Env, brief: string): Promise<{ kit: Kit; usage: unknown }> {
+  const { text, usage } = await ask(env, `${KIT_TASK}\n\n## The business\n${brief}`, 64000);
   const p = parseParts(text);
-  need(p, ["CSS", "HEADER", "FOOTER", "MAIN"]);
+  need(p, ["CSS", "HEADER", "FOOTER"]);
   const accent = /^#[0-9a-f]{6}$/i.test(p.ACCENT ?? "") ? p.ACCENT : "";
   return {
     kit: {
@@ -281,15 +279,15 @@ export async function designKit(env: Env, brief: string): Promise<{ kit: Kit; ho
       header: p.HEADER,
       footer: p.FOOTER,
       script: (p.SCRIPT ?? "").replace(/<\/?script[^>]*>/gi, ""),
+      components: p.COMPONENTS ?? "",
       brief,
     },
-    home: { title: p.TITLE ?? "", description: p.DESCRIPTION ?? "", css: "", body: p.MAIN },
     usage,
   };
 }
 
-/** Stage 2: one inner page, written against the kit and the home page so it matches. */
-export async function designInnerPage(env: Env, kit: Kit, home: PageDraft, page: (typeof PAGES)[number]): Promise<{ page: PageDraft; usage: unknown }> {
+/** Stage 2: one page, written against the kit so every page matches. */
+export async function designSitePage(env: Env, kit: Kit, page: (typeof PAGES)[number]): Promise<{ page: PageDraft; usage: unknown }> {
   const user = `${PAGE_TASK}
 
 ## This page: ${page.name} (${page.path})
@@ -309,9 +307,9 @@ ${kit.header}
 Footer (already on every page):
 ${kit.footer}
 
-Home page <main>, for the visual language and components (don't repeat its sections word for word):
-${home.body}`;
-  const { text, usage } = await ask(env, user, 24000);
+Components:
+${kit.components ?? ""}`;
+  const { text, usage } = await ask(env, user, 40000);
   const p = parseParts(text);
   need(p, ["MAIN"]);
   return { page: { title: p.TITLE ?? page.name, description: p.DESCRIPTION ?? "", css: (p.CSS ?? "").replace(/<\/?style[^>]*>/gi, ""), body: p.MAIN }, usage };

@@ -172,7 +172,7 @@ export function demoPage(
 ${
       d.buildStatus === "building"
         ? `<div class="status" role="status"><span class="spin"></span><div><b>${
-            d.buildStage === "pages" ? `Claude is writing the pages… ${progress.done} of ${progress.total} done` : "Claude is designing the look and the home page…"
+            d.buildStage === "pages" ? `Claude is writing the pages… ${progress.done} of ${progress.total} done` : "Claude is designing the look…"
           }</b><br><span class="note">Usually 8–12 minutes in all. This page refreshes itself.${d.liveVersion || d.html ? " The current version stays live until the new one is complete." : " Until then the link shows a quick template version."}</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
         : d.buildStatus === "failed"
           ? `<div class="status bad" role="alert"><div><b>The design build failed.</b> ${esc(d.buildError)}<br>The link still works${d.liveVersion || d.html ? " with the previous design" : " with the quick template version"}. Trying again keeps the pages already written.</div><form method="post" action="/demos/${esc(d.slug)}/rebuild"><button class="btn" type="submit">Try again</button></form></div>`
