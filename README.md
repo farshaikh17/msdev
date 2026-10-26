@@ -178,7 +178,8 @@ small app on the Workers Free plan, with its demos in Cloudflare D1: sign-in wit
 password, new demo, demo list, share links, GoHighLevel setup, and the public sites at
 `/s/<demo>`. Deploy with `npm run forge:deploy` (applies database migrations, then deploys).
 Secrets, set in Cloudflare → Workers → forge-demo → Settings → Variables and Secrets:
-`FORGE_PASSWORD` (sign-in) and `GEMINI_API_KEY` (optional, AI-written copy).
+`FORGE_PASSWORD` (sign-in) and `ANTHROPIC_API_KEY` (optional; Claude Opus 5.5 writes the copy,
+about $0.06 per site; `CLAUDE_MODEL` overrides the model).
 
 Code: `src/forge/` (schema, generator, template, storage), pages in `src/app/forge/`,
 public routes `src/app/p/[slug]` and `src/app/api/forge/[slug]`, Cloudflare app in

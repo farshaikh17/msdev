@@ -2,7 +2,7 @@
   "name": "prospect-crm",
   "version": "0.1.0",
   "private": true,
-  "description": "Lead/prospect CRM: discovery \u2192 screen \u2192 triage \u2192 verify pipeline with editable criteria, dedup, reconciliation and an append-only audit log.",
+  "description": "Lead/prospect CRM: discovery → screen → triage → verify pipeline with editable criteria, dedup, reconciliation and an append-only audit log.",
   "scripts": {
     "dev": "npm run db:migrate && next dev",
     "build": "next build",
@@ -22,6 +22,7 @@
     "node": ">=20.9"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
     "@electric-sql/pglite": "^0.5.8",
     "@google/genai": "^2.29.1",
     "drizzle-orm": "^0.45.3",

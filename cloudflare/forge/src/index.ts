@@ -12,7 +12,7 @@ import { Intake, type Demo } from "../../../src/forge/schema";
 import { checkPassword, sessionCookie, signedIn, signOutCookie } from "./auth";
 import { archiveDemo, getDemo, getSetting, listDemos, makeSlug, saveDemo, setSetting } from "./db";
 import type { Ctx, Env } from "./env";
-import { writeCopy } from "./gemini";
+import { writeCopy } from "./writer";
 import { demoPage, homePage, loginPage, settingsPage } from "./ui";
 
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, OPTIONS" };
@@ -94,7 +94,7 @@ async function handle(req: Request, env: Env, ctx: Ctx): Promise<Response> {
   if (!(await signedIn(req, env))) return path === "/login" || req.method === "GET" ? loginPage(undefined, !env.FORGE_PASSWORD) : redirect("/login");
   if (path === "/login") return redirect("/");
 
-  const aiOn = !!env.GEMINI_API_KEY;
+  const aiOn = !!env.ANTHROPIC_API_KEY;
 
   if (path === "/" && req.method === "GET") return homePage(await listDemos(env), site, aiOn, q("error"), q("ok"));
 

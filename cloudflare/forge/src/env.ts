@@ -2,9 +2,10 @@ export interface Env {
   DB: D1Database;
   /** The team password for signing in. */
   FORGE_PASSWORD?: string;
-  /** Google AI Studio key; without it, sites are drafted from the trade template. */
-  GEMINI_API_KEY?: string;
-  GEMINI_MODEL?: string;
+  /** Anthropic API key; without it, sites are drafted from the trade template. */
+  ANTHROPIC_API_KEY?: string;
+  /** Overrides the model (default claude-opus-5-5). */
+  CLAUDE_MODEL?: string;
 }
 
 // Minimal D1 types (avoids pulling in @cloudflare/workers-types).

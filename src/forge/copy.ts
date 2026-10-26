@@ -1,7 +1,7 @@
 /**
  * The words for a demo site, without any AI SDK: the no-AI draft, and the
  * prompt + JSON schema an AI model fills. Shared by the CRM (src/forge/generate.ts)
- * and the Cloudflare app (cloudflare/forge), which calls Gemini over plain HTTP.
+ * and the Cloudflare app (cloudflare/forge), which uses Claude.
  */
 import { z } from "zod";
 import { presetFor, type Preset } from "./presets";

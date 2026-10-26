@@ -111,7 +111,7 @@ export function homePage(demos: Listed[], siteUrl: (slug: string) => string, aiO
   return page(
     "Demos",
     `<main class="main">${flash(ok, err)}
-<div><h1>New demo website</h1><p class="lead">Type in a business and get a ready-to-show website in about a minute.${aiOn ? "" : " (AI copy is off until GEMINI_API_KEY is set, so sites use the trade template's wording.)"}</p></div>
+<div><h1>New demo website</h1><p class="lead">Type in a business and get a ready-to-show website in about a minute.${aiOn ? "" : " (AI copy is off until ANTHROPIC_API_KEY is set, so sites use the trade template's wording.)"}</p></div>
 <form method="post" action="/demos" class="card">${fields()}<div><button class="btn ember" type="submit" data-busy="${aiOn ? "Writing the site… up to a minute" : "Building…"}">Build demo website</button></div></form>
 <section style="display:grid;gap:14px"><h2>All demos (${demos.length})</h2>${rows}</section></main>`,
     { nav: "new" },
@@ -129,7 +129,7 @@ export function demoPage(d: Demo, links: { site: string; ghl: string }, aiOn: bo
     i.businessName,
     `<main class="main">${flash(ok, err)}
 <div class="row" style="justify-content:space-between"><div><h1>${esc(i.businessName)}</h1>
-<p class="lead">${esc(d.content.industry)}${i.city ? ` · ${esc(i.city)}` : ""} · <span class="pill">${d.writtenBy === "ai" ? "Written by Gemini" : "Template wording"}</span> · updated ${esc(d.updatedAt.slice(0, 16).replace("T", " "))} UTC</p></div>
+<p class="lead">${esc(d.content.industry)}${i.city ? ` · ${esc(i.city)}` : ""} · <span class="pill">${d.writtenBy === "ai" ? "Written by Claude" : "Template wording"}</span> · updated ${esc(d.updatedAt.slice(0, 16).replace("T", " "))} UTC</p></div>
 <a class="btn" href="${esc(links.site)}" target="_blank" rel="noreferrer">Open site ↗</a></div>
 <section class="card"><h2>Share it</h2><div class="share">
 ${row("Website link", links.site, links.site)}
