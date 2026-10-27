@@ -190,6 +190,11 @@ inner pages are written by Claude Haiku 5.5 from that design, so a site aims to 
 $1. Each demo's page in the app shows what its build actually cost. `CLAUDE_MODEL`,
 `CLAUDE_PAGE_MODEL` and `CLAUDE_EFFORT` (low / medium / high) override the defaults.
 
+**Photos.** The business's own photos (from its website or the photo links you add) come
+first. With the free `PEXELS_API_KEY` secret set (pexels.com/api), each site also gets stock
+photos matched to its niche for the hero, service and about sections; galleries and
+before/after stay labelled spaces for the business's real photos.
+
 Every form on a demo site really sends: submissions are saved and listed on the demo's page
 in the team app.
 

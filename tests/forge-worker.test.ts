@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Intake } from "@/forge/schema";
-import { costOf, CREDIT_MARKER, mapEmbed, parseParts, sitemapFor, tidyCss, type Kit } from "../cloudflare/forge/src/designer";
+import { costOf, CREDIT_MARKER, factsBlock, mapEmbed, parseParts, sitemapFor, tidyCss, type Kit } from "../cloudflare/forge/src/designer";
 import { privacyPage, termsPage } from "../cloudflare/forge/src/legal";
 import { assemble, chatWidget, DEFAULT_WIDGET_ID, formScript, widgetId } from "../cloudflare/forge/src/site";
 
@@ -24,6 +24,19 @@ describe("Forge worker — multi-page sites", () => {
   it("caps service pages at six", () => {
     const pages = sitemapFor(Intake.parse({ businessName: "Acme", services: "A1, B2, C3, D4, E5, F6, G7, H8" }));
     expect(pages.filter((p) => p.path.startsWith("/services/")).length).toBe(6);
+  });
+
+  it("uses the planned services and stock photos when the business gave none", () => {
+    const i = Intake.parse({ businessName: "Sterling Wildlife", industry: "Animal control service" });
+    const pages = sitemapFor(i, ["Raccoon Removal", "Bat Exclusion", "Snake Removal", "Attic Restoration"]);
+    expect(pages.map((p) => p.path)).toContain("/services/raccoon-removal");
+    const brief = factsBlock(i, null, "s-1a2b", { services: ["Raccoon Removal"], photoQueries: [], cost: 0 }, [
+      { url: "https://images.pexels.com/photos/1/a.jpeg", alt: "raccoon", credit: "Pexels" },
+    ]);
+    expect(brief).toContain("Raccoon Removal (typical for this niche");
+    expect(brief).toContain("Stock photos you may use");
+    expect(brief).toContain("https://images.pexels.com/photos/1/a.jpeg");
+    expect(brief).not.toContain("Typical services for this trade"); // no generic home-services hints for an unknown niche
   });
 
   it("maps the real service area", () => {

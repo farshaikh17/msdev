@@ -38,7 +38,8 @@ import {
   setSetting,
   touchBuild,
 } from "./db";
-import { designKit, designSitePage, factsBlock, Fatal, pagesOf, sitemapFor, TryLater } from "./designer";
+import { designKit, designSitePage, factsBlock, Fatal, pagesOf, planSite, sitemapFor, TryLater, type Plan } from "./designer";
+import { stockPhotos } from "./photos";
 import type { BuildJob, Ctx, Env, MessageBatch } from "./env";
 import { privacyPage, termsPage } from "./legal";
 import { readWebsite } from "./scrape";
@@ -211,10 +212,15 @@ async function build(env: Env, job: BuildJob, attempts: number): Promise<"done" 
   try {
     if (job.stage === "kit") {
       const site = demo.intake.websiteUrl ? await readWebsite(demo.intake.websiteUrl) : null;
-      const pages = sitemapFor(demo.intake);
+      // A cheap planning step picks niche-fitting services and photo searches; then the stock photos.
+      const plan: Plan | null = await planSite(env, demo.intake, site).catch((e) => (console.log("plan failed", errText(e)), null));
+      const stock = await stockPhotos(env, plan?.photoQueries ?? []);
+      const pages = sitemapFor(demo.intake, plan?.services);
       const jobs: Promise<void>[] = [];
-      const { kit, usage } = await designKit(env, factsBlock(demo.intake, site, slug), pages);
-      await saveKit(env, slug, version, kit, usage);
+      const { kit, usage } = await designKit(env, factsBlock(demo.intake, site, slug, plan, stock), pages);
+      // The planning call is counted with the design.
+      const u = usage as Record<string, unknown>;
+      await saveKit(env, slug, version, kit, { ...u, cost_usd: (Number(u.cost_usd) || 0) + (plan?.cost ?? 0) });
       await savePage(env, slug, version, "/privacy", privacyPage(demo.intake), null);
       await savePage(env, slug, version, "/terms", termsPage(demo.intake), null);
       await touchBuild(env, slug, version, "pages");

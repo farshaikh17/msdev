@@ -12,6 +12,8 @@ export interface Env {
   CLAUDE_PAGE_MODEL?: string;
   /** Overrides the design model's effort: low (default), medium or high. Higher costs more. */
   CLAUDE_EFFORT?: string;
+  /** Pexels API key (free): stock photos for businesses with few or no photos of their own. */
+  PEXELS_API_KEY?: string;
   /**
    * "sites": this Worker only serves demo websites, at /<slug>/<page> (the forge-sites Worker).
    * Its own origin keeps AI-written pages away from the team app, so they can run unsandboxed
