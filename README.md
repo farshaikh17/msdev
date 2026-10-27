@@ -185,7 +185,10 @@ The legal pages are our own draft wording, marked for the business to review. It
 the background on a Cloudflare Queue: one job designs the look (styles, header, footer), then
 the pages are written side by side, sharing a cached prompt. The new site goes live only once
 every page is written; a failed build can be retried without paying again for pages already
-done. Set `CLAUDE_PAGE_MODEL` to write the inner pages with a cheaper model.
+done. Cost: Claude Opus 5.5 (low effort) designs the look and writes the home page; the
+inner pages are written by Claude Haiku 5.5 from that design, so a site aims to cost about
+$1. Each demo's page in the app shows what its build actually cost. `CLAUDE_MODEL`,
+`CLAUDE_PAGE_MODEL` and `CLAUDE_EFFORT` (low / medium / high) override the defaults.
 
 Every form on a demo site really sends: submissions are saved and listed on the demo's page
 in the team app.
@@ -198,7 +201,7 @@ per demo under "More details"; `off` turns it off).
 Deploy with `npm run forge:deploy` (applies database migrations, then deploys both Workers).
 Secrets, set in Cloudflare → Workers → forge-demo → Settings → Variables and Secrets:
 `FORGE_PASSWORD` (sign-in) and `ANTHROPIC_API_KEY` (without it, sites use the built-in
-template; `CLAUDE_MODEL` overrides the model).
+template).
 
 Code: `src/forge/` (schema, generator, template, storage), pages in `src/app/forge/`,
 public routes `src/app/p/[slug]` and `src/app/api/forge/[slug]`, Cloudflare app in

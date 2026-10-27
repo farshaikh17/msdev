@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Intake } from "@/forge/schema";
-import { CREDIT_MARKER, mapEmbed, parseParts, sitemapFor, type Kit } from "../cloudflare/forge/src/designer";
+import { costOf, CREDIT_MARKER, mapEmbed, parseParts, sitemapFor, type Kit } from "../cloudflare/forge/src/designer";
 import { privacyPage, termsPage } from "../cloudflare/forge/src/legal";
 import { assemble, chatWidget, DEFAULT_WIDGET_ID, formScript, widgetId } from "../cloudflare/forge/src/site";
 
@@ -62,6 +62,14 @@ describe("Forge worker — multi-page sites", () => {
     const s = formScript("/acme-1a2b/_lead");
     expect(s).toContain('fetch("/acme-1a2b/_lead"');
     expect(s).toContain("stopImmediatePropagation");
+  });
+});
+
+describe("Forge worker — build cost", () => {
+  it("prices a call by model, including cached input", () => {
+    expect(costOf("claude-opus-5-5", { input_tokens: 1_000_000, output_tokens: 1_000_000 })).toBeCloseTo(24);
+    expect(costOf("claude-haiku-5-5", { input_tokens: 2_000, cache_read_input_tokens: 20_000, output_tokens: 10_000 })).toBeCloseTo(0.0054);
+    expect(costOf("some-other-model", { output_tokens: 1000 })).toBe(0);
   });
 });
 

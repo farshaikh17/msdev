@@ -166,7 +166,9 @@ export function demoPage(
     i.businessName,
     `<main class="main">${flash(ok, err)}
 <div class="row" style="justify-content:space-between"><div><h1>${esc(i.businessName)}</h1>
-<p class="lead">${esc(d.content.industry)}${i.city ? ` · ${esc(i.city)}` : ""} · <span class="pill">${d.liveVersion ? `Designed by Claude · ${links.pages.length} pages` : d.html ? "Designed by Claude · 1 page" : "Template"}</span> · updated ${esc(d.updatedAt.slice(0, 16).replace("T", " "))} UTC</p></div>
+<p class="lead">${esc(d.content.industry)}${i.city ? ` · ${esc(i.city)}` : ""} · <span class="pill">${d.liveVersion ? `Designed by Claude · ${links.pages.length} pages` : d.html ? "Designed by Claude · 1 page" : "Template"}</span> · updated ${esc(d.updatedAt.slice(0, 16).replace("T", " "))} UTC${
+      d.buildCost ? ` · built for <b>$${d.buildCost.usd.toFixed(2)}</b> (${d.buildCost.calls} Claude calls)` : ""
+    }</p></div>
 <a class="btn" href="${esc(links.site)}" target="_blank" rel="noreferrer">Open site ↗</a></div>
 ${
       d.buildStatus === "building"

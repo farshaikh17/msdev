@@ -210,15 +210,19 @@ async function build(env: Env, job: BuildJob, attempts: number): Promise<"done" 
     if (job.stage === "kit") {
       const site = demo.intake.websiteUrl ? await readWebsite(demo.intake.websiteUrl) : null;
       const pages = sitemapFor(demo.intake);
+      const jobs: Promise<void>[] = [];
       const { kit, usage } = await designKit(env, factsBlock(demo.intake, site, slug), pages);
       await saveKit(env, slug, version, kit, usage);
       await savePage(env, slug, version, "/privacy", privacyPage(demo.intake), null);
       await savePage(env, slug, version, "/terms", termsPage(demo.intake), null);
       await touchBuild(env, slug, version, "pages");
-      // The pages are written side by side (the queue runs several jobs at once). The home page
-      // starts first so the shared part of the prompt is cached before the others ask for it.
-      for (const p of pages.filter((p) => p.kind === "ai"))
-        await env.BUILDS.send({ slug, version, stage: "page", path: p.path }, p.path === "/" ? undefined : { delaySeconds: 30 });
+      // The pages are written side by side (the queue runs several jobs at once). The home page and
+      // the first inner page start at once; the other inner pages wait a little so the prompt they
+      // share is already cached when they ask for it.
+      pages
+        .filter((p) => p.kind === "ai")
+        .forEach((p, n) => jobs.push(env.BUILDS.send({ slug, version, stage: "page", path: p.path }, n <= 1 ? undefined : { delaySeconds: 30 })));
+      await Promise.all(jobs);
       return "done";
     }
     const kit = await getKit(env, slug, version);

@@ -6,10 +6,12 @@ export interface Env {
   FORGE_PASSWORD?: string;
   /** Anthropic API key; without it, sites are drafted from the trade template. */
   ANTHROPIC_API_KEY?: string;
-  /** Overrides the model (default claude-opus-5-5). */
+  /** Overrides the design model (default claude-opus-5-5). */
   CLAUDE_MODEL?: string;
-  /** Model for the inner pages only (the design kit and home page keep CLAUDE_MODEL), e.g. a cheaper one. */
+  /** Overrides the model for the inner pages (default claude-haiku-5-5; the design kit and home page use CLAUDE_MODEL). */
   CLAUDE_PAGE_MODEL?: string;
+  /** Overrides the design model's effort: low (default), medium or high. Higher costs more. */
+  CLAUDE_EFFORT?: string;
   /**
    * "sites": this Worker only serves demo websites, at /<slug>/<page> (the forge-sites Worker).
    * Its own origin keeps AI-written pages away from the team app, so they can run unsandboxed

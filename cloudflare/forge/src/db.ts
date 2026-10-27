@@ -8,6 +8,7 @@ interface Row {
   live_version: string | null;
   build_version: string | null;
   build_stage: string | null;
+  build_usage: string | null;
   build_status: string;
   build_error: string | null;
   slug: string;
@@ -31,6 +32,8 @@ export type Stored = Demo & {
   buildStage: "kit" | "pages" | null;
   buildStatus: "building" | "ready" | "failed";
   buildError: string;
+  /** What the live design cost to build (US$) and how many Claude calls it took; null before the first build. */
+  buildCost: { usd: number; calls: number } | null;
 };
 
 export interface Listed {
@@ -45,6 +48,16 @@ export interface Listed {
 /** A build that has made no progress this long was stopped by the platform (a queue job runs at most 15 minutes). */
 const STALE_MS = 16 * 60_000;
 
+function costFrom(raw: string | null): Stored["buildCost"] {
+  if (!raw) return null;
+  try {
+    const u = JSON.parse(raw) as { cost_usd?: unknown; calls?: unknown };
+    return typeof u.cost_usd === "number" ? { usd: u.cost_usd, calls: typeof u.calls === "number" ? u.calls : 0 } : null;
+  } catch {
+    return null;
+  }
+}
+
 function toDemo(r: Row): Stored {
   const stale = r.build_status === "building" && Date.now() - Date.parse(r.updated_at) > STALE_MS;
   return {
@@ -52,6 +65,7 @@ function toDemo(r: Row): Stored {
     liveVersion: r.live_version ?? null,
     buildVersion: r.build_version ?? null,
     buildStage: r.build_stage === "kit" || r.build_stage === "pages" ? r.build_stage : null,
+    buildCost: costFrom(r.build_usage),
     buildStatus: stale ? "failed" : r.build_status === "building" || r.build_status === "failed" ? r.build_status : "ready",
     buildError: stale ? "The build stopped before finishing." : (r.build_error ?? ""),
     slug: r.slug,

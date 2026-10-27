@@ -11,7 +11,25 @@ import type { Intake } from "../../../src/forge/schema";
 import type { Env } from "./env";
 import type { SiteFacts } from "./scrape";
 
+/** Designs the look and writes the home page. */
 export const MODEL = "claude-opus-5-5";
+/** Writes the other pages from the design kit: about 40x cheaper per token than Opus. */
+export const PAGE_MODEL = "claude-haiku-5-5";
+
+/** US$ per million tokens (Anthropic list prices; cache writes are 1.25x input, reads 0.1x on Haiku). */
+const PRICES: Record<string, { input: number; output: number; cacheWrite: number; cacheRead: number }> = {
+  "claude-opus-5-5": { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheWrite: 0.125, cacheRead: 0.01 },
+};
+
+/** What one call cost, from its usage (0 for a model not in the price list). */
+export function costOf(model: string, u: Record<string, unknown>): number {
+  const p = PRICES[Object.keys(PRICES).find((k) => model.startsWith(k)) ?? ""];
+  if (!p) return 0;
+  const n = (k: string) => (typeof u[k] === "number" ? (u[k] as number) : 0);
+  return (n("input_tokens") * p.input + n("output_tokens") * p.output + n("cache_creation_input_tokens") * p.cacheWrite + n("cache_read_input_tokens") * p.cacheRead) / 1e6;
+}
 
 /** Accent colours offered in the form (also used when "auto" needs a hint). */
 export const SWATCHES: { name: string; hex: string }[] = [
@@ -321,7 +339,9 @@ export class TryLater extends Error {}
 
 type Content = string | { type: "text"; text: string; cache_control?: { type: "ephemeral" } }[];
 
-async function ask(env: Env, content: Content, maxTokens: number, model: string): Promise<{ text: string; usage: Record<string, unknown> }> {
+type Effort = "low" | "medium" | "high";
+
+async function ask(env: Env, content: Content, maxTokens: number, model: string, effort: Effort): Promise<{ text: string; usage: Record<string, unknown> }> {
   if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY isn't set in Cloudflare.");
   // Streamed: a page takes minutes to write, and a silent connection that long gets cut (HTTP 524).
   // No automatic retry, so one failure never bills twice.
@@ -338,11 +358,11 @@ async function ask(env: Env, content: Content, maxTokens: number, model: string)
       max_tokens: maxTokens,
       stream: true,
       system: SYSTEM,
-      // Medium effort: real design judgement, without paying for maximum deliberation.
-      output_config: { effort: "medium" },
+      // Effort sets how much the model thinks before writing; thinking is billed as output.
+      output_config: { effort },
       // If the model declines (safety), the API re-runs the request on a suitable fallback model.
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
+      // Haiku has no server-side fallback.
+      ...(model.startsWith("claude-haiku") ? {} : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }),
       messages: [{ role: "user", content }],
     });
     for await (const ev of stream) {
@@ -371,11 +391,15 @@ async function ask(env: Env, content: Content, maxTokens: number, model: string)
     if (e instanceof Anthropic.APIError) throw new Error(`Claude returned an error (${e.status ?? "network"}). Try again.`);
     throw e;
   }
-  console.log("claude usage", JSON.stringify({ model: served, usage, stop }));
+  const cost = costOf(served || model, usage);
+  console.log("claude usage", JSON.stringify({ model: served, usage, stop, cost }));
   if (stop === "refusal") throw new Error("Claude declined to build this site. Try rewording the details.");
   if (stop === "max_tokens") throw new Error("A page came back incomplete (too long). Try again.");
-  return { text: parts.join(""), usage: { model: served, ...usage } };
+  return { text: parts.join(""), usage: { model: served, ...usage, cost_usd: cost } };
 }
+
+/** CLAUDE_EFFORT overrides the design model's effort (low, medium or high). */
+const effortOf = (env: Env, fallback: Effort): Effort => (env.CLAUDE_EFFORT === "medium" || env.CLAUDE_EFFORT === "high" || env.CLAUDE_EFFORT === "low" ? env.CLAUDE_EFFORT : fallback);
 
 const need = (parts: Record<string, string>, names: string[]) => {
   const missing = names.filter((n) => !parts[n]);
@@ -384,7 +408,8 @@ const need = (parts: Record<string, string>, names: string[]) => {
 
 /** Stage 1: the design system (fonts, CSS, header, footer, script) for the given pages. */
 export async function designKit(env: Env, brief: string, pages: PageSpec[]): Promise<{ kit: Kit; usage: unknown }> {
-  const { text, usage } = await ask(env, `${kitTask(pages)}\n\n## The business\n${brief}`, 64000, env.CLAUDE_MODEL || MODEL);
+  // Low effort: the brief already makes the design decisions explicit, and thinking is the costliest part.
+  const { text, usage } = await ask(env, `${kitTask(pages)}\n\n## The business\n${brief}`, 64000, env.CLAUDE_MODEL || MODEL, effortOf(env, "low"));
   const p = parseParts(text);
   need(p, ["CSS", "HEADER", "FOOTER"]);
   // The credit must be on every page: if the marker went missing, put it at the end of the footer.
@@ -409,7 +434,7 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[]): Pro
 
 /**
  * Stage 2: one page, written against the kit so every page matches. Everything but the page's
- * own task is identical across a site's pages and cached, so later pages pay a tenth for it.
+ * own task is identical across a site's inner pages and cached, so later pages pay a tenth for it.
  */
 export async function designSitePage(env: Env, kit: Kit, page: PageSpec): Promise<{ page: PageDraft; usage: unknown }> {
   const shared = `## The business
@@ -435,15 +460,19 @@ ${kit.components ?? ""}
 ${PAGE_TASK}`;
   const task = `## Write this page: ${page.name} (${page.path})
 ${page.brief}`;
-  const model = page.path === "/" ? env.CLAUDE_MODEL || MODEL : env.CLAUDE_PAGE_MODEL || env.CLAUDE_MODEL || MODEL;
+  // The home page is the showcase, so it gets the design model; the rest follow the kit on the cheaper one.
+  const home = page.path === "/";
+  const model = home ? env.CLAUDE_MODEL || MODEL : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
   const { text, usage } = await ask(
     env,
     [
-      { type: "text", text: shared, cache_control: { type: "ephemeral" } },
+      // Cached for the inner pages, which share it; the home page is the only page on its model, so it isn't.
+      home ? { type: "text", text: shared } : { type: "text", text: shared, cache_control: { type: "ephemeral" } },
       { type: "text", text: task },
     ],
     40000,
     model,
+    home ? effortOf(env, "low") : "medium",
   );
   const p = parseParts(text);
   need(p, ["MAIN"]);
