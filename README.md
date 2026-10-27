@@ -191,9 +191,10 @@ $1. Each demo's page in the app shows what its build actually cost. `CLAUDE_MODE
 `CLAUDE_PAGE_MODEL` and `CLAUDE_EFFORT` (low / medium / high) override the defaults.
 
 **Photos.** The business's own photos (from its website or the photo links you add) come
-first. With the free `PEXELS_API_KEY` secret set (pexels.com/api), each site also gets stock
-photos matched to its niche for the hero, service and about sections; galleries and
-before/after stay labelled spaces for the business's real photos.
+first. Each site also gets six AI-generated preview photos matched to its niche (Cloudflare
+Workers AI, FLUX.2 [klein]; free up to about 20 sites a day) for the hero, service and about
+sections. They're illustrative only: galleries and before/after stay labelled spaces for the
+business's real photos.
 
 Every form on a demo site really sends: submissions are saved and listed on the demo's page
 in the team app.

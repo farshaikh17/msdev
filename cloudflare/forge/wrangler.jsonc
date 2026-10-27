@@ -11,6 +11,8 @@
   "workers_dev": true,
   "observability": { "enabled": true },
   "vars": { "SITES_ORIGIN": "https://forge-sites.dev1-024.workers.dev" },
+  // Workers AI makes the preview photos (free allocation: 10,000 neurons a day).
+  "ai": { "binding": "AI" },
   // Background builds: the app queues a job, the same Worker consumes it (each may run up to
   // 15 minutes). A few run at once so a site's inner pages are written side by side. Jobs are
   // only retried when Claude turned the request away (busy), so a failure never bills twice.

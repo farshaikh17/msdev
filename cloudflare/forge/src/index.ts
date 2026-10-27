@@ -33,13 +33,15 @@ import {
   saveDemo,
   saveFailed,
   saveKit,
+  getImage,
+  saveImage,
   saveLead,
   savePage,
   setSetting,
   touchBuild,
 } from "./db";
 import { designKit, designSitePage, factsBlock, Fatal, pagesOf, planSite, sitemapFor, TryLater, type Plan } from "./designer";
-import { stockPhotos } from "./photos";
+import { previewImages } from "./images";
 import type { BuildJob, Ctx, Env, MessageBatch } from "./env";
 import { privacyPage, termsPage } from "./legal";
 import { readWebsite } from "./scrape";
@@ -154,6 +156,18 @@ async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, sub: st
   return res;
 }
 
+/** A preview photo. Its address names the site version, so it never changes and caches for a year. */
+async function serveImage(req: Request, env: Env, ctx: Ctx, slug: string, version: string, name: string): Promise<Response> {
+  const cache = (caches as unknown as { default: Cache }).default;
+  const hit = await cache.match(req);
+  if (hit) return hit;
+  const bytes = await getImage(env, slug, version, name);
+  if (!bytes) return text("Not found", 404);
+  const res = new Response(bytes, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable" } });
+  ctx.waitUntil(cache.put(req, res.clone()));
+  return res;
+}
+
 /** A demo website's form submission. */
 async function takeLead(req: Request, env: Env, slug: string): Promise<Response> {
   const headers = { ...CORS, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" };
@@ -212,12 +226,16 @@ async function build(env: Env, job: BuildJob, attempts: number): Promise<"done" 
   try {
     if (job.stage === "kit") {
       const site = demo.intake.websiteUrl ? await readWebsite(demo.intake.websiteUrl) : null;
-      // A cheap planning step picks niche-fitting services and photo searches; then the stock photos.
+      // A cheap planning step picks niche-fitting services and describes the preview photos,
+      // which Workers AI then generates (free) and the site serves from its own address.
       const plan: Plan | null = await planSite(env, demo.intake, site).catch((e) => (console.log("plan failed", errText(e)), null));
-      const stock = await stockPhotos(env, plan?.photoQueries ?? []);
+      const images = await previewImages(env, plan?.imagePrompts ?? []);
+      await Promise.all(images.map((img) => saveImage(env, slug, version, img.name, img.description, img.bytes)));
+      const imgBase = `${env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : ""}/${slug}/_img/${version}/`;
+      const previews = images.map((img) => ({ url: imgBase + img.name, description: img.description }));
       const pages = sitemapFor(demo.intake, plan?.services);
       const jobs: Promise<void>[] = [];
-      const { kit, usage } = await designKit(env, factsBlock(demo.intake, site, slug, plan, stock), pages);
+      const { kit, usage } = await designKit(env, factsBlock(demo.intake, site, slug, plan, previews), pages);
       // The planning call is counted with the design.
       const u = usage as Record<string, unknown>;
       await saveKit(env, slug, version, kit, { ...u, cost_usd: (Number(u.cost_usd) || 0) + (plan?.cost ?? 0) });
@@ -272,6 +290,8 @@ async function handleSites(req: Request, env: Env, ctx: Ctx): Promise<Response> 
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...CORS, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" } });
   let m = path.match(/^\/([a-z0-9-]{3,64})\/_lead$/);
   if (m && req.method === "POST") return takeLead(req, env, m[1]);
+  m = path.match(/^\/([a-z0-9-]{3,64})\/_img\/([a-z0-9]{6,40})\/(photo-\d{1,2}\.jpg)$/);
+  if (m && (req.method === "GET" || req.method === "HEAD")) return serveImage(req, env, ctx, m[1], m[2], m[3]);
   m = path.match(PAGE_PATH);
   if (m && (req.method === "GET" || req.method === "HEAD")) return serveSite(req, env, ctx, m[1], m[2] ?? "", `/${m[1]}`, false);
   return text("Nothing here. Demo links look like /business-name-1a2b.", 404);

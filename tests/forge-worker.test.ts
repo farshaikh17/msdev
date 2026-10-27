@@ -26,16 +26,16 @@ describe("Forge worker — multi-page sites", () => {
     expect(pages.filter((p) => p.path.startsWith("/services/")).length).toBe(6);
   });
 
-  it("uses the planned services and stock photos when the business gave none", () => {
+  it("uses the planned services and preview photos when the business gave none", () => {
     const i = Intake.parse({ businessName: "Sterling Wildlife", industry: "Animal control service" });
     const pages = sitemapFor(i, ["Raccoon Removal", "Bat Exclusion", "Snake Removal", "Attic Restoration"]);
     expect(pages.map((p) => p.path)).toContain("/services/raccoon-removal");
-    const brief = factsBlock(i, null, "s-1a2b", { services: ["Raccoon Removal"], photoQueries: [], cost: 0 }, [
-      { url: "https://images.pexels.com/photos/1/a.jpeg", alt: "raccoon", credit: "Pexels" },
+    const brief = factsBlock(i, null, "s-1a2b", { services: ["Raccoon Removal"], imagePrompts: [], cost: 0 }, [
+      { url: "https://sites.example/s-1a2b/_img/v1/photo-1.jpg", description: "A technician inspecting an attic" },
     ]);
     expect(brief).toContain("Raccoon Removal (typical for this niche");
-    expect(brief).toContain("Stock photos you may use");
-    expect(brief).toContain("https://images.pexels.com/photos/1/a.jpeg");
+    expect(brief).toContain("Preview photos made for this site");
+    expect(brief).toContain("https://sites.example/s-1a2b/_img/v1/photo-1.jpg — A technician inspecting an attic");
     expect(brief).not.toContain("Typical services for this trade"); // no generic home-services hints for an unknown niche
   });
 

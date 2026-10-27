@@ -9,7 +9,6 @@ import { splitList, parseReviews } from "../../../src/forge/copy";
 import { GENERIC, presetFor } from "../../../src/forge/presets";
 import type { Intake } from "../../../src/forge/schema";
 import type { Env } from "./env";
-import type { StockPhoto } from "./photos";
 import type { SiteFacts } from "./scrape";
 
 /** Designs the look and writes the home page. */
@@ -175,8 +174,8 @@ export const LEGACY_PAGES: PageSpec[] = [
 export interface Plan {
   /** 4–6 services that fit the real niche (used when none were typed in). */
   services: string[];
-  /** Short stock-photo searches for this niche. */
-  photoQueries: string[];
+  /** Descriptions of the preview photos to generate for this business. */
+  imagePrompts: string[];
   /** What the planning call cost (US$). */
   cost: number;
 }
@@ -203,7 +202,7 @@ export async function planSite(env: Env, i: Intake, site: SiteFacts | null): Pro
 @@@ SERVICES
 4 to 6 services this business offers, one per line (2–4 words each, title case). Use the services given or on their website when there are any; otherwise the main services a business in this niche typically offers.
 @@@ PHOTOS
-5 short stock-photo searches (2–4 words each, one per line) for photos that would suit this business's website: the work itself, the setting, the people, the results. Concrete and visual, e.g. "raccoon in attic", "technician inspecting roof".
+6 photo descriptions for an image generator, one per line (15–30 words each): realistic scenes for this business's website. The first is a wide hero shot; the rest show the main services, the work in progress, the setting and a happy customer moment. Concrete and visual (subject, setting, light), e.g. "A wildlife technician in uniform inspecting a roof vent on a Florida home at golden hour, ladder against the wall". No text, signs or brand names in the scene.
 
 ${facts}`,
     2000,
@@ -216,8 +215,8 @@ ${facts}`,
     (s ?? "")
       .split("\n")
       .map((l) => l.replace(/^[-*\d.)\s]+/, "").trim())
-      .filter((l) => l && l.length <= 60);
-  return { services: lines(p.SERVICES).slice(0, 6), photoQueries: lines(p.PHOTOS).slice(0, 6), cost: Number(usage.cost_usd) || 0 };
+      .filter((l) => l && l.length <= 400);
+  return { services: lines(p.SERVICES).filter((l) => l.length <= 60).slice(0, 6), imagePrompts: lines(p.PHOTOS).slice(0, 6), cost: Number(usage.cost_usd) || 0 };
 }
 
 const PLAN_SYSTEM = "You plan websites for local service businesses. Follow the reply format exactly.";
@@ -236,7 +235,7 @@ Our system assembles each page as: <!doctype html><html data-theme="light|dark">
 
 ## Technical rules (must follow)
 - External resources allowed: Google Fonts (<link> to fonts.googleapis.com / fonts.gstatic.com), the image URLs you are given, and the Google map embed URL you are given (as an <iframe> with title, loading="lazy" and referrerpolicy="no-referrer-when-downgrade"). Nothing else: no frameworks, icon fonts or CDNs. Draw icons as small inline SVGs.
-- Never invent image URLs. Use only the photo links supplied (the business's own, and stock photos when given). Without photos, design with typography, colour, gradients, soft glows, inline-SVG illustrations and patterns; where a photo genuinely belongs (gallery, before/after), use a designed tile clearly labelled as a space for the business's real photos — never a bare grey box and never a fake photo.
+- Never invent image URLs. Use only the photo links supplied (the business's own, and preview photos when given). Without photos, design with typography, colour, gradients, soft glows, inline-SVG illustrations and patterns; where a photo genuinely belongs (gallery, before/after), use a designed tile clearly labelled as a space for the business's real photos — never a bare grey box and never a fake photo.
 - Light AND dark mode: define every colour as a CSS custom property on :root for the light palette and on [data-theme="dark"] for the dark palette. Both modes must be fully designed and readable. A sun/moon toggle button in the header switches modes by setting document.documentElement.dataset.theme and saving it to localStorage under the key you are given, inside try/catch (a saved choice is applied before the page renders by our own head script).
 - The accent colour is the brand's primary colour: use it for primary buttons, accent words, icons and highlights in both modes (adjust lightness slightly per mode for contrast). Choose palettes that suit the real niche; don't default to dark mode, electric blue or yellow unless asked or clearly right.
 - Every phone number is a tel: link (US numbers as +1XXXXXXXXXX). Only show an email address if one was given.
@@ -348,7 +347,13 @@ export function parseParts(text: string): Record<string, string> {
 }
 
 /** Everything Claude is told about the business (stored with the kit, so every page job sees the same facts). */
-export function factsBlock(i: Intake, site: SiteFacts | null, slug: string, plan: Plan | null = null, stock: StockPhoto[] = []): string {
+/** A preview photo already made for this site: where it's served and what it shows. */
+export interface PreviewPhoto {
+  url: string;
+  description: string;
+}
+
+export function factsBlock(i: Intake, site: SiteFacts | null, slug: string, plan: Plan | null = null, previews: PreviewPhoto[] = []): string {
   const p = presetFor(i.industry, i.businessName, i.services);
   const generic = p === GENERIC;
   const lines: string[] = [];
@@ -369,9 +374,9 @@ export function factsBlock(i: Intake, site: SiteFacts | null, slug: string, plan
       ? `The business's own photos (pick the best, skip any that look like logos or tiny graphics; use these in the gallery and anywhere showing their work):\n${[...new Set(photos)].slice(0, 20).map((u) => `- ${u}`).join("\n")}`
       : "The business's own photos: none. In the gallery and before/after, use clearly-labelled 'your photos appear here' tiles.",
   );
-  if (stock.length)
+  if (previews.length)
     lines.push(
-      `Stock photos you may use (licensed, free for commercial use; use them generously for the hero, service cards, about and section imagery, but never present them as this business's own projects, team or before/after results; give each a descriptive alt):\n${stock.map((s) => `- ${s.url} — ${s.alt}`).join("\n")}`,
+      `Preview photos made for this site (1024x768; the first is the hero shot). Use them generously: the hero, service cards and service pages, about and section imagery, with object-fit: cover. They are illustrative, so never present them as this business's own projects, team or before/after results; give each a descriptive alt:\n${previews.map((p) => `- ${p.url} — ${p.description}`).join("\n")}`,
     );
   if (i.logoUrl) lines.push(`Logo image: ${i.logoUrl}`);
   const map = mapEmbed(i);

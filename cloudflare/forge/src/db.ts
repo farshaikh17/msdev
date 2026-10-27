@@ -184,6 +184,7 @@ export async function goLive(env: Env, slug: string, version: string): Promise<v
     .run();
   await env.DB.prepare("DELETE FROM site_pages WHERE slug = ? AND version <> ?").bind(slug, version).run();
   await env.DB.prepare("DELETE FROM site_versions WHERE slug = ? AND version <> ?").bind(slug, version).run();
+  await env.DB.prepare("DELETE FROM site_images WHERE slug = ? AND version <> ?").bind(slug, version).run();
 }
 
 /** Stop a build. Only the named version: a newer build that has started since is left alone. */
@@ -225,4 +226,16 @@ export async function listLeads(env: Env, slug: string): Promise<Lead[]> {
     .bind(slug)
     .all<{ page: string; fields: string; created_at: string }>();
   return results.map((r) => ({ page: r.page, fields: JSON.parse(r.fields) as Record<string, string>, createdAt: r.created_at }));
+}
+
+export async function saveImage(env: Env, slug: string, version: string, name: string, description: string, bytes: Uint8Array): Promise<void> {
+  await env.DB.prepare("INSERT OR REPLACE INTO site_images (slug, version, name, description, data) VALUES (?, ?, ?, ?, ?)")
+    .bind(slug, version, name, description, bytes)
+    .run();
+}
+
+/** A preview photo's bytes (D1 hands blobs back as an array of numbers). */
+export async function getImage(env: Env, slug: string, version: string, name: string): Promise<Uint8Array<ArrayBuffer> | null> {
+  const r = await env.DB.prepare("SELECT data FROM site_images WHERE slug = ? AND version = ? AND name = ?").bind(slug, version, name).first<{ data: number[] | ArrayBuffer }>();
+  return r ? new Uint8Array(r.data) : null;
 }
