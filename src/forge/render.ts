@@ -221,6 +221,7 @@ export function renderSite(demo: Demo): Rendered {
     <span class="fg-logo">${i.logoUrl ? logo : `<span class="fg-mark">${esc(initials(name))}</span><span class="fg-logo-name">${esc(name)}</span>`}</span>
     <span>${esc(c.topBar.location)}${phone ? ` · <a href="${call}">${esc(phone)}</a>` : ""}</span>
     <span>© ${new Date().getFullYear()} ${esc(name)}</span>
+    <a class="fg-credit" href="https://www.mianrosystems.com/" target="_blank" rel="noopener">Made with <span class="fg-heart" aria-label="love">♥</span> by Mianro systems</a>
   </div></footer>
 
   ${phone ? `<a class="fg-callbar" href="${call}">${icon("phone", 18)} Call ${esc(phone)}</a>` : ""}
@@ -357,6 +358,7 @@ function css(primary: string, dark: string): string {
 .fg-foot{background:#05070c;color:#94a3b8;font-size:.9rem}
 .fg-foot-in{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:center;padding:30px 20px}
 .fg-foot .fg-logo-name{color:#fff}
+.fg-credit{color:inherit;text-decoration:none}.fg-credit:hover{text-decoration:underline}.fg-heart{color:#e11d48}
 .fg-callbar{display:none}
 @media (max-width:980px){.fg-links,.fg-nav-phone{display:none}.fg-grid-3,.fg-grid-4{grid-template-columns:repeat(2,1fr)}.fg-split,.fg-contact{grid-template-columns:1fr}}
 @media (max-width:640px){.fg-top-in span:not(.fg-top-hl){display:none}.fg-nav-in{min-height:64px}.fg-nav-cta .fg-btn{display:none}.fg-hero-in{padding:72px 20px 64px}.fg-sec,.fg-final{padding:68px 0}.fg-grid-2,.fg-grid-3,.fg-grid-4,.fg-pains,.fg-form{grid-template-columns:1fr}.fg-callbar{display:flex;position:fixed;left:12px;right:12px;bottom:12px;z-index:30;justify-content:center;align-items:center;gap:8px;background:var(--p);color:#fff!important;font-weight:700;padding:15px;border-radius:999px;box-shadow:0 14px 30px -10px rgba(0,0,0,.45)}.fg-foot{padding-bottom:72px}}

@@ -9,9 +9,10 @@
  *   Public: GET /s/<slug>[/<page>]  redirects to forge-sites (served here, sandboxed, when SITES_ORIGIN is unset)
  *           GET /api/s/<slug>       template sites as JSON (older GoHighLevel loader)
  *   Queue:  forge-builds — a "kit" job designs the site (CSS, header, footer, script),
- *           then one "page" job per page (each up to 15 min).
+ *           then one "page" job per page (each up to 15 min). The legal pages are our own wording.
  * forge-sites (ROLE=sites, its own origin)
  *   Public: GET /<slug>[/<page>]    the demo website, with the GoHighLevel chat widget
+ *           POST /<slug>/_lead      the site's form submissions (shown on the demo in the team app)
  */
 import { renderPage, renderSite } from "../../../src/forge/render";
 import { draftContent } from "../../../src/forge/copy";
@@ -25,18 +26,21 @@ import {
   getSetting,
   goLive,
   listDemos,
+  listLeads,
   makeSlug,
   markBuilding,
   pagesDone,
   saveDemo,
   saveFailed,
   saveKit,
+  saveLead,
   savePage,
   setSetting,
   touchBuild,
 } from "./db";
-import { designKit, designSitePage, factsBlock, PAGES, TryLater } from "./designer";
+import { designKit, designSitePage, factsBlock, pagesOf, sitemapFor, TryLater } from "./designer";
 import type { BuildJob, Ctx, Env, MessageBatch } from "./env";
+import { privacyPage, termsPage } from "./legal";
 import { readWebsite } from "./scrape";
 import { assemble, chatWidget, DEFAULT_WIDGET_ID, finish, widgetId } from "./site";
 import { demoPage, homePage, loginPage, settingsPage } from "./ui";
@@ -125,9 +129,11 @@ async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, sub: st
   let current: string | null = null;
   if (demo.liveVersion) {
     const path = sub || "/";
-    if (!PAGES.some((p) => p.path === path)) return Response.redirect(new URL(prefix, req.url).toString(), 302);
-    const [kit, page] = await Promise.all([getKit(env, slug, demo.liveVersion), getPage(env, slug, demo.liveVersion, path)]);
-    if (!kit || !page) return text("This page isn't available.", 404);
+    const kit = await getKit(env, slug, demo.liveVersion);
+    if (!kit) return text("This page isn't available.", 404);
+    if (!pagesOf(kit).some((p) => p.path === path)) return Response.redirect(new URL(prefix, req.url).toString(), 302);
+    const page = await getPage(env, slug, demo.liveVersion, path);
+    if (!page) return text("This page isn't available.", 404);
     html = assemble(kit, page, slug);
     accent = kit.accent || demo.intake.primaryColor;
     current = path;
@@ -140,9 +146,29 @@ async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, sub: st
   const widget = chatWidget(widgetId(demo.intake.chatWidget, widgetId(await getSetting(env, WIDGET_KEY), DEFAULT_WIDGET_ID)), accent);
   const headers: Record<string, string> = { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "public, max-age=30" };
   if (sandbox) headers["content-security-policy"] = SANDBOX_CSP;
-  const res = finish(new Response(html, { headers }), { prefix, current, widget });
+  const res = finish(new Response(html, { headers }), { prefix, current, widget, leadUrl: `${prefix}/_lead` });
   ctx.waitUntil(cache.put(req, res.clone()));
   return res;
+}
+
+/** A demo website's form submission. */
+async function takeLead(req: Request, env: Env, slug: string): Promise<Response> {
+  const headers = { ...CORS, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" };
+  const raw = await req.text();
+  if (raw.length > 20_000) return Response.json({ error: "Too long." }, { status: 413, headers });
+  let body: { page?: unknown; fields?: unknown };
+  try {
+    body = JSON.parse(raw) as typeof body;
+  } catch {
+    return Response.json({ error: "Bad request." }, { status: 400, headers });
+  }
+  const fields: Record<string, string> = {};
+  if (body.fields && typeof body.fields === "object")
+    for (const [k, v] of Object.entries(body.fields).slice(0, 30)) if (typeof v === "string" && v.trim()) fields[k.slice(0, 60)] = v.trim().slice(0, 2000);
+  if (!Object.keys(fields).length) return Response.json({ error: "Empty form." }, { status: 400, headers });
+  if (!(await getDemo(env, slug))) return Response.json({ error: "This demo isn't available." }, { status: 404, headers });
+  await saveLead(env, slug, typeof body.page === "string" ? body.page.slice(0, 200) : "", fields);
+  return Response.json({ ok: true }, { headers });
 }
 
 async function templateJson(env: Env, slug: string): Promise<Response> {
@@ -160,10 +186,11 @@ const newVersion = () => `${Date.now().toString(36)}${[...crypto.getRandomValues
 async function startBuild(env: Env, slug: string, resume: string | null = null): Promise<void> {
   if (!env.ANTHROPIC_API_KEY) return;
   const v = resume;
-  if (v && (await getKit(env, slug, v))) {
+  const kit = v ? await getKit(env, slug, v) : null;
+  if (v && kit) {
     const done = await pagesDone(env, slug, v);
     await markBuilding(env, slug, v, "pages");
-    const missing = PAGES.filter((p) => !done.includes(p.path));
+    const missing = pagesOf(kit).filter((p) => !done.includes(p.path));
     if (!missing.length) return goLive(env, slug, v);
     for (const p of missing) await env.BUILDS.send({ slug, version: v, stage: "page", path: p.path });
     return;
@@ -182,24 +209,29 @@ async function build(env: Env, job: BuildJob, attempts: number): Promise<"done" 
   try {
     if (job.stage === "kit") {
       const site = demo.intake.websiteUrl ? await readWebsite(demo.intake.websiteUrl) : null;
-      const { kit, usage } = await designKit(env, factsBlock(demo.intake, site, slug));
+      const pages = sitemapFor(demo.intake);
+      const { kit, usage } = await designKit(env, factsBlock(demo.intake, site, slug), pages);
       await saveKit(env, slug, version, kit, usage);
+      await savePage(env, slug, version, "/privacy", privacyPage(demo.intake), null);
+      await savePage(env, slug, version, "/terms", termsPage(demo.intake), null);
       await touchBuild(env, slug, version, "pages");
-      // The pages are written side by side (the queue runs a few jobs at once).
-      for (const p of PAGES) await env.BUILDS.send({ slug, version, stage: "page", path: p.path });
+      // The pages are written side by side (the queue runs several jobs at once). The home page
+      // starts first so the shared part of the prompt is cached before the others ask for it.
+      for (const p of pages.filter((p) => p.kind === "ai"))
+        await env.BUILDS.send({ slug, version, stage: "page", path: p.path }, p.path === "/" ? undefined : { delaySeconds: 30 });
       return "done";
     }
-    const spec = PAGES.find((p) => p.path === job.path);
+    const kit = await getKit(env, slug, version);
+    if (!kit) throw new Error("The site's design went missing. Press Redesign to start again.");
+    const spec = pagesOf(kit).find((p) => p.path === job.path);
     if (!spec) return "done";
     if (!(await pagesDone(env, slug, version)).includes(spec.path)) {
-      const kit = await getKit(env, slug, version);
-      if (!kit) throw new Error("The site's design went missing. Press Redesign to start again.");
       const { page, usage } = await designSitePage(env, kit, spec);
       await savePage(env, slug, version, spec.path, page, usage);
       await touchBuild(env, slug, version, "pages");
     }
     const done = await pagesDone(env, slug, version);
-    if (PAGES.every((p) => done.includes(p.path))) await goLive(env, slug, version);
+    if (pagesOf(kit).every((p) => done.includes(p.path))) await goLive(env, slug, version);
     return "done";
   } catch (e) {
     if (e instanceof TryLater && attempts < BUSY_TRIES) {
@@ -213,10 +245,16 @@ async function build(env: Env, job: BuildJob, attempts: number): Promise<"done" 
   }
 }
 
+/** /<slug> plus an optional page path such as /services or /services/drain-cleaning. */
+const PAGE_PATH = /^\/([a-z0-9-]{3,64})((?:\/[a-z0-9-]+){1,2})?$/;
+
 /** forge-sites: demo websites only, at /<slug>[/<page>]. */
 async function handleSites(req: Request, env: Env, ctx: Ctx): Promise<Response> {
   const path = new URL(req.url).pathname.replace(/\/+$/, "") || "/";
-  const m = path.match(/^\/([a-z0-9-]{3,64})(\/[a-z-]+)?$/);
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...CORS, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" } });
+  let m = path.match(/^\/([a-z0-9-]{3,64})\/_lead$/);
+  if (m && req.method === "POST") return takeLead(req, env, m[1]);
+  m = path.match(PAGE_PATH);
   if (m && (req.method === "GET" || req.method === "HEAD")) return serveSite(req, env, ctx, m[1], m[2] ?? "", `/${m[1]}`, false);
   return text("Nothing here. Demo links look like /business-name-1a2b.", 404);
 }
@@ -231,7 +269,9 @@ async function handle(req: Request, env: Env, ctx: Ctx): Promise<Response> {
 
   // Public demo websites.
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
-  let m = path.match(/^\/s\/([a-z0-9-]+)(\/[a-z-]+)?$/);
+  let m = path.match(/^\/s\/([a-z0-9-]+)\/_lead$/);
+  if (m && req.method === "POST") return takeLead(req, env, m[1]);
+  m = path.match(/^\/s\/([a-z0-9-]+)((?:\/[a-z0-9-]+){1,2})?$/);
   if (m && req.method === "GET") {
     if (env.SITES_ORIGIN) return Response.redirect(`${site(m[1])}${m[2] ?? ""}`, 302);
     return serveSite(req, env, ctx, m[1], m[2] ?? "", `/s/${m[1]}`, true);
@@ -274,9 +314,16 @@ async function handle(req: Request, env: Env, ctx: Ctx): Promise<Response> {
     if (!demo) return redirect(withMsg("/", "error", "That demo doesn't exist or was archived."));
     if (!action && req.method === "GET") {
       const ghl = ghlLink(await getSetting(env, GHL_KEY), slug);
-      const done = demo.buildStatus === "building" && demo.buildVersion ? (await pagesDone(env, slug, demo.buildVersion)).length : 0;
-      const pages = demo.liveVersion ? PAGES.map((p) => ({ name: p.name, url: `${site(slug)}${p.path === "/" ? "" : p.path}` })) : [];
-      return demoPage(demo, { site: site(slug), ghl, pages }, { done, total: PAGES.length }, q("ok"), q("error"));
+      const building = demo.buildStatus === "building" && demo.buildVersion ? demo.buildVersion : null;
+      const [done, buildKit, liveKit, leads] = await Promise.all([
+        building ? pagesDone(env, slug, building).then((d) => d.length) : 0,
+        building ? getKit(env, slug, building) : null,
+        demo.liveVersion ? getKit(env, slug, demo.liveVersion) : null,
+        listLeads(env, slug),
+      ]);
+      const pages = liveKit ? pagesOf(liveKit).map((p) => ({ name: p.name, url: `${site(slug)}${p.path === "/" ? "" : p.path}` })) : [];
+      const total = (buildKit ? pagesOf(buildKit) : sitemapFor(demo.intake)).length;
+      return demoPage(demo, { site: site(slug), ghl, pages }, { done, total }, leads, q("ok"), q("error"));
     }
     if ((action === "/rewrite" || action === "/rebuild") && req.method === "POST") {
       if (demo.buildStatus === "building") return redirect(withMsg(`/demos/${slug}`, "error", "A design is already being built. Wait for it to finish."));

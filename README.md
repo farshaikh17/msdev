@@ -176,11 +176,19 @@ its `?d=` names, so one GHL page serves every demo.
 **Standalone app on Cloudflare (free).** `cloudflare/forge/` is Forge Demo as its own
 small app on the Workers Free plan, with its demos in Cloudflare D1: sign-in with a team
 password, new demo, demo list, share links, GoHighLevel setup and chat widget settings.
-Claude Opus 5.5 designs each demo as a five-page website (Home, Services, About, Service
-Areas, Contact) with light and dark modes in the chosen primary colour. It builds in the
-background on a Cloudflare Queue: one job designs the look (styles, header, footer),
-then the five pages are written side by side. The new site goes live only once every page
-is written; a failed build can be retried without paying again for the pages already done.
+Claude Opus 5.5 designs each demo to the design team's website SOP: at least 15 pages
+(Home with 12+ sections and a quote form, About, Services, a page per service (4–6), Our
+Process, Our Work, Reviews, FAQs, Service Areas with a real map, Contact, Get a Quote,
+Privacy Policy and Terms), light and dark modes in the chosen primary colour, and the footer
+credit "Made with ♥ by Mianro systems" (red heart, linked to mianrosystems.com) on every page.
+The legal pages are our own draft wording, marked for the business to review. It builds in
+the background on a Cloudflare Queue: one job designs the look (styles, header, footer), then
+the pages are written side by side, sharing a cached prompt. The new site goes live only once
+every page is written; a failed build can be retried without paying again for pages already
+done. Set `CLAUDE_PAGE_MODEL` to write the inner pages with a cheaper model.
+
+Every form on a demo site really sends: submissions are saved and listed on the demo's page
+in the team app.
 
 The sites are served by a second Worker, `forge-sites`, at `/<demo>/<page>` on its own
 origin, so AI-written pages can't reach the team app. Every page gets the GoHighLevel chat

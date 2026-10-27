@@ -1,10 +1,8 @@
 /** The Forge Demo screens: sign-in, new demo + list, demo ready, settings. Plain HTML, no framework. */
 import { esc } from "../../../src/forge/render";
 import type { Intake } from "../../../src/forge/schema";
-import type { Listed, Stored } from "./db";
-import { PAGES, SWATCHES } from "./designer";
-
-const PAGE_COUNT = PAGES.length;
+import type { Lead, Listed, Stored } from "./db";
+import { SWATCHES } from "./designer";
 
 const CSS = `
 :root{--bg:#f5f6f8;--surface:#fff;--ink:#172033;--muted:#5a6478;--line:#dde1e8;--ember:#d9601f;--ember-soft:#fbe9dd;--steel:#1d4f8c;--steel-soft:#e3ecf7;--ok:#217a4b;--ok-soft:#e1f2e8;--bad:#a32b2b;--bad-soft:#fbe4e4;--chrome:#e9ecf1;
@@ -143,7 +141,7 @@ export function homePage(demos: Listed[], siteUrl: (slug: string) => string, aiO
   return page(
     "Demos",
     `<main class="main">${flash(ok, err)}
-<div><h1>New demo website</h1><p class="lead">Type in a business and Claude designs a custom ${PAGE_COUNT}-page website for it, with your GoHighLevel chat widget in the site's colour. It takes about 15–20 minutes and builds in the background, so you can keep working.${aiOn ? "" : " (AI is off until ANTHROPIC_API_KEY is set, so sites use the built-in template.)"}</p></div>
+<div><h1>New demo website</h1><p class="lead">Type in a business and Claude designs a custom website of 15+ pages for it (to the design team's SOP), with your GoHighLevel chat widget in the site's colour and working forms. It takes about 15–20 minutes and builds in the background, so you can keep working.${aiOn ? "" : " (AI is off until ANTHROPIC_API_KEY is set, so sites use the built-in template.)"}</p></div>
 <form method="post" action="/demos" class="card">${fields()}<div><button class="btn ember" type="submit" data-busy="Starting…">Build demo website</button></div></form>
 <section style="display:grid;gap:14px"><h2>All demos (${demos.length})</h2>${rows}</section></main>`,
     { nav: "new" },
@@ -154,6 +152,7 @@ export function demoPage(
   d: Stored,
   links: { site: string; ghl: string; pages: { name: string; url: string }[] },
   progress: { done: number; total: number },
+  leads: Lead[],
   ok?: string,
   err?: string,
 ): Response {
@@ -185,6 +184,20 @@ ${links.ghl ? row("On your GoHighLevel page", links.ghl, links.ghl) : row("On yo
 ${row("Google Chat message", chat, chat)}
 ${row("Sheet row (date · business · trade · city · phone · link)", sheet.replace(/\t/g, " · "), sheet)}
 </div></section>
+<section class="card"><h2>Form submissions (${leads.length}${leads.length === 50 ? "+" : ""})</h2>${
+      leads.length
+        ? `<div class="share">${leads
+            .map(
+              (l) =>
+                `<div class="share-row"><div><b>${esc(l.createdAt.slice(0, 16).replace("T", " "))} UTC · ${esc(l.page || "/")}</b><span>${esc(
+                  Object.entries(l.fields)
+                    .map(([k, v]) => `${k}: ${v}`)
+                    .join("\n"),
+                )}</span></div></div>`,
+            )
+            .join("")}</div>`
+        : `<p class="note" style="margin:0">Anything sent through the site's forms shows up here.</p>`
+    }</section>
 <iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(i.businessName)}"></iframe>
 <form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Edit &amp; redesign</h2><p class="note">Change the details (or just press the button for a fresh design). Claude rebuilds it in the background; the links stay the same.</p>${fields(i)}
 <div><button class="btn" type="submit" data-busy="Starting…"${d.buildStatus === "building" ? " disabled" : ""}>Redesign site</button></div></form>

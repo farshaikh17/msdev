@@ -16,7 +16,7 @@
   // only retried when Claude turned the request away (busy), so a failure never bills twice.
   "queues": {
     "producers": [{ "binding": "BUILDS", "queue": "forge-builds" }],
-    "consumers": [{ "queue": "forge-builds", "max_batch_size": 1, "max_retries": 4, "max_concurrency": 4 }]
+    "consumers": [{ "queue": "forge-builds", "max_batch_size": 1, "max_retries": 4, "max_concurrency": 8 }]
   },
   "d1_databases": [
     {

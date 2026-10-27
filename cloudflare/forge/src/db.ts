@@ -193,3 +193,22 @@ export async function setSetting(env: Env, key: string, value: string): Promise<
     .bind(key, value)
     .run();
 }
+
+export interface Lead {
+  page: string;
+  fields: Record<string, string>;
+  createdAt: string;
+}
+
+export async function saveLead(env: Env, slug: string, page: string, fields: Record<string, string>): Promise<void> {
+  await env.DB.prepare("INSERT INTO leads (slug, page, fields, created_at) VALUES (?, ?, ?, ?)")
+    .bind(slug, page, JSON.stringify(fields), new Date().toISOString())
+    .run();
+}
+
+export async function listLeads(env: Env, slug: string): Promise<Lead[]> {
+  const { results } = await env.DB.prepare("SELECT page, fields, created_at FROM leads WHERE slug = ? ORDER BY id DESC LIMIT 50")
+    .bind(slug)
+    .all<{ page: string; fields: string; created_at: string }>();
+  return results.map((r) => ({ page: r.page, fields: JSON.parse(r.fields) as Record<string, string>, createdAt: r.created_at }));
+}

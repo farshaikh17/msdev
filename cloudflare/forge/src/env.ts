@@ -8,6 +8,8 @@ export interface Env {
   ANTHROPIC_API_KEY?: string;
   /** Overrides the model (default claude-opus-5-5). */
   CLAUDE_MODEL?: string;
+  /** Model for the inner pages only (the design kit and home page keep CLAUDE_MODEL), e.g. a cheaper one. */
+  CLAUDE_PAGE_MODEL?: string;
   /**
    * "sites": this Worker only serves demo websites, at /<slug>/<page> (the forge-sites Worker).
    * Its own origin keeps AI-written pages away from the team app, so they can run unsandboxed
