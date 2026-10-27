@@ -4,7 +4,7 @@
  * and add the GoHighLevel chat widget in the site's primary colour.
  */
 import { esc } from "../../../src/forge/render";
-import { CREDIT, CREDIT_CSS, CREDIT_MARKER, type Kit, type PageDraft } from "./designer";
+import { CREDIT, CREDIT_CSS, CREDIT_MARKER, tidyCss, type Kit, type PageDraft } from "./designer";
 
 /** Mianro's GoHighLevel chat widget, used unless Settings or the demo names another. */
 export const DEFAULT_WIDGET_ID = "6a872a7164c286aff3546896";
@@ -42,7 +42,7 @@ export function assemble(kit: Kit, page: PageDraft, slug: string): string {
   const boot = `<script>try{var t=localStorage.getItem(${key});if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>`;
   return `<!doctype html><html lang="en" data-theme="${kit.theme}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(page.title)}</title><meta name="description" content="${esc(page.description)}"><meta name="robots" content="noindex">
-${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${page.css}` : ""}\n${CREDIT_CSS}</style></head><body>
+${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${CREDIT_CSS}</style></head><body>
 ${kit.header}
 ${page.body}
 ${kit.footer.split(CREDIT_MARKER).join(CREDIT)}

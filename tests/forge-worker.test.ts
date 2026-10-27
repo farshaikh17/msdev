@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Intake } from "@/forge/schema";
-import { costOf, CREDIT_MARKER, mapEmbed, parseParts, sitemapFor, type Kit } from "../cloudflare/forge/src/designer";
+import { costOf, CREDIT_MARKER, mapEmbed, parseParts, sitemapFor, tidyCss, type Kit } from "../cloudflare/forge/src/designer";
 import { privacyPage, termsPage } from "../cloudflare/forge/src/legal";
 import { assemble, chatWidget, DEFAULT_WIDGET_ID, formScript, widgetId } from "../cloudflare/forge/src/site";
 
@@ -62,6 +62,17 @@ describe("Forge worker — multi-page sites", () => {
     const s = formScript("/acme-1a2b/_lead");
     expect(s).toContain('fetch("/acme-1a2b/_lead"');
     expect(s).toContain("stopImmediatePropagation");
+  });
+});
+
+describe("Forge worker — page CSS", () => {
+  it("drops repeated rules and stops at a whole rule under the cap", () => {
+    const rule = "@media (max-width:360px){.a{color:red}}";
+    expect(tidyCss(`.x{a:b}\n${rule}\n${rule}\n.y{c:d}`)).toBe(`.x{a:b}\n${rule}\n.y{c:d}`);
+    const long = Array.from({ length: 2000 }, (_, n) => `.r${n}{color:red}`).join("\n");
+    const out = tidyCss(long, 1000);
+    expect(out.length).toBeLessThanOrEqual(1000);
+    expect(out.endsWith("}")).toBe(true);
   });
 });
 

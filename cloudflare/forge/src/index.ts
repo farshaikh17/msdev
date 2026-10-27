@@ -38,7 +38,7 @@ import {
   setSetting,
   touchBuild,
 } from "./db";
-import { designKit, designSitePage, factsBlock, pagesOf, sitemapFor, TryLater } from "./designer";
+import { designKit, designSitePage, factsBlock, Fatal, pagesOf, sitemapFor, TryLater } from "./designer";
 import type { BuildJob, Ctx, Env, MessageBatch } from "./env";
 import { privacyPage, termsPage } from "./legal";
 import { readWebsite } from "./scrape";
@@ -50,6 +50,8 @@ const GHL_KEY = "ghlPageUrl";
 const WIDGET_KEY = "chatWidget";
 /** How often a job retries when Claude is busy (rate limit, overload) before the build fails. */
 const BUSY_TRIES = 4;
+/** How often a page is written again after a bad reply before the build fails (a page costs about a cent). */
+const PAGE_TRIES = 3;
 /** Sites served from the app's own origin run with an opaque origin: no cookies, no access to the app. */
 const SANDBOX_CSP = "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation";
 
@@ -200,8 +202,8 @@ async function startBuild(env: Env, slug: string, resume: string | null = null):
   await env.BUILDS.send({ slug, version, stage: "kit" });
 }
 
-/** Queue consumer. Returns "retry" when Claude was busy and the job should run again in a minute. */
-async function build(env: Env, job: BuildJob, attempts: number): Promise<"done" | "retry"> {
+/** Queue consumer. Returns how many seconds to wait before running the job again, or "done". */
+async function build(env: Env, job: BuildJob, attempts: number): Promise<"done" | number> {
   const demo = await getDemo(env, job.slug);
   // Ignore jobs from a build that has since been replaced, finished or failed.
   if (!demo || demo.buildStatus !== "building" || demo.buildVersion !== job.version) return "done";
@@ -241,7 +243,13 @@ async function build(env: Env, job: BuildJob, attempts: number): Promise<"done" 
     if (e instanceof TryLater && attempts < BUSY_TRIES) {
       console.log("claude busy, retrying", slug, job.stage);
       await touchBuild(env, slug, version, job.stage === "kit" ? "kit" : "pages");
-      return "retry";
+      return 60;
+    }
+    // One bad page shouldn't stop the site: write it again (the other pages carry on meanwhile).
+    if (job.stage === "page" && !(e instanceof Fatal) && attempts < PAGE_TRIES) {
+      console.log("page failed, retrying", slug, job.path, errText(e));
+      await touchBuild(env, slug, version, "pages");
+      return 5;
     }
     console.error("build failed", slug, job.stage, errText(e));
     await saveFailed(env, slug, version, errText(e));
@@ -383,8 +391,9 @@ const worker = {
   },
   async queue(batch: MessageBatch<BuildJob>, env: Env): Promise<void> {
     for (const msg of batch.messages) {
-      if ((await build(env, msg.body, msg.attempts)) === "retry") msg.retry({ delaySeconds: 60 });
-      else msg.ack();
+      const next = await build(env, msg.body, msg.attempts);
+      if (next === "done") msg.ack();
+      else msg.retry({ delaySeconds: next });
     }
   },
 };

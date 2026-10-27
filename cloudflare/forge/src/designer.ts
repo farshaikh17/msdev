@@ -248,9 +248,35 @@ the page <title>: "Business Name | Service in City" for the home page, otherwise
 @@@ DESCRIPTION
 the page's meta description (unique to this page)
 @@@ CSS
-extra CSS for this page only (no <style> tag; leave empty if none is needed; under about 8 KB)
+extra CSS for this page only (no <style> tag; leave empty if none is needed; under about 8 KB; write each rule once — combine selectors instead of repeating rules)
 @@@ MAIN
 the page's <main> element (under about 45 KB).`;
+
+/**
+ * A page's extra CSS, without repeated rules and cut (at the end of a whole rule) to `max`
+ * characters: a model that starts repeating itself can write tens of KB of near-identical rules.
+ */
+export function tidyCss(css: string, max = 12_000): string {
+  const rules: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < css.length; i++) {
+    if (css[i] === "{") depth++;
+    else if (css[i] === "}" && depth > 0 && --depth === 0) {
+      rules.push(css.slice(start, i + 1).trim());
+      start = i + 1;
+    }
+  }
+  const seen = new Set<string>();
+  let out = "";
+  for (const r of rules) {
+    if (!r || seen.has(r)) continue;
+    seen.add(r);
+    if (out.length + r.length + 1 > max) break;
+    out += `${r}\n`;
+  }
+  return out.trim();
+}
 
 /** Split a reply into its "@@@ NAME" parts. */
 export function parseParts(text: string): Record<string, string> {
@@ -336,12 +362,15 @@ export const pagesOf = (kit: Kit | null): PageSpec[] => kit?.pages ?? LEGACY_PAG
 
 /** Claude couldn't take the request right now (rate limit, overload): the job should try again shortly. */
 export class TryLater extends Error {}
+/** Retrying won't help (bad key, no credit, declined): stop the build and show the message. */
+export class Fatal extends Error {}
 
 type Content = string | { type: "text"; text: string; cache_control?: { type: "ephemeral" } }[];
 
 type Effort = "low" | "medium" | "high";
 
-async function ask(env: Env, content: Content, maxTokens: number, model: string, effort: Effort): Promise<{ text: string; usage: Record<string, unknown> }> {
+/** `cut`: the reply hit max_tokens before it finished. */
+async function ask(env: Env, content: Content, maxTokens: number, model: string, effort: Effort): Promise<{ text: string; usage: Record<string, unknown>; cut: boolean }> {
   if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY isn't set in Cloudflare.");
   // Streamed: a page takes minutes to write, and a silent connection that long gets cut (HTTP 524).
   // No automatic retry, so one failure never bills twice.
@@ -378,7 +407,7 @@ async function ask(env: Env, content: Content, maxTokens: number, model: string,
   } catch (e) {
     console.error("claude error", e instanceof Error ? e.message : String(e));
     if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError)
-      throw new Error("Claude rejected the API key. Check ANTHROPIC_API_KEY in Cloudflare.");
+      throw new Fatal("Claude rejected the API key. Check ANTHROPIC_API_KEY in Cloudflare.");
     // Nothing is written (or billed) when a request is turned away up front, so these are safe to repeat.
     if (
       e instanceof Anthropic.RateLimitError ||
@@ -387,15 +416,14 @@ async function ask(env: Env, content: Content, maxTokens: number, model: string,
     )
       throw new TryLater("Claude is busy right now.");
     if (e instanceof Anthropic.BadRequestError && /credit|billing/i.test(e.message))
-      throw new Error("The Claude API account is out of credit. Top it up at console.anthropic.com.");
+      throw new Fatal("The Claude API account is out of credit. Top it up at console.anthropic.com.");
     if (e instanceof Anthropic.APIError) throw new Error(`Claude returned an error (${e.status ?? "network"}). Try again.`);
     throw e;
   }
   const cost = costOf(served || model, usage);
   console.log("claude usage", JSON.stringify({ model: served, usage, stop, cost }));
-  if (stop === "refusal") throw new Error("Claude declined to build this site. Try rewording the details.");
-  if (stop === "max_tokens") throw new Error("A page came back incomplete (too long). Try again.");
-  return { text: parts.join(""), usage: { model: served, ...usage, cost_usd: cost } };
+  if (stop === "refusal") throw new Fatal("Claude declined to build this site. Try rewording the details.");
+  return { text: parts.join(""), usage: { model: served, ...usage, cost_usd: cost }, cut: stop === "max_tokens" };
 }
 
 /** CLAUDE_EFFORT overrides the design model's effort (low, medium or high). */
@@ -409,7 +437,8 @@ const need = (parts: Record<string, string>, names: string[]) => {
 /** Stage 1: the design system (fonts, CSS, header, footer, script) for the given pages. */
 export async function designKit(env: Env, brief: string, pages: PageSpec[]): Promise<{ kit: Kit; usage: unknown }> {
   // Low effort: the brief already makes the design decisions explicit, and thinking is the costliest part.
-  const { text, usage } = await ask(env, `${kitTask(pages)}\n\n## The business\n${brief}`, 64000, env.CLAUDE_MODEL || MODEL, effortOf(env, "low"));
+  const { text, usage, cut } = await ask(env, `${kitTask(pages)}\n\n## The business\n${brief}`, 64000, env.CLAUDE_MODEL || MODEL, effortOf(env, "low"));
+  if (cut) throw new Error("The site's design came back incomplete (too long). Try again.");
   const p = parseParts(text);
   need(p, ["CSS", "HEADER", "FOOTER"]);
   // The credit must be on every page: if the marker went missing, put it at the end of the footer.
@@ -463,18 +492,24 @@ ${page.brief}`;
   // The home page is the showcase, so it gets the design model; the rest follow the kit on the cheaper one.
   const home = page.path === "/";
   const model = home ? env.CLAUDE_MODEL || MODEL : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
-  const { text, usage } = await ask(
+  const { text, usage, cut } = await ask(
     env,
     [
       // Cached for the inner pages, which share it; the home page is the only page on its model, so it isn't.
       home ? { type: "text", text: shared } : { type: "text", text: shared, cache_control: { type: "ephemeral" } },
       { type: "text", text: task },
     ],
-    40000,
+    // A page is 3–6k tokens plus thinking. A tighter cap on the cheaper model also stops a reply
+    // that has started repeating itself sooner.
+    home ? 40000 : 24000,
     model,
     home ? effortOf(env, "low") : "medium",
   );
   const p = parseParts(text);
+  // A reply that ran on after finishing its <main> (e.g. repeating itself) is still a whole page.
+  const end = p.MAIN?.lastIndexOf("</main>") ?? -1;
+  if (cut && end < 0) throw new Error(`The ${page.name} page came back incomplete (too long).`);
+  if (end >= 0) p.MAIN = p.MAIN.slice(0, end + "</main>".length);
   need(p, ["MAIN"]);
-  return { page: { title: p.TITLE ?? page.name, description: p.DESCRIPTION ?? "", css: (p.CSS ?? "").replace(/<\/?style[^>]*>/gi, ""), body: p.MAIN }, usage };
+  return { page: { title: p.TITLE ?? page.name, description: p.DESCRIPTION ?? "", css: tidyCss((p.CSS ?? "").replace(/<\/?style[^>]*>/gi, "")), body: p.MAIN }, usage };
 }
