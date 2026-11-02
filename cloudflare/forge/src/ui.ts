@@ -2,6 +2,7 @@
 import { esc } from "../../../src/forge/render";
 import type { Intake } from "../../../src/forge/schema";
 import type { Lead, Listed, Stored } from "./db";
+import type { LibraryEntry } from "./hero";
 import { SWATCHES } from "./designer";
 
 const CSS = `
@@ -209,11 +210,25 @@ ${row("Sheet row (date · business · trade · city · phone · link)", sheet.re
   );
 }
 
-export function settingsPage(ghlPage: string, snippet: string, widget: string, defaultWidget: string, ok?: string, err?: string): Response {
+function videoLibrary(videos: LibraryEntry[]): string {
+  const entry = (v?: LibraryEntry) => `<form method="post" action="/settings/videos" class="${v ? "share-row" : ""}" style="display:grid;gap:10px">
+${v ? `<input type="hidden" name="id" value="${v.id}">` : ""}
+<div class="grid"><label>Trade<input name="name" value="${esc(v?.name ?? "")}" placeholder="e.g. HVAC" required></label>
+<label>Matches businesses whose trade, name or services mention<input name="keywords" value="${esc(v?.keywords.join(", ") ?? "")}" placeholder="e.g. hvac, air conditioning, heating, ac repair" required></label></div>
+<label>Video links (one per line; a demo gets one of them)<textarea name="urls" rows="3" placeholder="https://assets.cdn.filesafe.space/…/media/….mp4" required>${esc(v?.urls.join("\n") ?? "")}</textarea></label>
+<div class="row"><button class="btn${v ? " ghost" : ""}" type="submit">${v ? "Save" : "Add to library"}</button>
+${v ? `${v.urls.map((u, n) => `<a href="${esc(u)}" target="_blank" rel="noreferrer">Clip ${n + 1} ↗</a>`).join(" ")}<button class="btn danger" type="submit" formaction="/settings/videos/${v.id}/delete" formnovalidate>Remove</button>` : ""}</div></form>`;
+  return `<section class="card"><h2>Hero videos</h2>
+<p class="note" style="margin:0">Each demo's home page has a moving hero. With a video here for its trade, it plays that video (muted, looping); otherwise it slowly animates the site's photos. Make 8-second clips in Google Flow, upload them to the GoHighLevel media library, and paste their links here. Changes show on matching demos within a minute; no rebuild needed.</p>
+${videos.length ? `<div class="share">${videos.map((v) => entry(v)).join("")}</div>` : `<p class="note" style="margin:0">No videos yet.</p>`}
+<h3 style="margin:8px 0 0">Add a trade</h3>${entry()}</section>`;
+}
+
+export function settingsPage(ghlPage: string, snippet: string, widget: string, defaultWidget: string, videos: LibraryEntry[], ok?: string, err?: string): Response {
   return page(
     "Settings",
     `<main class="main">${flash(ok, err)}
-<div><h1>Settings</h1><p class="lead">GoHighLevel page, chat widget and team password.</p></div>
+<div><h1>Settings</h1><p class="lead">GoHighLevel page, chat widget, hero videos and team password.</p></div>
 <div><h2>Show demos on your GoHighLevel page</h2><p class="lead">Set this up once. After that every demo also opens on your own domain at <span class="pill">your-page?d=demo-name</span>.</p></div>
 <section class="card"><h2>1. Make the page in GoHighLevel</h2>
 <ol class="note" style="margin:0;padding-left:1.2rem;display:grid;gap:6px"><li>In Mianro Systems, create a blank funnel or website page with no header or footer, e.g. <b>/demo</b>.</li>
@@ -227,6 +242,7 @@ export function settingsPage(ghlPage: string, snippet: string, widget: string, d
 <p class="note" style="margin:0">Each demo site shows this GoHighLevel chat widget, recoloured to the site's primary colour. Leave empty for the Mianro default (<span class="pill">${esc(defaultWidget)}</span>), paste another widget's embed code or ID, or type <b>off</b>. A demo can also name its own widget under "More details".</p>
 <label for="cw">Widget ID or embed code<input id="cw" name="chatWidget" value="${esc(widget)}" placeholder="${esc(defaultWidget)}"></label>
 <div><button class="btn" type="submit">Save</button></div></form>
+${videoLibrary(videos)}
 <form method="post" action="/settings/password" class="card"><h2>Team password</h2>
 <p class="note" style="margin:0">Changing it signs everyone else out; they sign in again with the new one.</p>
 <div class="grid"><label for="pw-cur">Current password<input id="pw-cur" name="current" type="password" autocomplete="current-password" required></label>

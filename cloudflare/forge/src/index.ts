@@ -33,14 +33,19 @@ import {
   saveDemo,
   saveFailed,
   saveKit,
+  deleteVideo,
   getImage,
+  imageNames,
+  listVideos,
   saveImage,
+  saveVideo,
   saveLead,
   savePage,
   setSetting,
   touchBuild,
 } from "./db";
 import { designKit, designSitePage, factsBlock, Fatal, pagesOf, planSite, sitemapFor, TryLater, type Plan } from "./designer";
+import { heroMotion, matchVideo, parseKeywords, parseVideoUrls } from "./hero";
 import { previewImages } from "./images";
 import type { BuildJob, Ctx, Env, MessageBatch } from "./env";
 import { privacyPage, termsPage } from "./legal";
@@ -132,6 +137,7 @@ async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, sub: st
   let html: string;
   let accent: string;
   let current: string | null = null;
+  let motion = "";
   if (demo.liveVersion) {
     const path = sub || "/";
     const kit = await getKit(env, slug, demo.liveVersion);
@@ -142,6 +148,13 @@ async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, sub: st
     html = assemble(kit, page, slug);
     accent = kit.accent || demo.intake.primaryColor;
     current = path;
+    if (path === "/") {
+      const [names, library] = await Promise.all([imageNames(env, slug, demo.liveVersion), listVideos(env)]);
+      motion = heroMotion(
+        matchVideo(library, demo.intake, slug, pagesOf(kit).map((p) => p.name).join(" ")),
+        names.map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`),
+      );
+    }
   } else {
     // A single-page design (or the template while the first design is built).
     if (sub) return Response.redirect(new URL(prefix, req.url).toString(), 302);
@@ -151,7 +164,7 @@ async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, sub: st
   const widget = chatWidget(widgetId(demo.intake.chatWidget, widgetId(await getSetting(env, WIDGET_KEY), DEFAULT_WIDGET_ID)), accent);
   const headers: Record<string, string> = { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "public, max-age=30" };
   if (sandbox) headers["content-security-policy"] = SANDBOX_CSP;
-  const res = finish(new Response(html, { headers }), { prefix, current, widget, leadUrl: `${prefix}/_lead` });
+  const res = finish(new Response(html, { headers }), { prefix, current, widget, leadUrl: `${prefix}/_lead`, heroMotion: motion, legacyHero: !!motion && !html.includes('class="hero-motion"') });
   ctx.waitUntil(cache.put(req, res.clone()));
   return res;
 }
@@ -384,7 +397,18 @@ async function handle(req: Request, env: Env, ctx: Ctx): Promise<Response> {
   }
 
   if (path === "/settings" && req.method === "GET")
-    return settingsPage(await getSetting(env, GHL_KEY), ghlSnippet(base), await getSetting(env, WIDGET_KEY), DEFAULT_WIDGET_ID, q("ok"), q("error"));
+    return settingsPage(await getSetting(env, GHL_KEY), ghlSnippet(base), await getSetting(env, WIDGET_KEY), DEFAULT_WIDGET_ID, await listVideos(env), q("ok"), q("error"));
+  if (path === "/settings/videos" && req.method === "POST") {
+    const f = await req.formData();
+    const name = String(f.get("name") ?? "").trim().slice(0, 60);
+    const keywords = parseKeywords(String(f.get("keywords") ?? ""));
+    const urls = parseVideoUrls(String(f.get("urls") ?? ""));
+    if (!name || !keywords.length) return redirect(withMsg("/settings", "error", "Give the trade a name and at least one keyword."));
+    if (!urls.length) return redirect(withMsg("/settings", "error", "Paste at least one video link (https, ending in .mp4, or a GoHighLevel media link)."));
+    const id = Number(f.get("id")) || undefined;
+    await saveVideo(env, { id, name, keywords, urls });
+    return redirect(withMsg("/settings", "ok", `${id ? "Saved" : "Added"} hero videos for ${name}`));
+  }
   if (path === "/settings/password" && req.method === "POST") {
     const f = await req.formData();
     const current = String(f.get("current") ?? "");
@@ -395,6 +419,11 @@ async function handle(req: Request, env: Env, ctx: Ctx): Promise<Response> {
     await changePassword(env, next);
     // Keep this browser signed in with the new password; everyone else signs in again.
     return redirect(withMsg("/settings", "ok", "Password changed. Share the new one with the team."), { "set-cookie": await sessionCookie(env) });
+  }
+  m = path.match(/^\/settings\/videos\/(\d+)\/delete$/);
+  if (m && req.method === "POST") {
+    await deleteVideo(env, Number(m[1]));
+    return redirect(withMsg("/settings", "ok", "Removed from the video library"));
   }
   if (path === "/settings/chat" && req.method === "POST") {
     const raw = String((await req.formData()).get("chatWidget") ?? "").trim();

@@ -43,9 +43,10 @@ export interface MessageBatch<T> { messages: Message<T>[] }
 
 // Workers' streaming HTML parser (global in the runtime).
 interface HTMLText { text: string; lastInTextNode: boolean }
-interface HTMLElement {
+export interface HTMLElement {
   getAttribute(name: string): string | null;
   setAttribute(name: string, value: string): void;
+  setInnerContent(content: string, opts?: { html: boolean }): void;
   append(content: string, opts?: { html: boolean }): void;
   onEndTag(fn: () => void): void;
 }

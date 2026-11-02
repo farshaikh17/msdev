@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Intake } from "@/forge/schema";
 import { costOf, CREDIT_MARKER, factsBlock, mapEmbed, parseParts, sitemapFor, tidyCss, type Kit } from "../cloudflare/forge/src/designer";
+import { heroMotion, matchVideo, parseKeywords, parseVideoUrls } from "../cloudflare/forge/src/hero";
 import { privacyPage, termsPage } from "../cloudflare/forge/src/legal";
 import { assemble, chatWidget, DEFAULT_WIDGET_ID, formScript, widgetId } from "../cloudflare/forge/src/site";
 
@@ -114,5 +115,41 @@ describe("Forge worker — chat widget", () => {
     expect(w).toContain(`data-widget-id="${DEFAULT_WIDGET_ID}"`);
     expect(chatWidget(DEFAULT_WIDGET_ID, "red")).not.toContain("<style>");
     expect(chatWidget("", "#11968a")).toBe("");
+  });
+});
+
+describe("Forge worker — hero motion and video library", () => {
+  const lib = [
+    { id: 1, name: "HVAC", keywords: ["hvac", "air conditioning", "ac"], urls: ["https://x.filesafe.space/a.mp4", "https://x.filesafe.space/b.mp4"] },
+    { id: 2, name: "Plumbing", keywords: ["plumbing", "plumber", "drain"], urls: ["https://cdn.example/p.mp4"] },
+  ];
+
+  it("matches a business to its trade's videos, the trade field counting most", () => {
+    const hvac = Intake.parse({ businessName: "Pollux Air Conditioning", industry: "HVAC" });
+    expect(lib[0].urls).toContain(matchVideo(lib, hvac, "pollux-1a2b"));
+    expect(matchVideo(lib, Intake.parse({ businessName: "Acme", industry: "Plumber" }), "acme-1a2b")).toBe("https://cdn.example/p.mp4");
+    // Whole words only: "ac" doesn't match inside "Acme" or "Tracking".
+    expect(matchVideo(lib, Intake.parse({ businessName: "Acme Tracking" }), "acme-1a2b")).toBeNull();
+    // With the trade left empty, the services the site was built with still find it.
+    expect(lib[0].urls).toContain(matchVideo(lib, Intake.parse({ businessName: "Pollux Air Conditioning" }), "p-1a2b", "AC Repair Commercial HVAC Services"));
+    // The same demo always gets the same clip.
+    expect(matchVideo(lib, hvac, "pollux-1a2b")).toBe(matchVideo(lib, hvac, "pollux-1a2b"));
+  });
+
+  it("accepts only https video links", () => {
+    expect(parseVideoUrls("https://a.com/x.mp4\nhttp://a.com/y.mp4 https://a.com/page javascript:alert(1)\nhttps://assets.cdn.filesafe.space/S/media/6ada.mp4")).toEqual([
+      "https://a.com/x.mp4",
+      "https://assets.cdn.filesafe.space/S/media/6ada.mp4",
+    ]);
+    expect(parseKeywords("HVAC, Air Conditioning\n a, hvac")).toEqual(["hvac", "air conditioning"]);
+  });
+
+  it("fills the hero with a video (photo as poster), three animated photos, or one drifting photo", () => {
+    const photos = ["/s/_img/v/photo-1.jpg", "/s/_img/v/photo-2.jpg", "/s/_img/v/photo-3.jpg", "/s/_img/v/photo-4.jpg"];
+    const v = heroMotion("https://cdn.example/p.mp4", photos);
+    expect(v).toContain('<video autoplay muted loop playsinline preload="auto" poster="/s/_img/v/photo-1.jpg">');
+    expect(heroMotion(null, photos).match(/<img /g)?.length).toBe(3);
+    expect(heroMotion(null, photos.slice(0, 2)).match(/<img /g)?.length).toBe(1);
+    expect(heroMotion(null, [])).toBe("");
   });
 });

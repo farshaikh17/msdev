@@ -196,6 +196,13 @@ Workers AI, FLUX.2 [klein]; free up to about 20 sites a day) for the hero, servi
 sections. They're illustrative only: galleries and before/after stay labelled spaces for the
 business's real photos.
 
+**Moving hero.** The home page hero has a moving background, filled in when the page is served.
+If the hero video library (Settings → Hero videos) has clips for the business's trade, it plays
+one, muted and looping, with the AI hero photo showing until it loads. Otherwise three of the
+site's photos cross-fade with a slow zoom and pan. The team makes 8-second clips in Google Flow,
+uploads them to the GoHighLevel media library and pastes the links into the library, with the
+keywords that identify the trade; matching sites show them within a minute, without a rebuild.
+
 Every form on a demo site really sends: submissions are saved and listed on the demo's page
 in the team app.
 

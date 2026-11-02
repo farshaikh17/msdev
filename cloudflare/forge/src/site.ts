@@ -5,6 +5,8 @@
  */
 import { esc } from "../../../src/forge/render";
 import { CREDIT, CREDIT_CSS, CREDIT_MARKER, tidyCss, type Kit, type PageDraft } from "./designer";
+import type { HTMLElement } from "./env";
+import { HERO_CSS, LEGACY_HERO_BG } from "./hero";
 
 /** Mianro's GoHighLevel chat widget, used unless Settings or the demo names another. */
 export const DEFAULT_WIDGET_ID = "6a872a7164c286aff3546896";
@@ -49,7 +51,7 @@ export function assemble(kit: Kit, page: PageDraft, slug: string): string {
   const boot = `<script>try{var t=localStorage.getItem(${key});if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>`;
   return `<!doctype html><html lang="en" data-theme="${kit.theme}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(page.title)}</title><meta name="description" content="${esc(page.description)}"><meta name="robots" content="noindex">
-${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${HEADER_CSS}\n${CREDIT_CSS}</style></head><body>
+${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${HEADER_CSS}\n${HERO_CSS}\n${CREDIT_CSS}</style></head><body>
 ${kit.header}
 ${page.body}
 ${kit.footer.split(CREDIT_MARKER).join(CREDIT)}
@@ -66,9 +68,9 @@ export function formScript(url: string): string {
 
 /**
  * Point the site's root-relative links ("/services") at this demo ("/<slug>/services"),
- * mark the current page in the nav, and add the chat widget.
+ * mark the current page in the nav, fill the hero's motion layer, and add the chat widget.
  */
-export function finish(res: Response, opts: { prefix: string; current: string | null; widget: string; leadUrl: string }): Response {
+export function finish(res: Response, opts: { prefix: string; current: string | null; widget: string; leadUrl: string; heroMotion?: string; legacyHero?: boolean }): Response {
   const local = (v: string | null) => !!v && v.startsWith("/") && !v.startsWith("//");
   const move = (v: string) => {
     const [, path, rest] = v.match(/^([^?#]*)(.*)$/)!;
@@ -89,6 +91,18 @@ export function finish(res: Response, opts: { prefix: string; current: string | 
         if (local(a)) e.setAttribute("action", move(a!));
       },
     });
+  // The home hero's moving background (a library video, or the site's photos animated).
+  if (opts.heroMotion) {
+    let filled = false;
+    const fill = (e: HTMLElement, legacy: boolean) => {
+      if (filled) return;
+      filled = true;
+      if (legacy) e.setAttribute("class", `${e.getAttribute("class") ?? ""} hero-motion-fill`);
+      e.setInnerContent(opts.heroMotion!, { html: true });
+    };
+    r = r.on(".hero-motion", { element: (e) => fill(e, false) });
+    if (opts.legacyHero) r = r.on(LEGACY_HERO_BG, { element: (e) => fill(e, true) });
+  }
   r = r.on("body", { element: (e) => e.append(formScript(opts.leadUrl) + opts.widget, { html: true }) });
   return r.transform(res);
 }

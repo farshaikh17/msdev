@@ -2,6 +2,7 @@
 import { Intake, SiteContent, type Demo } from "../../../src/forge/schema";
 import type { Kit, PageDraft } from "./designer";
 import type { Env } from "./env";
+import { parseKeywords, parseVideoUrls, type LibraryEntry } from "./hero";
 
 interface Row {
   html: string | null;
@@ -238,4 +239,28 @@ export async function saveImage(env: Env, slug: string, version: string, name: s
 export async function getImage(env: Env, slug: string, version: string, name: string): Promise<Uint8Array<ArrayBuffer> | null> {
   const r = await env.DB.prepare("SELECT data FROM site_images WHERE slug = ? AND version = ? AND name = ?").bind(slug, version, name).first<{ data: number[] | ArrayBuffer }>();
   return r ? new Uint8Array(r.data) : null;
+}
+
+/** The preview photos made for a site version, in order (photo-1 is the hero shot). */
+export async function imageNames(env: Env, slug: string, version: string): Promise<string[]> {
+  const { results } = await env.DB.prepare("SELECT name FROM site_images WHERE slug = ? AND version = ?").bind(slug, version).all<{ name: string }>();
+  return results.map((r) => r.name).sort((a, b) => Number(a.match(/\d+/)?.[0]) - Number(b.match(/\d+/)?.[0]));
+}
+
+export async function listVideos(env: Env): Promise<LibraryEntry[]> {
+  const { results } = await env.DB.prepare("SELECT id, name, keywords, urls FROM video_library ORDER BY name").all<{ id: number; name: string; keywords: string; urls: string }>();
+  return results.map((r) => ({ id: r.id, name: r.name, keywords: parseKeywords(r.keywords), urls: parseVideoUrls(r.urls) }));
+}
+
+export async function saveVideo(env: Env, e: { id?: number; name: string; keywords: string[]; urls: string[] }): Promise<void> {
+  if (e.id)
+    await env.DB.prepare("UPDATE video_library SET name = ?, keywords = ?, urls = ? WHERE id = ?").bind(e.name, e.keywords.join(", "), e.urls.join("\n"), e.id).run();
+  else
+    await env.DB.prepare("INSERT INTO video_library (name, keywords, urls, created_at) VALUES (?, ?, ?, ?)")
+      .bind(e.name, e.keywords.join(", "), e.urls.join("\n"), new Date().toISOString())
+      .run();
+}
+
+export async function deleteVideo(env: Env, id: number): Promise<void> {
+  await env.DB.prepare("DELETE FROM video_library WHERE id = ?").bind(id).run();
 }
