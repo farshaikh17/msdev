@@ -17,7 +17,7 @@
 import { renderPage, renderSite } from "../../../src/forge/render";
 import { draftContent } from "../../../src/forge/copy";
 import { Intake, type Demo } from "../../../src/forge/schema";
-import { checkPassword, sessionCookie, signedIn, signOutCookie } from "./auth";
+import { changePassword, checkPassword, MIN_PASSWORD, passwordSet, sessionCookie, signedIn, signOutCookie } from "./auth";
 import {
   archiveDemo,
   getDemo,
@@ -321,10 +321,10 @@ async function handle(req: Request, env: Env, ctx: Ctx): Promise<Response> {
   if (path === "/login" && req.method === "POST") {
     const f = await req.formData();
     if (await checkPassword(env, String(f.get("password") ?? ""))) return redirect("/", { "set-cookie": await sessionCookie(env) });
-    return loginPage("That password isn't right.", !env.FORGE_PASSWORD);
+    return loginPage("That password isn't right.", !(await passwordSet(env)));
   }
   if (path === "/logout" && req.method === "POST") return redirect("/login", { "set-cookie": signOutCookie });
-  if (!(await signedIn(req, env))) return path === "/login" || req.method === "GET" ? loginPage(undefined, !env.FORGE_PASSWORD) : redirect("/login");
+  if (!(await signedIn(req, env))) return path === "/login" || req.method === "GET" ? loginPage(undefined, !(await passwordSet(env))) : redirect("/login");
   if (path === "/login") return redirect("/");
 
   const aiOn = !!env.ANTHROPIC_API_KEY;
@@ -385,6 +385,17 @@ async function handle(req: Request, env: Env, ctx: Ctx): Promise<Response> {
 
   if (path === "/settings" && req.method === "GET")
     return settingsPage(await getSetting(env, GHL_KEY), ghlSnippet(base), await getSetting(env, WIDGET_KEY), DEFAULT_WIDGET_ID, q("ok"), q("error"));
+  if (path === "/settings/password" && req.method === "POST") {
+    const f = await req.formData();
+    const current = String(f.get("current") ?? "");
+    const next = String(f.get("next") ?? "");
+    if (!(await checkPassword(env, current))) return redirect(withMsg("/settings", "error", "The current password isn't right."));
+    if (next.length < MIN_PASSWORD) return redirect(withMsg("/settings", "error", `Use at least ${MIN_PASSWORD} characters for the new password.`));
+    if (next !== String(f.get("confirm") ?? "")) return redirect(withMsg("/settings", "error", "The new passwords don't match."));
+    await changePassword(env, next);
+    // Keep this browser signed in with the new password; everyone else signs in again.
+    return redirect(withMsg("/settings", "ok", "Password changed. Share the new one with the team."), { "set-cookie": await sessionCookie(env) });
+  }
   if (path === "/settings/chat" && req.method === "POST") {
     const raw = String((await req.formData()).get("chatWidget") ?? "").trim();
     try {

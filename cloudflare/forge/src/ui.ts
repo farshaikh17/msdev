@@ -72,7 +72,7 @@ export function page(title: string, body: string, opts: { nav?: "new" | "setting
     opts.nav === undefined || opts.nav === null
       ? ""
       : `<header class="top"><div class="top-in"><a class="brand" href="/"><i></i>Forge Demo</a><nav class="nav">
-<a href="/" class="${opts.nav === "new" ? "on" : ""}">Demos</a><a href="/settings" class="${opts.nav === "settings" ? "on" : ""}">GoHighLevel setup</a>
+<a href="/" class="${opts.nav === "new" ? "on" : ""}">Demos</a><a href="/settings" class="${opts.nav === "settings" ? "on" : ""}">Settings</a>
 <form method="post" action="/logout"><button class="linkbtn">Sign out</button></form></nav></div></header>`;
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(title)} · Forge Demo</title><meta name="robots" content="noindex">
@@ -182,7 +182,7 @@ ${
 <section class="card"><h2>Share it</h2><div class="share">
 ${row("Website link", links.site, links.site)}
 ${links.pages.length ? `<div class="row note">Pages: ${links.pages.map((p) => `<a href="${esc(p.url)}" target="_blank" rel="noreferrer">${esc(p.name)}</a>`).join(" · ")}</div>` : ""}
-${links.ghl ? row("On your GoHighLevel page", links.ghl, links.ghl) : row("On your GoHighLevel page", "Set up your GoHighLevel page first (GoHighLevel setup, top menu).", "")}
+${links.ghl ? row("On your GoHighLevel page", links.ghl, links.ghl) : row("On your GoHighLevel page", "Set up your GoHighLevel page first (Settings, top menu).", "")}
 ${row("Google Chat message", chat, chat)}
 ${row("Sheet row (date · business · trade · city · phone · link)", sheet.replace(/\t/g, " · "), sheet)}
 </div></section>
@@ -211,9 +211,10 @@ ${row("Sheet row (date · business · trade · city · phone · link)", sheet.re
 
 export function settingsPage(ghlPage: string, snippet: string, widget: string, defaultWidget: string, ok?: string, err?: string): Response {
   return page(
-    "GoHighLevel setup",
+    "Settings",
     `<main class="main">${flash(ok, err)}
-<div><h1>Show demos on your GoHighLevel page</h1><p class="lead">Set this up once. After that every demo also opens on your own domain at <span class="pill">your-page?d=demo-name</span>.</p></div>
+<div><h1>Settings</h1><p class="lead">GoHighLevel page, chat widget and team password.</p></div>
+<div><h2>Show demos on your GoHighLevel page</h2><p class="lead">Set this up once. After that every demo also opens on your own domain at <span class="pill">your-page?d=demo-name</span>.</p></div>
 <section class="card"><h2>1. Make the page in GoHighLevel</h2>
 <ol class="note" style="margin:0;padding-left:1.2rem;display:grid;gap:6px"><li>In Mianro Systems, create a blank funnel or website page with no header or footer, e.g. <b>/demo</b>.</li>
 <li>Add one full-width <b>Custom JS/HTML</b> element and paste the code below. Save and publish.</li></ol>
@@ -225,7 +226,13 @@ export function settingsPage(ghlPage: string, snippet: string, widget: string, d
 <form method="post" action="/settings/chat" class="card"><h2>Chat widget on every demo</h2>
 <p class="note" style="margin:0">Each demo site shows this GoHighLevel chat widget, recoloured to the site's primary colour. Leave empty for the Mianro default (<span class="pill">${esc(defaultWidget)}</span>), paste another widget's embed code or ID, or type <b>off</b>. A demo can also name its own widget under "More details".</p>
 <label for="cw">Widget ID or embed code<input id="cw" name="chatWidget" value="${esc(widget)}" placeholder="${esc(defaultWidget)}"></label>
-<div><button class="btn" type="submit">Save</button></div></form></main>`,
+<div><button class="btn" type="submit">Save</button></div></form>
+<form method="post" action="/settings/password" class="card"><h2>Team password</h2>
+<p class="note" style="margin:0">Changing it signs everyone else out; they sign in again with the new one.</p>
+<div class="grid"><label for="pw-cur">Current password<input id="pw-cur" name="current" type="password" autocomplete="current-password" required></label>
+<label for="pw-new">New password<input id="pw-new" name="next" type="password" autocomplete="new-password" minlength="10" required></label>
+<label for="pw-conf">New password again<input id="pw-conf" name="confirm" type="password" autocomplete="new-password" minlength="10" required></label></div>
+<div><button class="btn" type="submit">Change password</button></div></form></main>`,
     { nav: "settings" },
   );
 }
