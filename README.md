@@ -180,7 +180,7 @@ Claude Opus 5.5 designs each demo to the design team's website SOP: at least 15 
 (Home with 12+ sections and a quote form, About, Services, a page per service (4–6), Our
 Process, Our Work, Reviews, FAQs, Service Areas with a real map, Contact, Get a Quote,
 Privacy Policy and Terms), light and dark modes in the chosen primary colour, and the footer
-credit "Made with ♥ by Mianro systems" (red heart, linked to mianrosystems.com) on every page.
+credit "Made with ♥ by Mianro Systems" (red heart, "Mianro Systems" linked to mianrosystems.com) on every page.
 The legal pages are our own draft wording, marked for the business to review. It builds in
 the background on a Cloudflare Queue: one job designs the look (styles, header, footer), then
 the pages are written side by side, sharing a cached prompt. The new site goes live only once

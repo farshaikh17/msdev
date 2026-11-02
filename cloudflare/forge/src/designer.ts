@@ -55,8 +55,8 @@ export interface PageSpec {
 
 /** The footer credit the SOP requires on every page, exactly. Kit footers carry the marker; assemble() swaps this in. */
 export const CREDIT_MARKER = "<!--mianro-credit-->";
-export const CREDIT = `<a class="mianro-credit" href="https://www.mianrosystems.com/" target="_blank" rel="noopener">Made with <span class="mianro-heart" aria-label="love">♥</span> by Mianro systems</a>`;
-export const CREDIT_CSS = `.mianro-credit{color:inherit;text-decoration:none;white-space:nowrap}.mianro-credit:hover{text-decoration:underline}.mianro-heart{color:#e11d48!important}`;
+export const CREDIT = `<span class="mianro-credit">Made with <span class="mianro-heart" role="img" aria-label="love">♥</span> by <a href="https://www.mianrosystems.com/" target="_blank" rel="noopener">Mianro Systems</a></span>`;
+export const CREDIT_CSS = `.mianro-credit{white-space:nowrap;font-weight:400}.mianro-credit a{color:inherit;font-weight:600;text-decoration:underline;text-underline-offset:3px}.mianro-credit a:hover{opacity:.8}.mianro-heart{color:#e11d48!important;font-size:1.4em;line-height:0;vertical-align:-0.12em;margin:0 .1em}`;
 
 const slugify = (s: string) =>
   s
@@ -241,7 +241,8 @@ Our system assembles each page as: <!doctype html><html data-theme="light|dark">
 - Every phone number is a tel: link (US numbers as +1XXXXXXXXXX). Only show an email address if one was given.
 - Forms: our system submits every form and shows the confirmation, so never handle form submit in your script. Give every field a name attribute, a <label>, the right type and required where needed. Under each submit button add the small note: By submitting, you agree to our <a href="/privacy">Privacy Policy</a>. Style a .form-thanks confirmation box (it replaces the form after sending) and a .form-error message.
 - One <h1> per page and a sensible heading order. Visible keyboard focus. Descriptive alt text. Good contrast.
-- Responsive from 360px to wide desktop with no horizontal scrolling, clipped text or overlaps; buttons easy to tap. A working mobile menu. The link to the current page gets aria-current="page" from our system: style it.
+- Responsive from 360px to wide desktop with no horizontal scrolling, clipped text or overlaps; buttons easy to tap. A working mobile menu.
+- The header is always a single line: nav labels, the phone number and buttons never wrap (white-space: nowrap). Keep nav labels short (e.g. "About", "Our Work") and switch to the mobile menu below 1100px. The link to the current page gets aria-current="page" from our system: style it.
 - A GoHighLevel chat bubble is added to the bottom-right corner of every page automatically. Keep that corner free on every screen size: no back-to-top button there; on phones the sticky "Call" button sits bottom-left (or a bar leaving the right 90px free), and nothing important sits under the bubble.
 - Content must be visible without JavaScript and without scrolling. Reveal animations may only enhance already-visible content; never start sections at opacity 0. Respect prefers-reduced-motion. Keep motion restrained: no custom cursors, WebGL or heavy effects.
 
@@ -285,7 +286,7 @@ the whole site's stylesheet (no <style> tag): tokens for both modes, base, heade
 the <header> element: logo/name linking to /, the main nav (Services as a dropdown listing /services and ${services.map((s) => s.path).join(", ")}; About Us; Our Work; Reviews; Service Areas; Contact), a phone link, a "Get a Quote" button to /quote, the theme toggle, and the mobile menu (which lists every page above except the legal ones).
 @@@ FOOTER
 the <footer> element: logo/name + one-line description, columns for Pages, Services (each service page) and Contact (phone, area, hours if known), links to /privacy and /terms, the copyright line, and exactly this marker on its own where the credit line goes: ${CREDIT_MARKER}
-Our system replaces the marker with the credit "Made with ♥ by Mianro systems" (red heart, linked to mianrosystems.com); don't write the credit yourself. Also the phone-only sticky Call button (bottom-left), if there is a phone number.
+Our system replaces the marker with the credit "Made with ♥ by Mianro Systems" (red heart, "Mianro Systems" linked to mianrosystems.com); don't write the credit yourself. Also the phone-only sticky Call button (bottom-left), if there is a phone number.
 @@@ SCRIPT
 one small script (no <script> tag) shared by every page: theme toggle, mobile menu, Services dropdown on tap, ticker/reveal niceties. No form submit handling. It must not fail on pages without some elements.
 @@@ COMPONENTS

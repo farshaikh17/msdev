@@ -35,6 +35,13 @@ export function chatWidget(id: string, accent: string): string {
 const BASE_CSS = `.legal{max-width:760px;margin:0 auto;padding:clamp(48px,8vw,112px) 20px;line-height:1.7}.legal h2{margin-top:2em}.legal-note{padding:14px 18px;border:1px solid currentColor;border-radius:12px;opacity:.85}
 .form-thanks{padding:24px;border-radius:16px;border:1px solid currentColor;font-weight:600}.form-error{color:#c0262d;font-weight:600;margin-top:10px}`;
 
+/**
+ * QA guard after the kit's CSS: the header stays on one line. Nav labels, phone and buttons never
+ * wrap, and between tablet and wide desktop the header row scales down a little so it fits.
+ */
+export const HEADER_CSS = `header a,header button,header summary,header li,header [class*="phone"],header [class*="btn"]{white-space:nowrap}
+@media (min-width:900px) and (max-width:1279px){header>*{zoom:.88}}`;
+
 /** One page of a multi-page site as a full HTML document. */
 export function assemble(kit: Kit, page: PageDraft, slug: string): string {
   const key = JSON.stringify(`fg-theme-${slug}`);
@@ -42,7 +49,7 @@ export function assemble(kit: Kit, page: PageDraft, slug: string): string {
   const boot = `<script>try{var t=localStorage.getItem(${key});if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>`;
   return `<!doctype html><html lang="en" data-theme="${kit.theme}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(page.title)}</title><meta name="description" content="${esc(page.description)}"><meta name="robots" content="noindex">
-${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${CREDIT_CSS}</style></head><body>
+${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${HEADER_CSS}\n${CREDIT_CSS}</style></head><body>
 ${kit.header}
 ${page.body}
 ${kit.footer.split(CREDIT_MARKER).join(CREDIT)}
