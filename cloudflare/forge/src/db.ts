@@ -248,12 +248,22 @@ export async function imageNames(env: Env, slug: string, version: string): Promi
 }
 
 export async function listVideos(env: Env): Promise<LibraryEntry[]> {
-  const { results } = await env.DB.prepare("SELECT id, name, keywords, urls FROM video_library ORDER BY name").all<{ id: number; name: string; keywords: string; urls: string }>();
-  return results.map((r) => ({ id: r.id, name: r.name, keywords: parseKeywords(r.keywords), urls: parseVideoUrls(r.urls) }));
+  const { results } = await env.DB.prepare("SELECT id, name, keywords, urls, drive_id, file_name FROM video_library ORDER BY name, file_name").all<{
+    id: number;
+    name: string;
+    keywords: string;
+    urls: string;
+    drive_id: string | null;
+    file_name: string | null;
+  }>();
+  return results.map((r) => ({ id: r.id, name: r.name, keywords: parseKeywords(r.keywords), urls: parseVideoUrls(r.urls), driveId: r.drive_id, fileName: r.file_name }));
 }
 
 export async function saveVideo(env: Env, e: { id?: number; name: string; keywords: string[]; urls: string[] }): Promise<void> {
-  if (e.id)
+  if (e.id && !e.urls.length)
+    // A Drive clip: only its trade and keywords are edited; the link stays.
+    await env.DB.prepare("UPDATE video_library SET name = ?, keywords = ? WHERE id = ?").bind(e.name, e.keywords.join(", "), e.id).run();
+  else if (e.id)
     await env.DB.prepare("UPDATE video_library SET name = ?, keywords = ?, urls = ? WHERE id = ?").bind(e.name, e.keywords.join(", "), e.urls.join("\n"), e.id).run();
   else
     await env.DB.prepare("INSERT INTO video_library (name, keywords, urls, created_at) VALUES (?, ?, ?, ?)")
@@ -263,4 +273,23 @@ export async function saveVideo(env: Env, e: { id?: number; name: string; keywor
 
 export async function deleteVideo(env: Env, id: number): Promise<void> {
   await env.DB.prepare("DELETE FROM video_library WHERE id = ?").bind(id).run();
+}
+
+/** A clip copied from the Drive folder (insert, or refresh if it's already there). */
+export async function saveDriveVideo(env: Env, v: { driveId: string; fileName: string; name: string; keywords: string[]; url: string }): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO video_library (name, keywords, urls, drive_id, file_name, created_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (drive_id) WHERE drive_id IS NOT NULL DO UPDATE SET urls = excluded.urls, file_name = excluded.file_name`,
+  )
+    .bind(v.name, v.keywords.join(", "), v.url, v.driveId, v.fileName, new Date().toISOString())
+    .run();
+}
+
+export async function driveVideoIds(env: Env): Promise<string[]> {
+  const { results } = await env.DB.prepare("SELECT drive_id FROM video_library WHERE drive_id IS NOT NULL").all<{ drive_id: string }>();
+  return results.map((r) => r.drive_id);
+}
+
+export async function deleteDriveVideo(env: Env, driveId: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM video_library WHERE drive_id = ?").bind(driveId).run();
 }

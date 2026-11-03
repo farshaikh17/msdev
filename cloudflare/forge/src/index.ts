@@ -47,7 +47,8 @@ import {
 import { designKit, designSitePage, factsBlock, Fatal, pagesOf, planSite, sitemapFor, TryLater, type Plan } from "./designer";
 import { heroMotion, matchVideo, parseKeywords, parseVideoUrls } from "./hero";
 import { previewImages } from "./images";
-import type { BuildJob, Ctx, Env, MessageBatch } from "./env";
+import { DEFAULT_FOLDER, folderId, FOLDER_KEY, importClip, serveVideo, syncFolder } from "./drive";
+import type { BuildJob, Ctx, Env, MessageBatch, VideoJob } from "./env";
 import { privacyPage, termsPage } from "./legal";
 import { readWebsite } from "./scrape";
 import { assemble, chatWidget, DEFAULT_WIDGET_ID, finish, widgetId } from "./site";
@@ -303,6 +304,8 @@ async function handleSites(req: Request, env: Env, ctx: Ctx): Promise<Response> 
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...CORS, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" } });
   let m = path.match(/^\/([a-z0-9-]{3,64})\/_lead$/);
   if (m && req.method === "POST") return takeLead(req, env, m[1]);
+  m = path.match(/^\/_v\/([A-Za-z0-9_-]{10,80})\.mp4$/);
+  if (m && (req.method === "GET" || req.method === "HEAD")) return serveVideo(req, env, m[1]);
   m = path.match(/^\/([a-z0-9-]{3,64})\/_img\/([a-z0-9]{6,40})\/(photo-\d{1,2}\.jpg)$/);
   if (m && (req.method === "GET" || req.method === "HEAD")) return serveImage(req, env, ctx, m[1], m[2], m[3]);
   m = path.match(PAGE_PATH);
@@ -397,16 +400,34 @@ async function handle(req: Request, env: Env, ctx: Ctx): Promise<Response> {
   }
 
   if (path === "/settings" && req.method === "GET")
-    return settingsPage(await getSetting(env, GHL_KEY), ghlSnippet(base), await getSetting(env, WIDGET_KEY), DEFAULT_WIDGET_ID, await listVideos(env), q("ok"), q("error"));
+    return settingsPage(await getSetting(env, GHL_KEY), ghlSnippet(base), await getSetting(env, WIDGET_KEY), DEFAULT_WIDGET_ID, await listVideos(env), folderId(await getSetting(env, FOLDER_KEY)) || DEFAULT_FOLDER, q("ok"), q("error"));
+  if (path === "/settings/videos/sync" && req.method === "POST") {
+    const raw = String((await req.formData()).get("folder") ?? "").trim();
+    if (raw) {
+      const id = folderId(raw);
+      if (!id) return redirect(withMsg("/settings", "error", "Paste the Google Drive folder's link (it contains /folders/…)."));
+      await setSetting(env, FOLDER_KEY, id);
+    }
+    try {
+      const r = await syncFolder(env);
+      return redirect(
+        withMsg("/settings", "ok", `Folder checked: ${r.total} clips. ${r.added ? `${r.added} new, being copied now (refresh in a minute)` : "Nothing new"}${r.removed ? `; ${r.removed} removed` : ""}.`),
+      );
+    } catch (e) {
+      return redirect(withMsg("/settings", "error", errText(e)));
+    }
+  }
   if (path === "/settings/videos" && req.method === "POST") {
     const f = await req.formData();
     const name = String(f.get("name") ?? "").trim().slice(0, 60);
     const keywords = parseKeywords(String(f.get("keywords") ?? ""));
     const urls = parseVideoUrls(String(f.get("urls") ?? ""));
     if (!name || !keywords.length) return redirect(withMsg("/settings", "error", "Give the trade a name and at least one keyword."));
-    if (!urls.length) return redirect(withMsg("/settings", "error", "Paste at least one video link (https, ending in .mp4, or a GoHighLevel media link)."));
     const id = Number(f.get("id")) || undefined;
-    await saveVideo(env, { id, name, keywords, urls });
+    // Clips from the Drive folder have no links field (their link is fixed); only trade and keywords change.
+    const fromDrive = !!id && (await listVideos(env)).some((v) => v.id === id && v.driveId);
+    if (!urls.length && !fromDrive) return redirect(withMsg("/settings", "error", "Paste at least one video link (https, ending in .mp4, or a GoHighLevel media link)."));
+    await saveVideo(env, { id, name, keywords, urls: fromDrive ? [] : urls });
     return redirect(withMsg("/settings", "ok", `${id ? "Saved" : "Added"} hero videos for ${name}`));
   }
   if (path === "/settings/password" && req.method === "POST") {
@@ -455,12 +476,29 @@ const worker = {
       return new Response("Something went wrong. Please try again.", { status: 500 });
     }
   },
-  async queue(batch: MessageBatch<BuildJob>, env: Env): Promise<void> {
+  async queue(batch: MessageBatch<BuildJob | VideoJob>, env: Env): Promise<void> {
     for (const msg of batch.messages) {
-      const next = await build(env, msg.body, msg.attempts);
+      const job = msg.body;
+      if (job.stage === "video") {
+        // A clip from the Drive folder; a failed copy is retried, and the next sync tries again anyway.
+        try {
+          await importClip(env, job.driveId);
+          msg.ack();
+        } catch (e) {
+          console.error("video import failed", job.driveId, errText(e));
+          if (msg.attempts < 3) msg.retry({ delaySeconds: 60 });
+          else msg.ack();
+        }
+        continue;
+      }
+      const next = await build(env, job, msg.attempts);
       if (next === "done") msg.ack();
       else msg.retry({ delaySeconds: next });
     }
+  },
+  /** Hourly: pick up clips added to (or removed from) the team's Drive folder. */
+  async scheduled(_event: unknown, env: Env): Promise<void> {
+    await syncFolder(env).catch((e) => console.error("video sync failed", errText(e)));
   },
 };
 

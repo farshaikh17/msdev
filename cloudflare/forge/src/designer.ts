@@ -221,6 +221,31 @@ ${facts}`,
 
 const PLAN_SYSTEM = "You plan websites for local service businesses. Follow the reply format exactly.";
 
+/**
+ * Which trade a hero video suits, from its file name (Haiku, about $0.001). Names come from the
+ * prompt the clip was made with, e.g. "Electrician_wiring_electrical_panel_20261019112812.mp4".
+ */
+export async function classifyClip(env: Env, fileName: string, trades: string[]): Promise<{ trade: string; keywords: string[] }> {
+  const { text } = await ask(
+    env,
+    `A hero video for a local business website is named: ${fileName}
+Trades already in the library: ${trades.length ? trades.join("; ") : "(none yet)"}
+
+Reply with exactly these two parts and nothing else.
+@@@ TRADE
+The kind of business this video suits, 1–3 words (e.g. HVAC, Auto Repair, Med Spa, Landscaping, Kitchen & Remodeling). Reuse a trade from the list when it fits. If the name says nothing about the subject, write Unsorted.
+@@@ KEYWORDS
+8–14 lowercase words or short phrases, comma separated, that a business in this trade would have in its trade, name or service list (e.g. for Auto Repair: auto repair, mechanic, oil change, brakes, garage, car service, tires). Leave empty for Unsorted.`,
+    1000,
+    env.CLAUDE_PAGE_MODEL || PAGE_MODEL,
+    "low",
+    PLAN_SYSTEM,
+  );
+  const p = parseParts(text);
+  const trade = (p.TRADE ?? "").split("\n")[0].trim().slice(0, 40) || "Unsorted";
+  return { trade, keywords: trade === "Unsorted" ? [] : (p.KEYWORDS ?? "").split(/[,\n]/).map((k) => k.trim().toLowerCase()).filter((k) => k.length >= 2).slice(0, 20) };
+}
+
 /** Google's keyless map embed for the service area, or "" when no place is known. */
 export function mapEmbed(i: Intake): string {
   const place = i.city || splitList(i.serviceAreas)[0] || "";

@@ -11,6 +11,9 @@ import type { Intake } from "../../../src/forge/schema";
 export interface LibraryEntry {
   id: number;
   name: string;
+  /** Set for clips synced from the Google Drive folder. */
+  driveId?: string | null;
+  fileName?: string | null;
   /** Lower-case words or phrases matched against the business's trade, name and services. */
   keywords: string[];
   urls: string[];
@@ -39,7 +42,8 @@ export function parseVideoUrls(raw: string): string[] {
 export function matchVideo(library: LibraryEntry[], i: Intake, slug: string, siteServices = ""): string | null {
   // The services the site was built with count like typed-in services (the trade is often left empty).
   const fields = [i.industry, i.businessName, `${i.services} ${siteServices}`].map((f) => ` ${f.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `);
-  let best: LibraryEntry | null = null;
+  // Clips from every entry with the best score (Drive clips are one entry each, so a trade has several).
+  let clips: string[] = [];
   let bestScore = 0;
   for (const e of library) {
     let score = 0;
@@ -48,13 +52,15 @@ export function matchVideo(library: LibraryEntry[], i: Intake, slug: string, sit
       if (word.trim() && fields[0].includes(word)) score += 3;
       else if (word.trim() && (fields[1].includes(word) || fields[2].includes(word))) score += 1;
     }
-    if (score > bestScore && e.urls.length) [best, bestScore] = [e, score];
+    if (!score || !e.urls.length || score < bestScore) continue;
+    if (score > bestScore) [clips, bestScore] = [[], score];
+    clips.push(...e.urls);
   }
-  if (!best) return null;
+  if (!clips.length) return null;
   // Same clip for a given demo every time; different demos in the trade spread across the clips.
   let h = 0;
   for (const c of slug) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return best.urls[h % best.urls.length];
+  return clips[h % clips.length];
 }
 
 /** What goes inside the hero's motion layer. Empty when there's neither a video nor a photo. */

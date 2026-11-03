@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { Intake } from "@/forge/schema";
 import { costOf, CREDIT_MARKER, factsBlock, mapEmbed, parseParts, sitemapFor, tidyCss, type Kit } from "../cloudflare/forge/src/designer";
+import { folderId, parseFolder, serveVideo } from "../cloudflare/forge/src/drive";
 import { heroMotion, matchVideo, parseKeywords, parseVideoUrls } from "../cloudflare/forge/src/hero";
 import { privacyPage, termsPage } from "../cloudflare/forge/src/legal";
 import { assemble, chatWidget, DEFAULT_WIDGET_ID, formScript, widgetId } from "../cloudflare/forge/src/site";
@@ -151,5 +153,39 @@ describe("Forge worker — hero motion and video library", () => {
     expect(heroMotion(null, photos).match(/<img /g)?.length).toBe(3);
     expect(heroMotion(null, photos.slice(0, 2)).match(/<img /g)?.length).toBe(1);
     expect(heroMotion(null, [])).toBe("");
+  });
+});
+
+describe("Forge worker — hero videos from Google Drive", () => {
+  it("reads the video files from a public folder page", () => {
+    const files = parseFolder(readFileSync("tests/fixtures/drive-folder.html", "utf8"));
+    expect(files.length).toBe(20);
+    expect(files).toContainEqual({ id: "1O48l3xrnqZ9jAR1gdJDPebgD0Xzbx0Eq", name: "Electrician_wiring_electrical_panel_20261019112812.mp4" });
+  });
+
+  it("takes a folder link or ID", () => {
+    expect(folderId("https://drive.google.com/drive/folders/1vOIKvNmw2oj72lrHYu7QVKbbr88MQ82f?usp=sharing")).toBe("1vOIKvNmw2oj72lrHYu7QVKbbr88MQ82f");
+    expect(folderId("1vOIKvNmw2oj72lrHYu7QVKbbr88MQ82f")).toBe("1vOIKvNmw2oj72lrHYu7QVKbbr88MQ82f");
+    expect(folderId("https://example.com/x")).toBe("");
+  });
+
+  it("serves byte ranges (Safari needs them to play video)", async () => {
+    const bytes = new Uint8Array(1000).map((_, i) => i % 256);
+    const env = { VIDEOS: { get: async () => bytes.buffer } } as unknown as Parameters<typeof serveVideo>[1];
+    const full = await serveVideo(new Request("https://s/_v/x.mp4"), env, "x");
+    expect(full.status).toBe(200);
+    expect(full.headers.get("accept-ranges")).toBe("bytes");
+    const part = await serveVideo(new Request("https://s/_v/x.mp4", { headers: { range: "bytes=10-19" } }), env, "x");
+    expect(part.status).toBe(206);
+    expect(part.headers.get("content-range")).toBe("bytes 10-19/1000");
+    expect([...new Uint8Array(await part.arrayBuffer())]).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+    const tail = await serveVideo(new Request("https://s/_v/x.mp4", { headers: { range: "bytes=990-" } }), env, "x");
+    expect(tail.headers.get("content-range")).toBe("bytes 990-999/1000");
+  });
+
+  it("spreads demos across all the clips of the matching trade", () => {
+    const clips = ["a", "b", "c"].map((c, n) => ({ id: n, name: "HVAC", keywords: ["hvac"], urls: [`https://s/_v/${c}.mp4`] }));
+    const picks = new Set(["one-1a2b", "two-3c4d", "three-5e6f", "four-7a8b", "five-9c0d"].map((s) => matchVideo(clips, Intake.parse({ businessName: "Cool Co", industry: "HVAC" }), s)));
+    expect(picks.size).toBeGreaterThan(1);
   });
 });

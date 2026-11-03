@@ -1,7 +1,9 @@
 export interface Env {
   DB: D1Database;
   /** Background page builds (Cloudflare Queue). */
-  BUILDS: Queue<BuildJob>;
+  BUILDS: Queue<BuildJob | VideoJob>;
+  /** Hero video files synced from Google Drive (key "v:<drive file id>"). */
+  VIDEOS: KVNamespace;
   /** The team password for signing in. */
   FORGE_PASSWORD?: string;
   /** Anthropic API key; without it, sites are drafted from the trade template. */
@@ -34,9 +36,16 @@ export interface D1PreparedStatement {
 }
 export interface D1Database { prepare(sql: string): D1PreparedStatement }
 export interface Ctx { waitUntil(p: Promise<unknown>): void }
+export interface KVNamespace {
+  get(key: string, type: "arrayBuffer"): Promise<ArrayBuffer | null>;
+  put(key: string, value: ArrayBuffer | Uint8Array | string): Promise<void>;
+  delete(key: string): Promise<void>;
+}
 
 /** "kit": design the site (CSS, header, footer, script), then queue one "page" job per page. */
 export type BuildJob = { slug: string; version: string; stage: "kit" } | { slug: string; version: string; stage: "page"; path: string };
+/** Copy one clip from the team's Google Drive folder into the video library. */
+export interface VideoJob { stage: "video"; driveId: string }
 export interface Queue<T> { send(body: T, opts?: { delaySeconds?: number }): Promise<void> }
 export interface Message<T> { body: T; attempts: number; ack(): void; retry(opts?: { delaySeconds?: number }): void }
 export interface MessageBatch<T> { messages: Message<T>[] }

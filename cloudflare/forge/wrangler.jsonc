@@ -13,6 +13,8 @@
   "vars": { "SITES_ORIGIN": "https://forge-sites.dev1-024.workers.dev" },
   // Workers AI makes the preview photos (free allocation: 10,000 neurons a day).
   "ai": { "binding": "AI" },
+  // Hourly: copy new hero videos from the team's Google Drive folder.
+  "triggers": { "crons": ["23 * * * *"] },
   // Background builds: the app queues a job, the same Worker consumes it (each may run up to
   // 15 minutes). A few run at once so a site's inner pages are written side by side. Jobs are
   // only retried when Claude turned the request away (busy), so a failure never bills twice.
@@ -20,6 +22,8 @@
     "producers": [{ "binding": "BUILDS", "queue": "forge-builds" }],
     "consumers": [{ "queue": "forge-builds", "max_batch_size": 1, "max_retries": 4, "max_concurrency": 8 }]
   },
+  // Hero video files synced from the team's Google Drive folder.
+  "kv_namespaces": [{ "binding": "VIDEOS", "id": "ff778158e4db4d77914f79e62d0eb673" }],
   "d1_databases": [
     {
       "binding": "DB",

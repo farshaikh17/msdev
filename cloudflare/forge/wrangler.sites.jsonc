@@ -10,6 +10,8 @@
   "workers_dev": true,
   "observability": { "enabled": true },
   "vars": { "ROLE": "sites" },
+  // Hero video files synced from the team's Google Drive folder.
+  "kv_namespaces": [{ "binding": "VIDEOS", "id": "ff778158e4db4d77914f79e62d0eb673" }],
   "d1_databases": [
     {
       "binding": "DB",

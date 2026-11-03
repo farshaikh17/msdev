@@ -210,21 +210,29 @@ ${row("Sheet row (date · business · trade · city · phone · link)", sheet.re
   );
 }
 
-function videoLibrary(videos: LibraryEntry[]): string {
+function videoLibrary(videos: LibraryEntry[], folder: string): string {
   const entry = (v?: LibraryEntry) => `<form method="post" action="/settings/videos" class="${v ? "share-row" : ""}" style="display:grid;gap:10px">
 ${v ? `<input type="hidden" name="id" value="${v.id}">` : ""}
+${v?.driveId ? `<b style="font-size:.85rem">${esc(v.fileName ?? "")}${v.name === "Unsorted" ? ` <span class="tag bad">Needs a trade</span>` : ""}</b>` : ""}
 <div class="grid"><label>Trade<input name="name" value="${esc(v?.name ?? "")}" placeholder="e.g. HVAC" required></label>
 <label>Matches businesses whose trade, name or services mention<input name="keywords" value="${esc(v?.keywords.join(", ") ?? "")}" placeholder="e.g. hvac, air conditioning, heating, ac repair" required></label></div>
-<label>Video links (one per line; a demo gets one of them)<textarea name="urls" rows="3" placeholder="https://assets.cdn.filesafe.space/…/media/….mp4" required>${esc(v?.urls.join("\n") ?? "")}</textarea></label>
+${v?.driveId ? "" : `<label>Video links (one per line; a demo gets one of them)<textarea name="urls" rows="3" placeholder="https://…/clip.mp4" required>${esc(v?.urls.join("\n") ?? "")}</textarea></label>`}
 <div class="row"><button class="btn${v ? " ghost" : ""}" type="submit">${v ? "Save" : "Add to library"}</button>
-${v ? `${v.urls.map((u, n) => `<a href="${esc(u)}" target="_blank" rel="noreferrer">Clip ${n + 1} ↗</a>`).join(" ")}<button class="btn danger" type="submit" formaction="/settings/videos/${v.id}/delete" formnovalidate>Remove</button>` : ""}</div></form>`;
+${v ? `${v.urls.map((u, n) => `<a href="${esc(u)}" target="_blank" rel="noreferrer">${v.driveId ? "Watch" : `Clip ${n + 1}`} ↗</a>`).join(" ")}${v.driveId ? "" : `<button class="btn danger" type="submit" formaction="/settings/videos/${v.id}/delete" formnovalidate>Remove</button>`}` : ""}</div></form>`;
+  const drive = videos.filter((v) => v.driveId);
+  const manual = videos.filter((v) => !v.driveId);
   return `<section class="card"><h2>Hero videos</h2>
-<p class="note" style="margin:0">Each demo's home page has a moving hero. With a video here for its trade, it plays that video (muted, looping); otherwise it slowly animates the site's photos. Make 8-second clips in Google Flow, upload them to the GoHighLevel media library, and paste their links here. Changes show on matching demos within a minute; no rebuild needed.</p>
-${videos.length ? `<div class="share">${videos.map((v) => entry(v)).join("")}</div>` : `<p class="note" style="margin:0">No videos yet.</p>`}
-<h3 style="margin:8px 0 0">Add a trade</h3>${entry()}</section>`;
+<p class="note" style="margin:0">Each demo's home page has a moving hero. With a video for its trade, it plays that video (muted, looping); otherwise it slowly animates the site's photos. Drop new clips into the team's Google Drive folder: they're copied in every hour (or press Check now) and given a trade from their file name, so name them by what they show (e.g. "Electrician wiring panel.mp4"). Fix any trade or keywords below; changes show on matching demos within a minute, no rebuild needed. To remove a clip, remove it from the folder.</p>
+<form method="post" action="/settings/videos/sync" class="row" style="align-items:end">
+<label style="flex:1;min-width:240px">Google Drive folder (shared as "Anyone with the link")<input name="folder" value="https://drive.google.com/drive/folders/${esc(folder)}"></label>
+<button class="btn" type="submit" data-busy="Checking…">Check now</button>
+<a href="https://drive.google.com/drive/folders/${esc(folder)}" target="_blank" rel="noreferrer">Open folder ↗</a></form>
+${drive.length ? `<h3 style="margin:8px 0 0">From the folder (${drive.length})</h3><div class="share">${drive.map((v) => entry(v)).join("")}</div>` : `<p class="note" style="margin:0">No clips copied yet. Press Check now.</p>`}
+<details><summary>Videos hosted elsewhere (${manual.length})</summary><div class="share" style="margin-bottom:14px">${manual.map((v) => entry(v)).join("")}</div>
+<h3 style="margin:8px 0">Add by link</h3>${entry()}</details></section>`;
 }
 
-export function settingsPage(ghlPage: string, snippet: string, widget: string, defaultWidget: string, videos: LibraryEntry[], ok?: string, err?: string): Response {
+export function settingsPage(ghlPage: string, snippet: string, widget: string, defaultWidget: string, videos: LibraryEntry[], folder: string, ok?: string, err?: string): Response {
   return page(
     "Settings",
     `<main class="main">${flash(ok, err)}
@@ -242,7 +250,7 @@ export function settingsPage(ghlPage: string, snippet: string, widget: string, d
 <p class="note" style="margin:0">Each demo site shows this GoHighLevel chat widget, recoloured to the site's primary colour. Leave empty for the Mianro default (<span class="pill">${esc(defaultWidget)}</span>), paste another widget's embed code or ID, or type <b>off</b>. A demo can also name its own widget under "More details".</p>
 <label for="cw">Widget ID or embed code<input id="cw" name="chatWidget" value="${esc(widget)}" placeholder="${esc(defaultWidget)}"></label>
 <div><button class="btn" type="submit">Save</button></div></form>
-${videoLibrary(videos)}
+${videoLibrary(videos, folder)}
 <form method="post" action="/settings/password" class="card"><h2>Team password</h2>
 <p class="note" style="margin:0">Changing it signs everyone else out; they sign in again with the new one.</p>
 <div class="grid"><label for="pw-cur">Current password<input id="pw-cur" name="current" type="password" autocomplete="current-password" required></label>

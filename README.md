@@ -197,11 +197,13 @@ sections. They're illustrative only: galleries and before/after stay labelled sp
 business's real photos.
 
 **Moving hero.** The home page hero has a moving background, filled in when the page is served.
-If the hero video library (Settings → Hero videos) has clips for the business's trade, it plays
-one, muted and looping, with the AI hero photo showing until it loads. Otherwise three of the
-site's photos cross-fade with a slow zoom and pan. The team makes 8-second clips in Google Flow,
-uploads them to the GoHighLevel media library and pastes the links into the library, with the
-keywords that identify the trade; matching sites show them within a minute, without a rebuild.
+If the hero video library has clips for the business's trade, it plays one, muted and looping,
+with the AI hero photo showing until it loads. Otherwise three of the site's photos cross-fade
+with a slow zoom and pan. The library fills itself from the design team's Google Drive folder
+(shared by link; no Google key needed): every hour (or Settings → Hero videos → Check now) new
+clips are copied into Workers KV and given a trade and keywords from their file name, and clips
+removed from the folder leave the library. The team can correct any clip's trade in Settings;
+matching sites update within a minute, without a rebuild.
 
 Every form on a demo site really sends: submissions are saved and listed on the demo's page
 in the team app.
