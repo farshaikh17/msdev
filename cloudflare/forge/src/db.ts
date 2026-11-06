@@ -388,8 +388,10 @@ export async function clearAttempts(env: Env, key: string): Promise<void> {
   await env.DB.prepare("DELETE FROM throttle WHERE key = ?").bind(key).run();
 }
 
+/** Hourly housekeeping: expired rate-limit counters, and one-time links that expired over a month ago. */
 export async function pruneThrottle(env: Env): Promise<void> {
   await env.DB.prepare("DELETE FROM throttle WHERE reset_at < ?").bind(Date.now()).run();
+  await env.DB.prepare("DELETE FROM tokens WHERE expires_at < ?").bind(Date.now() - 30 * 86_400_000).run();
 }
 
 export async function countLeads(env: Env, slug: string): Promise<number> {

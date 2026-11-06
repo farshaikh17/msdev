@@ -69,7 +69,7 @@ ${
 <form method="post" action="/admin/tenants/${t.id}/branding" class="card"><h2>Name and footer credit</h2>
 <p class="note" style="margin:0">The line at the bottom of every page of this account's demo sites. Mianro's own line is the default; you can put the customer's name and link there instead, or remove it. It changes on sites already built within a minute.</p>
 <div class="grid"><label>Account name<input name="name" value="${esc(t.name)}" required maxlength="80"></label>
-<label>Footer credit<select name="creditMode">${mode("mianro", "Made with ♥ by Mianro Systems")}${mode("custom", "Made with ♥ by (their name and link)")}${mode("none", "No credit line")}</select></label>
+<label>Footer credit<select name="creditMode">${mode("mianro", "Mianro Systems (default)")}${mode("custom", "Their own name and link")}${mode("none", "None")}</select></label>
 <label>Their name<input name="creditName" value="${esc(t.creditName)}" maxlength="80" placeholder="e.g. Bright Ideas Marketing"></label>
 <label>Their link (https)<input name="creditUrl" type="url" value="${esc(t.creditUrl)}" placeholder="https://their-site.com"></label></div>
 <div><button class="btn" type="submit">Save</button></div></form>

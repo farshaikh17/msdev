@@ -148,7 +148,7 @@ ${code(`201 Created
 ${code(`GET ${base}/demos/{slug}      → { slug, business_name, status, site_url, pages: [...], error }
 GET ${base}/demos            → { demos: [...] }   (latest 100)
 GET ${base}/me               → { account, credits, unlimited }`)}
-<p class="note" style="margin:0">status is <b>building</b>, <b>ready</b> or <b>failed</b>. Send the key as <span class="mono">Authorization: Bearer …</span>. Limit: 60 requests a minute per key.</p></section>
+<p class="note" style="margin:0">status is <b>building</b>, <b>ready</b> or <b>failed</b> (or <b>template</b> while only the quick starter site exists). Send the key as <span class="mono">Authorization: Bearer …</span>. Limit: 60 requests a minute per key.</p></section>
 <section class="card"><h2>Webhook messages</h2>
 <p class="note" style="margin:0">Set the address under Settings. We send <b>demo.ready</b> and <b>demo.failed</b> (and <b>ping</b> for a test) as a POST with a JSON body and these headers:</p>
 ${code(`x-forge-event: demo.ready

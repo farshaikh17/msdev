@@ -20,7 +20,7 @@ h1{font-size:clamp(1.7rem,4vw,2.2rem);font-weight:800}h2{font-size:1.25rem;font-
 .top-in{display:flex;align-items:center;gap:22px;flex-wrap:wrap;padding-block:12px}
 .brand{font-family:var(--display);font-weight:800;font-size:1.15rem;color:var(--ink);text-decoration:none;display:flex;align-items:center;gap:8px}
 .brand i{width:26px;height:26px;border-radius:8px;background:var(--ember);display:inline-block}
-.nav{display:flex;gap:18px;font-size:.92rem}.nav a{color:var(--muted);text-decoration:none}.nav a.on{color:var(--steel);font-weight:600}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;font-size:.92rem;min-width:0}.nav a{color:var(--muted);text-decoration:none}.nav a.on{color:var(--steel);font-weight:600}
 .nav form{margin:0}.linkbtn{background:none;border:0;color:var(--muted);font:inherit;cursor:pointer;padding:0}
 .main{padding-block:32px 64px;display:grid;gap:28px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;display:grid;gap:16px;min-width:0}
@@ -64,7 +64,7 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 @keyframes sp{to{transform:rotate(360deg)}}
 .tag{font:600 .72rem var(--body);padding:3px 9px;border-radius:999px;background:var(--steel-soft);color:var(--steel)}
 .tag.bad{background:var(--bad-soft);color:var(--bad)}
-.credits{font:600 .78rem var(--body);padding:4px 10px;border-radius:999px;background:var(--steel-soft);color:var(--steel);white-space:nowrap}
+.credits{font:600 .78rem var(--body);padding:4px 10px;border-radius:999px;background:var(--steel-soft);color:var(--steel);max-width:100%;overflow-wrap:anywhere}
 .right{margin-left:auto}
 .mono{font:.8rem var(--mono)}
 `;

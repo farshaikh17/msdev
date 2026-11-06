@@ -201,6 +201,7 @@ describe("Forge worker — rate limiting", () => {
   function fakeEnv() {
     const db = new DatabaseSync(":memory:");
     db.exec(readFileSync("cloudflare/forge/migrations/0008_throttle.sql", "utf8"));
+    db.exec("CREATE TABLE tokens (expires_at INTEGER)"); // the hourly cleanup also clears old one-time links
     const DB = {
       prepare(sql: string) {
         let args: unknown[] = [];
