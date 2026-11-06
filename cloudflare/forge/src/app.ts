@@ -91,7 +91,9 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
   const post = req.method === "POST";
 
   // ---- Public: demo sites on this origin, the template JSON, and the API ----------------------
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  if (req.method === "OPTIONS")
+    // A form post from a sandboxed demo page is cross-origin, so the browser asks first.
+    return new Response(null, { status: 204, headers: /\/_lead$/.test(path) ? { ...CORS, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" } : CORS });
   let m = path.match(/^\/s\/([a-z0-9-]+)\/_lead$/);
   if (m && post) return takeLead(req, env, ctx, m[1]);
   m = path.match(/^\/s\/([a-z0-9-]+)((?:\/[a-z0-9-]+){1,2})?$/);
@@ -114,11 +116,11 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     const password = String(f.get("password") ?? "");
     if (!(await checkTeamPassword(env, String(f.get("team") ?? "")))) {
       await recordAttempt(env, key, LOGIN_WINDOW_MIN * 60_000);
-      return setupPage("That isn't the current team password.");
+      return setupPage("That isn't the current team password.", email);
     }
-    if (!EMAIL.test(email)) return setupPage("Enter a valid email address.");
+    if (!EMAIL.test(email)) return setupPage("Enter a valid email address.", email);
     const bad = passwordProblem(password, String(f.get("confirm") ?? ""));
-    if (bad) return setupPage(bad);
+    if (bad) return setupPage(bad, email);
     const admin = await createFirstAdmin(env, email, await hashPassword(password));
     if (!admin) return redirect("/login");
     return redirect("/", { "set-cookie": await sessionCookie(env, admin) });
@@ -139,7 +141,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     }
     await recordAttempt(env, ipKey, LOGIN_WINDOW_MIN * 60_000);
     await recordAttempt(env, mailKey, LOGIN_WINDOW_MIN * 60_000);
-    return loginPage("That email and password don't match.", (await adminCount(env)) === 0);
+    return loginPage("That email and password don't match.", (await adminCount(env)) === 0, email);
   }
   if (path === "/logout" && post) return redirect("/login", { "set-cookie": signOutCookie });
 

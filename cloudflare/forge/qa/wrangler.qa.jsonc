@@ -1,0 +1,11 @@
+{
+  // Local-only copy of the Forge Worker for QA: its own database and queue, no Workers AI, no secrets.
+  "name": "forge-qa",
+  "main": "../src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": { "SITES_ORIGIN": "" },
+  "queues": { "producers": [{ "binding": "BUILDS", "queue": "forge-builds" }], "consumers": [{ "queue": "forge-builds", "max_batch_size": 1, "max_retries": 2 }] },
+  "kv_namespaces": [{ "binding": "VIDEOS", "id": "qa-videos" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "forge-qa", "database_id": "qa-db", "migrations_dir": "../migrations" }]
+}

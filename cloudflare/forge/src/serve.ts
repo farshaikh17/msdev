@@ -19,7 +19,7 @@ import {
 import { pagesOf } from "./designer";
 import type { Ctx, Env } from "./env";
 import { heroMotion, matchVideo } from "./hero";
-import { assemble, chatWidget, creditFor, finish, widgetFor } from "./site";
+import { assemble, chatWidget, creditFor, finish, templateCredit, widgetFor } from "./site";
 import { getTenant } from "./tenants";
 import { deliver } from "./webhook";
 
@@ -75,7 +75,7 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
   } else {
     // A single-page design (or the template while the first design is built).
     if (sub) return Response.redirect(new URL(prefix, req.url).toString(), 302);
-    html = demo.html ?? renderPage(demo);
+    html = templateCredit(demo.html ?? renderPage(demo), tenant);
     accent = demo.intake.primaryColor || demo.content.theme.primary;
   }
   const widget = chatWidget(widgetFor(tenant, demo.intake.chatWidget), accent);

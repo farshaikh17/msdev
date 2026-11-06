@@ -203,3 +203,34 @@ describe("admin: inquiries", () => {
     void ADMIN;
   });
 });
+
+describe("demo site details found in QA", () => {
+  it("answers the browser's pre-flight for a form post from a sandboxed demo page", async () => {
+    const r = await call(h, "/s/some-demo-1234/_lead", { method: "OPTIONS" });
+    expect(r.status).toBe(204);
+    expect(r.headers.get("access-control-allow-methods")).toContain("POST");
+    expect(r.headers.get("access-control-allow-headers")).toContain("content-type");
+  });
+
+  it("puts the account's own footer credit on the older template page too", async () => {
+    const { templateCredit } = await import("../cloudflare/forge/src/site");
+    const page = '<footer><span class="fg-credit">Made with <span class="fg-heart" role="img" aria-label="love">♥</span> by <a href="https://www.mianrosystems.com/" target="_blank" rel="noopener">Mianro Systems</a></span></footer>';
+    expect(templateCredit(page, { creditMode: "mianro", creditName: "", creditUrl: "" })).toBe(page);
+    expect(templateCredit(page, { creditMode: "none", creditName: "", creditUrl: "" })).toBe("<footer></footer>");
+    const custom = templateCredit(page, { creditMode: "custom", creditName: "Dummy <Agency>", creditUrl: "https://dummy.test" });
+    expect(custom).toContain('<a href="https://dummy.test" target="_blank" rel="noopener">Dummy &lt;Agency&gt;</a>');
+    expect(custom).not.toContain("Mianro");
+  });
+});
+
+describe("hostile input", () => {
+  it("keeps markup typed into a public form inert in the admin screen", async () => {
+    await call(h, "/contact", { form: { name: "<img src=x onerror=alert(1)>", email: "x@y.test", message: "<script>alert(2)</script>", website: '"><svg onload=alert(3)>' } });
+    const admin = await setupAdmin(h);
+    const page = await html(await call(h, "/admin/inquiries", { cookie: admin }));
+    expect(page).not.toContain("<img src=x");
+    expect(page).not.toContain("<script>alert(2)");
+    expect(page).not.toContain("<svg onload");
+    expect(page).toContain("&lt;script&gt;alert(2)");
+  });
+});

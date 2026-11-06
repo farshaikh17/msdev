@@ -60,6 +60,18 @@ export function creditFor(t: Pick<Tenant, "creditMode" | "creditName" | "creditU
   return CREDIT;
 }
 
+/** The older template page's footer credit, in the account's own words (the Mianro default is left as it is). */
+export function templateCredit(html: string, t: Pick<Tenant, "creditMode" | "creditName" | "creditUrl">): string {
+  if (t.creditMode === "mianro") return html;
+  const line = /<span class="fg-credit">[\s\S]*?<\/a><\/span>/;
+  if (t.creditMode === "none") return html.replace(line, "");
+  const name = t.creditName.trim();
+  if (!name) return html;
+  const url = /^https:\/\/[^\s"'<>]+$/.test(t.creditUrl) ? t.creditUrl : "";
+  const who = url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(name)}</a>` : esc(name);
+  return html.replace(line, `<span class="fg-credit">Made with <span class="fg-heart" role="img" aria-label="love">♥</span> by ${who}</span>`);
+}
+
 /** The chat widget for a site: the demo's own, else the account's; only Mianro's account falls back to the Mianro widget. */
 export function widgetFor(tenant: Pick<Tenant, "id" | "chatWidget">, demoWidget: string): string {
   return widgetId(demoWidget, widgetId(tenant.chatWidget, tenant.id === 1 ? DEFAULT_WIDGET_ID : ""));

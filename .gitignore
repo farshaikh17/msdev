@@ -21,3 +21,7 @@ cloudflare/forge-sites/.dev.vars*
 
 # Forge Demo local dev
 cloudflare/forge/.dev.vars
+cloudflare/forge/qa/state/
+cloudflare/forge/qa/shots/
+cloudflare/forge/qa/dev.log
+.wrangler/

@@ -181,3 +181,15 @@ plus `/sitemap.xml` and `/robots.txt`. Signed-in people still land on their dash
   chooses up to nine demos for the Examples page (only active accounts' demos appear).
 - **Terms and privacy** are plain-language drafts; have them reviewed before relying on them.
 - Tests: `tests/forge-web.test.ts`.
+
+## Full browser QA (dummy data, nothing touches production)
+
+`npm run forge:qa` starts a throw-away local copy of Forge (its own database, built from the real
+migrations; no secrets) and drives it with a real browser through the whole product: crawls every
+public page (links, headings, alt text, form labels, console errors, phone-width overflow, mobile
+menu, dark mode), sends the three public forms, sets up the administrator, turns a reseller
+application into a customer account, accepts the invite, builds a demo, submits a form on it,
+creates a team invite and an API key, uses the API, adds credits, changes the footer credit,
+features an example, suspends and reactivates the account, and checks sign-in rate limiting.
+It needs Playwright (already installed here) and takes about two minutes. Screenshots go to
+`cloudflare/forge/qa/shots/`.

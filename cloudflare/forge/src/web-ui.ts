@@ -103,9 +103,9 @@ a.card:hover{border-color:var(--coral);transform:translateY(-2px);box-shadow:0 1
 .price{font:700 2.8rem var(--serif);color:var(--navy)}@media (prefers-color-scheme:dark){.price{color:var(--ink)}}
 .price small{font:500 .95rem var(--sans);color:var(--muted)}
 .per{font-size:.88rem;color:var(--muted)}
-.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:22px}
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,360px));gap:22px}
 .shot{background:var(--paper);border:1px solid var(--sand);border-radius:var(--r);overflow:hidden;text-decoration:none;color:inherit;display:grid}
-.shot:hover{border-color:var(--coral)}.shot .img{aspect-ratio:16/10;background:linear-gradient(135deg,var(--sky),var(--coral-soft));background-size:cover;background-position:center}
+.shot:hover{border-color:var(--coral)}.shot .img{aspect-ratio:16/10;background:linear-gradient(135deg,var(--sky),var(--coral-soft));background-size:cover;background-position:center;display:grid;place-items:center;font:700 2.6rem var(--serif);color:var(--coral-d)}
 .shot div:last-child{padding:16px 18px;display:grid;gap:2px}.shot small{color:var(--muted)}
 .faq{display:grid;gap:12px;max-width:820px;margin:0 auto}
 .faq details{background:var(--paper);border:1px solid var(--sand);border-radius:14px;padding:4px 22px}
@@ -190,11 +190,12 @@ const ctaBand = (title = "Ready to show your next prospect their website?", sub 
 
 const faqList = (items = FAQS) => `<div class="faq">${items.map((f) => `<details><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join("")}</div>`;
 const tradeCard = (t: Trade) => `<a class="trade" href="/trades/${t.slug}">${esc(t.name === "Gym or studio" ? "Gyms & studios" : t.who.replace(/^./, (c) => c.toUpperCase()))}<small>${esc(t.services.slice(0, 3).join(" · "))}</small></a>`;
+const initials = (n: string) => n.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
 const showcaseCards = (items: Showcase[]) =>
   `<div class="shots">${items
     .map(
       (s) =>
-        `<a class="shot" href="${esc(s.url)}" target="_blank" rel="noopener"><div class="img"${s.image ? ` style="background-image:url('${esc(s.image)}')"` : ""}></div><div><b>${esc(s.name)}</b><small>${esc(s.trade)} · View the live site →</small></div></a>`,
+        `<a class="shot" href="${esc(s.url)}" target="_blank" rel="noopener"><div class="img"${s.image ? ` style="background-image:url('${esc(s.image)}')"` : ""}>${s.image ? "" : esc(initials(s.name))}</div><div><b>${esc(s.name)}</b><small>${esc(s.trade)} · View the live site →</small></div></a>`,
     )
     .join("")}</div>`;
 

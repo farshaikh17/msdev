@@ -64,6 +64,7 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 @keyframes sp{to{transform:rotate(360deg)}}
 .tag{font:600 .72rem var(--body);padding:3px 9px;border-radius:999px;background:var(--steel-soft);color:var(--steel)}
 .tag.bad{background:var(--bad-soft);color:var(--bad)}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.dim{background:var(--chrome);color:var(--muted)}
 .credits{font:600 .78rem var(--body);padding:4px 10px;border-radius:999px;background:var(--steel-soft);color:var(--steel);max-width:100%;overflow-wrap:anywhere}
 .right{margin-left:auto}
 .mono{font:.8rem var(--mono)}
@@ -108,21 +109,21 @@ export const flash = (ok?: string, err?: string) =>
 
 const brand = `<a class="brand" href="/"><i></i>Forge Demo</a>`;
 
-export function loginPage(error?: string, canSetup = false): Response {
+export function loginPage(error?: string, canSetup = false, email = ""): Response {
   return page(
     "Sign in",
     `<main class="login card">${brand}
 ${flash(undefined, error)}
 <form method="post" action="/login" class="card" style="padding:0;border:0;gap:14px">
-<label for="em">Email<input id="em" name="email" type="email" autocomplete="username" required autofocus></label>
-<label for="pw">Password<input id="pw" name="password" type="password" autocomplete="current-password" required></label>
+<label for="em">Email<input id="em" name="email" type="email" autocomplete="username" required${email ? "" : " autofocus"} value="${esc(email)}"></label>
+<label for="pw">Password<input id="pw" name="password" type="password" autocomplete="current-password" required${email ? " autofocus" : ""}></label>
 <button class="btn" type="submit">Sign in</button></form>
 ${canSetup ? `<p class="note" style="margin:0"><a href="/setup">First time here? Set up the administrator account.</a></p>` : ""}</main>`,
   );
 }
 
 /** First-run setup: the one-off team password proves it's really the owner, then the first admin is made. */
-export function setupPage(error?: string): Response {
+export function setupPage(error?: string, email = ""): Response {
   return page(
     "Set up",
     `<main class="login card">${brand}
@@ -130,7 +131,7 @@ export function setupPage(error?: string): Response {
 ${flash(undefined, error)}
 <form method="post" action="/setup" class="card" style="padding:0;border:0;gap:14px">
 <label for="tp">Current team password<input id="tp" name="team" type="password" autocomplete="off" required autofocus></label>
-<label for="se">Your email<input id="se" name="email" type="email" autocomplete="username" required></label>
+<label for="se">Your email<input id="se" name="email" type="email" autocomplete="username" required value="${esc(email)}"></label>
 <label for="sp">New password (10+ characters)<input id="sp" name="password" type="password" autocomplete="new-password" minlength="10" required></label>
 <label for="sc">New password again<input id="sc" name="confirm" type="password" autocomplete="new-password" minlength="10" required></label>
 <button class="btn" type="submit">Create administrator</button></form></main>`,
@@ -203,7 +204,7 @@ export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) =>
     `<main class="main">${flash(ok, err)}
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${stat("Build credits", s.tenant.unlimited ? "Unlimited" : s.tenant.credits)}${stat("Demos", usage.demos)}${stat("Built this month", usage.buildsMonth)}${stat("Form submissions", usage.leads)}</div>
 ${out ? `<div class="flash bad" role="alert">This account has no build credits left. Ask your Forge administrator to add more; sites you've already built keep working.</div>` : ""}
-<div><h1>New demo website</h1><p class="lead">Type in a business (or paste its Google Maps link) and Claude designs a custom website of 15+ pages for it (to the design team's SOP), with the GoHighLevel chat widget in the site's colour and working forms. It takes about 7–20 minutes and builds in the background, so you can keep working.${s.tenant.unlimited ? "" : " Each build uses 1 credit; a build that fails is refunded."}${aiOn ? "" : " (AI is off until ANTHROPIC_API_KEY is set, so sites use the built-in template.)"}</p></div>
+<div><h1>New demo website</h1><p class="lead">Type in a business (or paste its Google Maps link) and Forge designs a custom website of 15+ pages for it, with working forms and a chat widget in the site's colour. It takes about 7–20 minutes and builds in the background, so you can keep working.${s.tenant.unlimited ? "" : " Each build uses 1 credit; a build that fails is refunded."}${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template and no credit is used.)"}</p></div>
 <form method="post" action="/demos" class="card">${fields()}<div><button class="btn ember" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build demo website</button></div></form>
 <section style="display:grid;gap:14px"><h2>All demos (${demos.length})</h2>${rows}</section></main>`,
     { nav: "demos", session: s },

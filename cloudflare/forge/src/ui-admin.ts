@@ -117,7 +117,7 @@ export function adminInquiriesPage(s: Session, rows: Inquiry[], filter: string, 
       r.kind === "reseller"
         ? `<a class="btn" href="/admin?${new URLSearchParams({ name: r.company || r.name, email: r.email, credits: "10" }).toString()}#new">Create account</a>`
         : "";
-    return `<div class="card"><div class="row" style="justify-content:space-between"><div><b>${esc(r.name)}</b> · <a href="mailto:${esc(r.email)}">${esc(r.email)}</a><br><span class="note">${esc(KIND[r.kind] ?? r.kind)} · ${when(r.createdAt)}${bits.length ? ` · ${bits.join(" · ")}` : ""}</span></div><span class="tag${r.status === "new" ? "" : " bad"}">${esc(r.status)}</span></div>
+    return `<div class="card"><div class="row" style="justify-content:space-between"><div><b>${esc(r.name)}</b> · <a href="mailto:${esc(r.email)}">${esc(r.email)}</a><br><span class="note">${esc(KIND[r.kind] ?? r.kind)} · ${when(r.createdAt)}${bits.length ? ` · ${bits.join(" · ")}` : ""}</span></div><span class="tag${r.status === "won" ? " ok" : r.status === "closed" ? " dim" : ""}">${esc(r.status)}</span></div>
 ${r.message ? `<p style="margin:0;white-space:pre-wrap">${esc(r.message)}</p>` : ""}
 <div class="row">${create}${STATUSES.filter((x) => x !== r.status)
       .map((x) => `<form method="post" action="/admin/inquiries/${r.id}/status"><input type="hidden" name="status" value="${x}"><input type="hidden" name="back" value="${esc(filter)}"><button class="btn ghost" type="submit">Mark ${x}</button></form>`)
