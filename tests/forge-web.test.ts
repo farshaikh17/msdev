@@ -234,3 +234,18 @@ describe("hostile input", () => {
     expect(page).toContain("&lt;script&gt;alert(2)");
   });
 });
+
+describe("sample sites", () => {
+  it("lists three fictional samples on Examples and serves each one isolated and unindexed", async () => {
+    const list = await html(await call(h, "/examples"));
+    for (const n of ["Harbor Plumbing Co", "Bright Smile Dental", "Casa Verde Kitchen"]) expect(list).toContain(n);
+    for (const s of ["harbor-plumbing", "bright-smile-dental", "casa-verde-kitchen"]) {
+      const r = await call(h, `/examples/sample/${s}`);
+      expect(r.status, s).toBe(200);
+      expect(r.headers.get("content-security-policy")).toContain("sandbox");
+      expect(r.headers.get("x-robots-tag")).toBe("noindex");
+      expect(await html(r)).toContain("555-01");
+    }
+    expect((await call(h, "/examples/sample/nope")).status).toBe(404);
+  });
+});

@@ -2,6 +2,9 @@
  * The public Forge website (no sign-in): routes, the price packs and examples Mianro staff choose,
  * and the contact / sample / reseller-application forms, which land in the admin console.
  */
+import { draftContent } from "../../../src/forge/copy";
+import { renderPage } from "../../../src/forge/render";
+import { Intake } from "../../../src/forge/schema";
 import { getDemo, getSetting, imageNames, recordAttempt, throttled } from "./db";
 import { sameOrigin } from "./auth";
 import type { Env } from "./env";
@@ -91,6 +94,27 @@ async function showcase(env: Env, origin: string): Promise<Showcase[]> {
     out.push({ slug, name: demo.intake.businessName, trade: demo.content.industry || "Local business", url: `${base}${slug}`, image });
   }
   return out;
+}
+
+// ---- Fictional sample sites (always available, no account needed) -----------------------------
+
+const SAMPLE_INTAKES = [
+  { slug: "harbor-plumbing", businessName: "Harbor Plumbing Co", industry: "Plumbing", city: "Tampa, FL", phone: "(813) 555-0142", primaryColor: "#1d6fb8" },
+  { slug: "bright-smile-dental", businessName: "Bright Smile Dental", industry: "Dentistry", city: "Austin, TX", phone: "(512) 555-0188", primaryColor: "#14917f" },
+  { slug: "casa-verde-kitchen", businessName: "Casa Verde Kitchen", industry: "Restaurant", city: "Miami, FL", phone: "(305) 555-0116", primaryColor: "#c8502a" },
+];
+
+export const SAMPLES: Showcase[] = SAMPLE_INTAKES.map((i) => ({ slug: i.slug, name: i.businessName, trade: `${i.industry} · sample`, url: `/examples/sample/${i.slug}`, image: null }));
+
+function sampleSite(slug: string): Response | null {
+  const found = SAMPLE_INTAKES.find((i) => i.slug === slug);
+  if (!found) return null;
+  const intake = Intake.parse(found);
+  const now = new Date(0).toISOString();
+  const html = renderPage({ slug, intake, content: draftContent(intake), writtenBy: "draft", createdAt: now, updatedAt: now });
+  return new Response(html, {
+    headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "x-content-type-options": "nosniff", "cache-control": "public, max-age=300", "content-security-policy": "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox" },
+  });
 }
 
 // ---- Inquiries -------------------------------------------------------------------------------
@@ -224,6 +248,7 @@ export async function handleWeb(req: Request, env: Env, path: string, signedIn: 
   if (path === "/favicon.svg")
     return new Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#e4572e"/><text x="16" y="23" font-size="20" font-family="Georgia,serif" font-weight="700" text-anchor="middle" fill="#fff">F</text></svg>', { headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" } });
 
+  let m: RegExpMatchArray | null;
   if (path === "/") {
     if (signedIn) return null; // signed-in people see their dashboard here
     const plans = await getPlans(env);
@@ -239,9 +264,11 @@ export async function handleWeb(req: Request, env: Env, path: string, signedIn: 
     const plan = url.searchParams.get("plan") ?? "";
     return page("Apply to the Forge reseller program", "Tell us about your agency and we'll set up your account.", formPage({ kind: "reseller", values: { plan: plan.slice(0, 40) } }));
   }
-  if (path === "/examples") return page("Websites built by Forge", "See real multi-page websites Forge designed from just a business name.", examplesPage(await showcase(env, origin)));
+  if (path === "/examples") return page("Websites built by Forge", "See multi-page websites Forge designed from just a business name.", examplesPage(await showcase(env, origin), SAMPLES));
+  m = path.match(/^\/examples\/sample\/([a-z0-9-]+)$/);
+  if (m) return sampleSite(m[1]) ?? page("Page not found · Forge", "", notFoundPage(), { status: 404, noindex: true });
   if (path === "/trades") return page("Websites for every local trade", "Forge designs tailored websites for plumbers, electricians, dentists, restaurants and more.", tradesIndex(url.searchParams.get("q") ?? ""));
-  let m = path.match(/^\/trades\/([a-z0-9-]+)$/);
+  m = path.match(/^\/trades\/([a-z0-9-]+)$/);
   if (m) {
     const t = tradeBySlug(m[1]);
     if (!t) return page("Page not found · Forge", "", notFoundPage(), { status: 404, noindex: true });

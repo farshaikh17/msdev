@@ -294,13 +294,10 @@ export function resellersPage(): string {
 <section><div class="wrap"><div class="center" style="margin-bottom:30px"><h2>Reseller questions</h2></div>${faqList(FAQS.slice(3, 9))}</div></section>${ctaBand()}`;
 }
 
-export function examplesPage(items: Showcase[]): string {
-  return `<div class="pagehead"><div class="wrap"><span class="eyebrow">Examples</span><h1>Sites built by Forge</h1><p class="lead" style="margin-top:16px">Open them on your phone. Every one was designed from just a business name.</p></div></div>
-<section class="tight"><div class="wrap">${
-    items.length
-      ? showcaseCards(items)
-      : `<div class="card"><h3>Examples are on the way</h3><p>We're choosing the first sites to feature here. Want to see one built for a business you know? Ask for a free sample.</p><a class="btn" href="/contact?kind=sample">Request a sample</a></div>`
-  }</div></section>
+export function examplesPage(items: Showcase[], samples: Showcase[] = []): string {
+  return `<div class="pagehead"><div class="wrap"><span class="eyebrow">Examples</span><h1>Sites built by Forge</h1><p class="lead" style="margin-top:16px">Open them on your phone. Every one starts from just a business name.</p></div></div>
+${items.length ? `<section class="tight"><div class="wrap"><div class="head"><h2>Recent builds</h2></div>${showcaseCards(items)}</div></section>` : ""}
+${samples.length ? `<section class="tight"><div class="wrap"><div class="head"><div><h2>Sample designs</h2><p>Fictional businesses, so you can see the structure, forms and layout. Forge's full multi-page designs go further.</p></div></div>${showcaseCards(samples)}</div></section>` : ""}
 <section class="tight"><div class="wrap"><div class="card" style="grid-template-columns:1fr auto;align-items:center"><div><h3>Want a sample for a business you know?</h3><p>Tell us the business and we'll build one for you to look at.</p></div><a class="btn" href="/contact?kind=sample">Request a sample</a></div></div></section>${ctaBand()}`;
 }
 
