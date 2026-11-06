@@ -58,9 +58,10 @@ import {
   adminCount,
 } from "./tenants";
 import { demoPage, homePage, invitePage, isOwner, loginPage, page, setupPage } from "./ui";
-import { adminPage, adminTenantPage, adminVideosPage } from "./ui-admin";
+import { adminInquiriesPage, adminPage, adminSitePage, adminTenantPage, adminVideosPage } from "./ui-admin";
 import { apiPage, passwordCard, settingsPage, teamPage } from "./ui-settings";
 import { deliver, newWebhookSecret, webhookUrlProblem } from "./webhook";
+import { countNewInquiries, getPlans, getShowcaseSlugs, handleWeb, listInquiries, parsePlans, parseSlugs, setInquiryStatus, webNotFound } from "./web";
 
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, OPTIONS" };
 /** Wrong passwords allowed per address (and per email), and how long the count lasts. */
@@ -173,9 +174,13 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
 
   // ---- Everything below needs a signed-in person ---------------------------------------------
   const s = await currentSession(req, env);
+  // The public website (home, pricing, trades, guides, forms…). Signed-in people see their dashboard at "/".
+  const web = await handleWeb(req, env, path, !!s);
+  if (web) return web;
   if (!s) {
-    if (path === "/login" || req.method === "GET") return loginPage(undefined, (await adminCount(env)) === 0);
-    return redirect("/login");
+    if (path === "/login") return loginPage(undefined, (await adminCount(env)) === 0);
+    if (/^\/(demos|team|api|settings|admin)(\/|$)/.test(path) || post) return redirect("/login");
+    return webNotFound(req, false);
   }
   if (post && !sameOrigin(req)) return text("Cross-site form posts are not accepted.", 403);
   if (path === "/login") return redirect("/");
@@ -374,19 +379,52 @@ async function handleAdmin(req: Request, env: Env, s: Session, path: string, ori
   const post = req.method === "POST";
   const flashQ = { ok: q("ok"), err: q("error") };
 
-  if (path === "/admin" && req.method === "GET") return adminPage(s, await listTenants(env), flashQ);
+  const adminHome = async (extra: Parameters<typeof adminPage>[2] = {}) => adminPage(s, await listTenants(env), extra, await countNewInquiries(env));
+  if (path === "/admin" && req.method === "GET") {
+    const name = q("name");
+    const prefill = name || q("email") ? { name: (name ?? "").slice(0, 80), email: (q("email") ?? "").slice(0, 120), credits: String(Math.max(0, Math.min(10000, Math.floor(Number(q("credits")) || 3)))) } : undefined;
+    return adminHome({ ...flashQ, prefill });
+  }
+
+  if (path === "/admin/inquiries" && req.method === "GET") {
+    const status = q("status");
+    const filter = status && ["new", "talking", "won", "closed"].includes(status) ? status : "";
+    return adminInquiriesPage(s, await listInquiries(env, filter || undefined), filter, flashQ);
+  }
+  const iq = path.match(/^\/admin\/inquiries\/(\d+)\/status$/);
+  if (iq && post) {
+    const f = await req.formData();
+    await setInquiryStatus(env, Number(iq[1]), String(f.get("status") ?? ""));
+    const back = String(f.get("back") ?? "");
+    return redirect(`/admin/inquiries${["new", "talking", "won", "closed"].includes(back) ? `?status=${back}` : ""}`);
+  }
+
+  if (path === "/admin/site") {
+    if (!post) return adminSitePage(s, await getPlans(env), (await getShowcaseSlugs(env)).join("\n"), flashQ);
+    const f = await req.formData();
+    const featured = Number(f.get("featured"));
+    const raw = [0, 1, 2, 3].map((i) => ({ name: String(f.get(`name${i}`) ?? ""), credits: Number(f.get(`credits${i}`)), price: String(f.get(`price${i}`) ?? ""), blurb: String(f.get(`blurb${i}`) ?? ""), featured: featured === i }));
+    const plans = parsePlans(raw.filter((r) => r.name.trim()));
+    const slugs = parseSlugs(String(f.get("showcase") ?? ""));
+    const unknown: string[] = [];
+    for (const slug of slugs) if (!(await getDemo(env, slug))) unknown.push(slug);
+    if (!plans.length) return adminSitePage(s, await getPlans(env), slugs.join("\n"), { err: "Keep at least one pack, with a name and a number of credits." });
+    if (unknown.length) return adminSitePage(s, plans, slugs.join("\n"), { err: `These demos don't exist: ${unknown.join(", ")}` });
+    await setSetting(env, "web_plans", JSON.stringify(plans));
+    await setSetting(env, "web_showcase", slugs.join(" "));
+    return redirect(withMsg("/admin/site", "ok", "Saved. The public site shows it now."));
+  }
 
   if (path === "/admin/tenants" && post) {
     const f = await req.formData();
     const name = String(f.get("name") ?? "").trim();
     const email = String(f.get("email") ?? "").trim().toLowerCase();
     const credits = Math.max(0, Math.min(10000, Math.floor(Number(f.get("credits")) || 0)));
-    const tenants = async () => listTenants(env);
-    if (!name || !EMAIL.test(email)) return adminPage(s, await tenants(), { err: "Enter the account name and a valid owner email." });
-    if (await getUserByEmail(env, email)) return adminPage(s, await tenants(), { err: "That email already has an account." });
+    if (!name || !EMAIL.test(email)) return adminHome({ err: "Enter the account name and a valid owner email." });
+    if (await getUserByEmail(env, email)) return adminHome({ err: "That email already has an account." });
     const t = await createTenant(env, name, credits);
     const token = await createToken(env, { kind: "invite", tenantId: t.id, email, role: "owner", createdBy: s.user.id });
-    return adminPage(s, await tenants(), { ok: `Created ${t.name} with ${credits} credits.`, link: { what: `Owner invite link for ${email}`, url: `${origin}/invite/${token}` } });
+    return adminHome({ ok: `Created ${t.name} with ${credits} credits.`, link: { what: `Owner invite link for ${email}`, url: `${origin}/invite/${token}` } });
   }
 
   let m = path.match(/^\/admin\/tenants\/(\d+)(?:\/(credits|branding|status|delete|invite|users\/(\d+)\/reset))?$/);

@@ -20,7 +20,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("first-time set-up and sign-in", () => {
   it("shows the sign-in page, and set-up only works with the old team password", async () => {
-    const home = await call(h, "/");
+    const home = await call(h, "/login");
     expect(await html(home)).toContain("First time here? Set up the administrator account.");
     const wrong = await call(h, "/setup", { form: { team: "nope", email: ADMIN.email, password: ADMIN.password, confirm: ADMIN.password } });
     expect(await html(wrong)).toContain("isn&#39;t the current team password");
@@ -38,7 +38,7 @@ describe("first-time set-up and sign-in", () => {
     const admin = await setupAdmin(h);
     await makeAccount(h, admin, "Bright Ideas", "owner@b.test");
     h.db.exec("DELETE FROM users WHERE role = 'admin'");
-    expect(await html(await call(h, "/"))).toContain("Set up the administrator account");
+    expect(await html(await call(h, "/login"))).toContain("Set up the administrator account");
     const again = await call(h, "/setup", { form: { team: TEAM_PASSWORD, email: "new-boss@mianro.test", password: "new-admin-password", confirm: "new-admin-password" } });
     expect(again.status).toBe(303);
     expect((await getUserByEmail(h.env, "new-boss@mianro.test"))!.role).toBe("admin");

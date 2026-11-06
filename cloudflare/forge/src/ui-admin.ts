@@ -4,25 +4,28 @@ import type { Session } from "./auth";
 import type { LibraryEntry } from "./hero";
 import type { LedgerEntry, PendingInvite, Tenant, TenantSummary, Usage, User } from "./tenants";
 import { flash, page } from "./ui";
+import type { Inquiry } from "./web";
+import type { Plan } from "./web-content";
 import { linkBox, videoLibrary } from "./ui-settings";
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
 const when = (iso: string | null) => (iso ? esc(iso.slice(0, 16).replace("T", " ")) + " UTC" : "never");
 
 interface Extra {
+  prefill?: { name: string; email: string; credits: string };
   link?: { what: string; url: string };
   ok?: string;
   err?: string;
 }
 
-export function adminPage(s: Session, tenants: TenantSummary[], extra: Extra = {}): Response {
+export function adminPage(s: Session, tenants: TenantSummary[], extra: Extra = {}, newInquiries = 0): Response {
   const total = tenants.reduce((a, t) => a + t.costTotal, 0);
   const month = tenants.reduce((a, t) => a + t.costMonth, 0);
   return page(
     "Admin",
     `<main class="main">${flash(extra.ok, extra.err)}${extra.link ? linkBox(extra.link.what, extra.link.url) : ""}
 <div class="row" style="justify-content:space-between"><div><h1>Accounts</h1><p class="lead">Customer accounts, their build credits and what their builds cost us in Claude fees. This page is for Mianro staff only.</p></div>
-<a class="btn ghost" href="/admin/videos">Shared hero videos →</a></div>
+<div class="row"><a class="btn ghost" href="/admin/inquiries">Inquiries${newInquiries ? ` (${newInquiries} new)` : ""}</a><a class="btn ghost" href="/admin/site">Website</a><a class="btn ghost" href="/admin/videos">Shared videos</a></div></div>
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
 <div class="card" style="gap:2px;padding:16px"><span class="note">Accounts</span><b style="font:800 1.6rem var(--display)">${tenants.length}</b></div>
 <div class="card" style="gap:2px;padding:16px"><span class="note">Claude cost this month</span><b style="font:800 1.6rem var(--display)">${usd(month)}</b></div>
@@ -33,11 +36,11 @@ export function adminPage(s: Session, tenants: TenantSummary[], extra: Extra = {
           `<tr><td><a href="/admin/tenants/${t.id}">${esc(t.name)}</a></td><td>${t.status === "suspended" ? `<span class="tag bad">suspended</span>` : `<span class="tag">active</span>`}</td><td>${t.unlimited ? "unlimited" : t.credits}</td><td>${t.demos}</td><td>${t.users}</td><td>${t.builds}</td><td>${usd(t.costMonth)}</td><td>${usd(t.costTotal)}</td><td><a href="/admin/tenants/${t.id}">Manage →</a></td></tr>`,
       )
       .join("")}</tbody></table></div>
-<form method="post" action="/admin/tenants" class="card"><h2>New account</h2>
+<form method="post" action="/admin/tenants" class="card" id="new"><h2>New account</h2>
 <p class="note" style="margin:0">Make an account for a customer (an agency or business that will build demos), give it some starting credits, and invite its owner. You get a link to send them.</p>
-<div class="grid"><label>Account name<input name="name" required maxlength="80" placeholder="e.g. Bright Ideas Marketing"></label>
-<label>Owner's email<input name="email" type="email" required placeholder="owner@their-company.com"></label>
-<label>Starting credits<input name="credits" type="number" min="0" max="10000" value="3"></label></div>
+<div class="grid"><label>Account name<input name="name" required maxlength="80" placeholder="e.g. Bright Ideas Marketing" value="${esc(extra.prefill?.name ?? "")}"></label>
+<label>Owner's email<input name="email" type="email" required placeholder="owner@their-company.com" value="${esc(extra.prefill?.email ?? "")}"></label>
+<label>Starting credits<input name="credits" type="number" min="0" max="10000" value="${esc(extra.prefill?.credits ?? "3")}"></label></div>
 <div><button class="btn" type="submit">Create account and invite link</button></div></form></main>`,
     { nav: "admin", session: s },
   );
@@ -99,6 +102,50 @@ export function adminVideosPage(s: Session, videos: LibraryEntry[], folder: stri
     `<main class="main">${flash(extra.ok, extra.err)}
 <div><p class="note" style="margin:0"><a href="/admin">← All accounts</a></p><h1>Shared hero videos</h1></div>
 ${videoLibrary(videos, { base: "/admin/videos", shared: true, folder })}</main>`,
+    { nav: "admin", session: s },
+  );
+}
+
+const KIND: Record<string, string> = { reseller: "Reseller application", sample: "Sample request", contact: "Message" };
+const STATUSES = ["new", "talking", "won", "closed"] as const;
+
+export function adminInquiriesPage(s: Session, rows: Inquiry[], filter: string, extra: Extra = {}): Response {
+  const tab = (v: string, label: string) => `<a class="btn ${filter === v ? "" : "ghost"}" href="/admin/inquiries${v ? `?status=${v}` : ""}">${label}</a>`;
+  const card = (r: Inquiry) => {
+    const bits = [r.company && `<b>${esc(r.company)}</b>`, r.website && esc(r.website), r.phone && esc(r.phone), ...Object.entries(r.extra).map(([k, v]) => `${esc(k)}: ${esc(v)}`)].filter(Boolean);
+    const create =
+      r.kind === "reseller"
+        ? `<a class="btn" href="/admin?${new URLSearchParams({ name: r.company || r.name, email: r.email, credits: "10" }).toString()}#new">Create account</a>`
+        : "";
+    return `<div class="card"><div class="row" style="justify-content:space-between"><div><b>${esc(r.name)}</b> · <a href="mailto:${esc(r.email)}">${esc(r.email)}</a><br><span class="note">${esc(KIND[r.kind] ?? r.kind)} · ${when(r.createdAt)}${bits.length ? ` · ${bits.join(" · ")}` : ""}</span></div><span class="tag${r.status === "new" ? "" : " bad"}">${esc(r.status)}</span></div>
+${r.message ? `<p style="margin:0;white-space:pre-wrap">${esc(r.message)}</p>` : ""}
+<div class="row">${create}${STATUSES.filter((x) => x !== r.status)
+      .map((x) => `<form method="post" action="/admin/inquiries/${r.id}/status"><input type="hidden" name="status" value="${x}"><input type="hidden" name="back" value="${esc(filter)}"><button class="btn ghost" type="submit">Mark ${x}</button></form>`)
+      .join("")}</div></div>`;
+  };
+  return page(
+    "Inquiries",
+    `<main class="main">${flash(extra.ok, extra.err)}<div><p class="note" style="margin:0"><a href="/admin">← All accounts</a></p><h1>Website inquiries</h1><p class="lead">Messages, sample requests and reseller applications from the public site.</p></div>
+<div class="row">${tab("", "All")}${tab("new", "New")}${tab("talking", "Talking")}${tab("won", "Won")}${tab("closed", "Closed")}</div>
+${rows.length ? rows.map(card).join("") : `<div class="card empty">Nothing here yet.</div>`}</main>`,
+    { nav: "admin", session: s },
+  );
+}
+
+export function adminSitePage(s: Session, plans: Plan[], showcase: string, extra: Extra = {}): Response {
+  const rows = [...plans, ...Array.from({ length: Math.max(0, 4 - plans.length) }, () => ({ name: "", credits: 0, price: "", blurb: "" }) as Plan)];
+  return page(
+    "Website",
+    `<main class="main">${flash(extra.ok, extra.err)}<div><p class="note" style="margin:0"><a href="/admin">← All accounts</a></p><h1>Public website</h1><p class="lead">What the public Forge site shows: the credit packs on the pricing page and the example sites. Leave a pack's name empty to remove it.</p></div>
+<form method="post" action="/admin/site" class="card"><h2>Credit packs</h2>
+${rows
+  .map(
+    (p, i) => `<div class="grid"><label>Name<input name="name${i}" maxlength="30" value="${esc(p.name)}"></label><label>Credits<input name="credits${i}" type="number" min="0" max="100000" value="${p.credits || ""}"></label><label>Price<input name="price${i}" maxlength="14" value="${esc(p.price)}" placeholder="$249"></label><label class="full">One line<input name="blurb${i}" maxlength="140" value="${esc(p.blurb)}"></label><label class="choice"><input type="radio" name="featured" value="${i}"${p.featured ? " checked" : ""}><span>Most popular</span></label></div>`,
+  )
+  .join("")}
+<h2>Example sites</h2><label>Demo links or names, one per line (up to 9)<textarea name="showcase" rows="5" placeholder="https://forge-sites.example/acme-plumbing-1a2b3c4d">${esc(showcase)}</textarea></label>
+<p class="note" style="margin:0">Only demos you list here appear on the public Examples page, and only while their account is active.</p>
+<div><button class="btn" type="submit">Save</button></div></form></main>`,
     { nav: "admin", session: s },
   );
 }

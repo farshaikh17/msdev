@@ -162,3 +162,22 @@ network and no Claude spend. They cover set-up and sign-in, isolation between ac
 credits and refunds, suspension and deletion, invites and resets, the API, webhooks, and the
 footer credit and chat widget. Breaking the account filter, the credit charge or the suspension
 check each makes them fail.
+
+## The public website
+
+Signed-out visitors to the app's address see the public Forge website instead of the sign-in page
+(sign in at `/login`; the first-run "Set up the administrator" link is on that page). It is the
+reseller-facing front door: home, how it works, pricing, a reseller program page, trade pages
+(one per trade in `src/web-content.ts`), guides, questions, examples, contact, terms and privacy,
+plus `/sitemap.xml` and `/robots.txt`. Signed-in people still land on their dashboard at `/`.
+
+- **Words and trades:** `src/web-content.ts`. **Layout and pages:** `src/web-ui.ts`. **Routes, forms and
+  settings:** `src/web.ts`.
+- **Forms:** contact, "get a sample" and reseller applications are saved in the `inquiries` table
+  (limited to 5 per address per hour, with a hidden bot field). Mianro staff read them under
+  **Admin → Inquiries**, mark them new / talking / won / closed, and a reseller application has a
+  **Create account** button that pre-fills the new-account form.
+- **Prices and examples:** **Admin → Website** edits the credit packs shown on the pricing page and
+  chooses up to nine demos for the Examples page (only active accounts' demos appear).
+- **Terms and privacy** are plain-language drafts; have them reviewed before relying on them.
+- Tests: `tests/forge-web.test.ts`.
