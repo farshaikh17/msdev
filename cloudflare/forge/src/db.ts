@@ -87,7 +87,7 @@ export function makeSlug(name: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 40)
     .replace(/-+$/, "");
-  const r = crypto.getRandomValues(new Uint8Array(2));
+  const r = crypto.getRandomValues(new Uint8Array(4)); // 8 hex digits: 4 billion links, not guessable by trying
   return `${base || "demo"}-${[...r].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
 
@@ -292,4 +292,35 @@ export async function driveVideoIds(env: Env): Promise<string[]> {
 
 export async function deleteDriveVideo(env: Env, driveId: string): Promise<void> {
   await env.DB.prepare("DELETE FROM video_library WHERE drive_id = ?").bind(driveId).run();
+}
+
+/** Has this key used up its attempts in the current window? (Read-only: expired counters don't count.) */
+export async function throttled(env: Env, key: string, limit: number): Promise<boolean> {
+  const r = await env.DB.prepare("SELECT count FROM throttle WHERE key = ? AND reset_at > ?").bind(key, Date.now()).first<{ count: number }>();
+  return (r?.count ?? 0) >= limit;
+}
+
+/** Count one attempt; the window opens at the first attempt and the count starts over after `windowMs`. */
+export async function recordAttempt(env: Env, key: string, windowMs: number): Promise<void> {
+  const now = Date.now();
+  await env.DB.prepare(
+    `INSERT INTO throttle (key, count, reset_at) VALUES (?1, 1, ?2)
+     ON CONFLICT (key) DO UPDATE SET count = CASE WHEN reset_at > ?3 THEN count + 1 ELSE 1 END,
+                                     reset_at = CASE WHEN reset_at > ?3 THEN reset_at ELSE ?2 END`,
+  )
+    .bind(key, now + windowMs, now)
+    .run();
+}
+
+export async function clearAttempts(env: Env, key: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM throttle WHERE key = ?").bind(key).run();
+}
+
+export async function pruneThrottle(env: Env): Promise<void> {
+  await env.DB.prepare("DELETE FROM throttle WHERE reset_at < ?").bind(Date.now()).run();
+}
+
+export async function countLeads(env: Env, slug: string): Promise<number> {
+  const r = await env.DB.prepare("SELECT count(*) c FROM leads WHERE slug = ?").bind(slug).first<{ c: number }>();
+  return r?.c ?? 0;
 }

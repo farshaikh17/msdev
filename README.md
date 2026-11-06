@@ -205,6 +205,15 @@ clips are copied into Workers KV and given a trade and keywords from their file 
 removed from the folder leave the library. The team can correct any clip's trade in Settings;
 matching sites update within a minute, without a rebuild.
 
+**Security.** Everything in the team app sits behind the sign-in; strangers can't start a build
+(so can't spend Claude credit), change a setting or see demo data. Wrong passwords are limited to
+5 per address per 15 minutes, the public form endpoint accepts 8 posts per address per 10 minutes
+and stores at most 300 per demo, and new demo links carry 8 random hex digits so they can't be
+found by trying. Pages are marked noindex. Limits are per address, so a bot network spread over
+many addresses is slowed but not stopped: use a long password (Settings → Team password), and keep
+the Drive video folder shared as Viewer (an editor link lets anyone swap the clips demos play).
+The free Workers plan's daily request allowance can't be protected without a custom domain.
+
 Every form on a demo site really sends: submissions are saved and listed on the demo's page
 in the team app.
 

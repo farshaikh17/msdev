@@ -34,14 +34,19 @@ import {
   saveFailed,
   saveKit,
   deleteVideo,
+  clearAttempts,
+  countLeads,
   getImage,
   imageNames,
   listVideos,
   saveImage,
+  pruneThrottle,
+  recordAttempt,
   saveVideo,
   saveLead,
   savePage,
   setSetting,
+  throttled,
   touchBuild,
 } from "./db";
 import { designKit, designSitePage, factsBlock, Fatal, pagesOf, planSite, sitemapFor, TryLater, type Plan } from "./designer";
@@ -163,7 +168,7 @@ async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, sub: st
     accent = demo.intake.primaryColor || demo.content.theme.primary;
   }
   const widget = chatWidget(widgetId(demo.intake.chatWidget, widgetId(await getSetting(env, WIDGET_KEY), DEFAULT_WIDGET_ID)), accent);
-  const headers: Record<string, string> = { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "public, max-age=30" };
+  const headers: Record<string, string> = { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "x-content-type-options": "nosniff", "cache-control": "public, max-age=30" };
   if (sandbox) headers["content-security-policy"] = SANDBOX_CSP;
   const res = finish(new Response(html, { headers }), { prefix, current, widget, leadUrl: `${prefix}/_lead`, heroMotion: motion, legacyHero: !!motion && !html.includes('class="hero-motion"') });
   ctx.waitUntil(cache.put(req, res.clone()));
@@ -183,8 +188,21 @@ async function serveImage(req: Request, env: Env, ctx: Ctx, slug: string, versio
 }
 
 /** A demo website's form submission. */
+/** Wrong passwords allowed per address, and how long the count lasts. */
+const LOGIN_TRIES = 5;
+const LOGIN_WINDOW_MIN = 15;
+/** Form posts allowed per address per demo window, and stored submissions allowed per demo. */
+const LEAD_TRIES = 8;
+const LEAD_WINDOW_MS = 10 * 60_000;
+const LEAD_CAP = 300;
+
+const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") ?? "unknown";
+
 async function takeLead(req: Request, env: Env, slug: string): Promise<Response> {
   const headers = { ...CORS, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" };
+  // Spam guard: a few posts per address, then a pause. (Checked before anything is stored.)
+  const key = `lead:${clientIp(req)}`;
+  if (await throttled(env, key, LEAD_TRIES)) return Response.json({ error: "Too many submissions. Please try again later." }, { status: 429, headers: { ...headers, "retry-after": "600" } });
   const raw = await req.text();
   if (raw.length > 20_000) return Response.json({ error: "Too long." }, { status: 413, headers });
   let body: { page?: unknown; fields?: unknown };
@@ -198,6 +216,8 @@ async function takeLead(req: Request, env: Env, slug: string): Promise<Response>
     for (const [k, v] of Object.entries(body.fields).slice(0, 30)) if (typeof v === "string" && v.trim()) fields[k.slice(0, 60)] = v.trim().slice(0, 2000);
   if (!Object.keys(fields).length) return Response.json({ error: "Empty form." }, { status: 400, headers });
   if (!(await getDemo(env, slug))) return Response.json({ error: "This demo isn't available." }, { status: 404, headers });
+  await recordAttempt(env, key, LEAD_WINDOW_MS);
+  if ((await countLeads(env, slug)) >= LEAD_CAP) return Response.json({ error: "This form is full." }, { status: 429, headers });
   await saveLead(env, slug, typeof body.page === "string" ? body.page.slice(0, 200) : "", fields);
   return Response.json({ ok: true }, { headers });
 }
@@ -335,8 +355,18 @@ async function handle(req: Request, env: Env, ctx: Ctx): Promise<Response> {
 
   // Sign-in.
   if (path === "/login" && req.method === "POST") {
+    // Wrong guesses are counted per address: after a few, that address waits before it can try again.
+    const key = `login:${clientIp(req)}`;
+    if (await throttled(env, key, LOGIN_TRIES)) {
+      const r = loginPage(`Too many wrong passwords. Try again in ${LOGIN_WINDOW_MIN} minutes.`, false);
+      return new Response(r.body, { status: 429, headers: { ...Object.fromEntries(r.headers), "retry-after": String(LOGIN_WINDOW_MIN * 60) } });
+    }
     const f = await req.formData();
-    if (await checkPassword(env, String(f.get("password") ?? ""))) return redirect("/", { "set-cookie": await sessionCookie(env) });
+    if (await checkPassword(env, String(f.get("password") ?? ""))) {
+      await clearAttempts(env, key);
+      return redirect("/", { "set-cookie": await sessionCookie(env) });
+    }
+    await recordAttempt(env, key, LOGIN_WINDOW_MIN * 60_000);
     return loginPage("That password isn't right.", !(await passwordSet(env)));
   }
   if (path === "/logout" && req.method === "POST") return redirect("/login", { "set-cookie": signOutCookie });
@@ -498,6 +528,7 @@ const worker = {
   },
   /** Hourly: pick up clips added to (or removed from) the team's Drive folder. */
   async scheduled(_event: unknown, env: Env): Promise<void> {
+    await pruneThrottle(env).catch(() => undefined);
     await syncFolder(env).catch((e) => console.error("video sync failed", errText(e)));
   },
 };

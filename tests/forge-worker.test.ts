@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { Intake } from "@/forge/schema";
 import { costOf, CREDIT_MARKER, factsBlock, mapEmbed, parseParts, sitemapFor, tidyCss, type Kit } from "../cloudflare/forge/src/designer";
+import { clearAttempts, makeSlug, pruneThrottle, recordAttempt, throttled } from "../cloudflare/forge/src/db";
 import { folderId, parseFolder, serveVideo } from "../cloudflare/forge/src/drive";
 import { heroMotion, matchVideo, parseKeywords, parseVideoUrls } from "../cloudflare/forge/src/hero";
 import { privacyPage, termsPage } from "../cloudflare/forge/src/legal";
@@ -187,5 +189,62 @@ describe("Forge worker — hero videos from Google Drive", () => {
     const clips = ["a", "b", "c"].map((c, n) => ({ id: n, name: "HVAC", keywords: ["hvac"], urls: [`https://s/_v/${c}.mp4`] }));
     const picks = new Set(["one-1a2b", "two-3c4d", "three-5e6f", "four-7a8b", "five-9c0d"].map((s) => matchVideo(clips, Intake.parse({ businessName: "Cool Co", industry: "HVAC" }), s)));
     expect(picks.size).toBeGreaterThan(1);
+  });
+});
+
+describe("Forge worker — rate limiting", () => {
+  /** A D1 look-alike over in-memory SQLite, running the app's real throttle migration and queries. */
+  function fakeEnv() {
+    const db = new DatabaseSync(":memory:");
+    db.exec(readFileSync("cloudflare/forge/migrations/0008_throttle.sql", "utf8"));
+    const DB = {
+      prepare(sql: string) {
+        let args: unknown[] = [];
+        const st = {
+          bind: (...a: unknown[]) => ((args = a), st),
+          first: async () => (db.prepare(sql).get(...(args as never[])) as never) ?? null,
+          run: async () => void db.prepare(sql).run(...(args as never[])),
+          all: async () => ({ results: db.prepare(sql).all(...(args as never[])) as never[] }),
+        };
+        return st;
+      },
+    };
+    return { env: { DB } as unknown as Parameters<typeof throttled>[0], db };
+  }
+
+  it("blocks an address after its allowed attempts, and only that address", async () => {
+    const { env } = fakeEnv();
+    for (let n = 0; n < 5; n++) {
+      expect(await throttled(env, "login:1.2.3.4", 5)).toBe(false);
+      await recordAttempt(env, "login:1.2.3.4", 15 * 60_000);
+    }
+    expect(await throttled(env, "login:1.2.3.4", 5)).toBe(true);
+    expect(await throttled(env, "login:5.6.7.8", 5)).toBe(false);
+  });
+
+  it("starts counting again once the window has passed", async () => {
+    const { env, db } = fakeEnv();
+    for (let n = 0; n < 5; n++) await recordAttempt(env, "login:1.2.3.4", 15 * 60_000);
+    expect(await throttled(env, "login:1.2.3.4", 5)).toBe(true);
+    db.exec("UPDATE throttle SET reset_at = reset_at - 16 * 60 * 1000"); // 16 minutes later
+    expect(await throttled(env, "login:1.2.3.4", 5)).toBe(false);
+    await recordAttempt(env, "login:1.2.3.4", 15 * 60_000);
+    expect((db.prepare("SELECT count FROM throttle").get() as { count: number }).count).toBe(1);
+  });
+
+  it("clears the count on a correct sign-in, and prunes old counters", async () => {
+    const { env, db } = fakeEnv();
+    await recordAttempt(env, "login:a", 60_000);
+    await recordAttempt(env, "login:b", 60_000);
+    await clearAttempts(env, "login:a");
+    expect(db.prepare("SELECT count(*) c FROM throttle").get()).toEqual({ c: 1 });
+    db.exec("UPDATE throttle SET reset_at = 1");
+    await pruneThrottle(env);
+    expect(db.prepare("SELECT count(*) c FROM throttle").get()).toEqual({ c: 0 });
+  });
+
+  it("makes demo links that can't be guessed by trying", () => {
+    expect(makeSlug("Pollux Air Conditioning")).toMatch(/^pollux-air-conditioning-[0-9a-f]{8}$/);
+    expect(makeSlug("Pollux Air Conditioning")).not.toBe(makeSlug("Pollux Air Conditioning"));
   });
 });
