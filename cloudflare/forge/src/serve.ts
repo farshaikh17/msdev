@@ -1,0 +1,131 @@
+/**
+ * The public side: demo websites, their photos and videos, and their forms. Nothing here needs a
+ * sign-in. A demo is served only while its account is active; the account's settings (footer
+ * credit, chat widget, hero videos) are applied as each page is served.
+ */
+import { renderPage, renderSite } from "../../../src/forge/render";
+import {
+  countLeads,
+  getDemo,
+  getImage,
+  getKit,
+  getPage,
+  imageNames,
+  listLibrary,
+  recordAttempt,
+  saveLead,
+  throttled,
+} from "./db";
+import { pagesOf } from "./designer";
+import type { Ctx, Env } from "./env";
+import { heroMotion, matchVideo } from "./hero";
+import { assemble, chatWidget, creditFor, finish, widgetFor } from "./site";
+import { getTenant } from "./tenants";
+
+export const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, OPTIONS" };
+/** Sites served from the app's own origin run with an opaque origin: no cookies, no access to the app. */
+const SANDBOX_CSP = "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation";
+
+/** Form posts allowed per address per window, and stored submissions allowed per demo. */
+const LEAD_TRIES = 8;
+const LEAD_WINDOW_MS = 10 * 60_000;
+const LEAD_CAP = 300;
+
+export const text = (body: string, status: number) => new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8" } });
+export const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") ?? "unknown";
+
+/** A demo that can be shown to the public: not archived, and its account is active. */
+async function publicDemo(env: Env, slug: string) {
+  const demo = await getDemo(env, slug);
+  if (!demo) return null;
+  const tenant = await getTenant(env, demo.tenantId);
+  return tenant && tenant.status === "active" ? { demo, tenant } : null;
+}
+
+/** A demo website page. `prefix` is the demo's address on this origin ("/<slug>" or "/s/<slug>"); `sub` the page path ("" for home). */
+export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, sub: string, prefix: string, sandbox: boolean): Promise<Response> {
+  const cache = (caches as unknown as { default: Cache }).default;
+  const hit = await cache.match(req);
+  if (hit) return hit;
+  const found = await publicDemo(env, slug);
+  if (!found) return text("This demo isn't available.", 404);
+  const { demo, tenant } = found;
+  let html: string;
+  let accent: string;
+  let current: string | null = null;
+  let motion = "";
+  if (demo.liveVersion) {
+    const path = sub || "/";
+    const kit = await getKit(env, slug, demo.liveVersion);
+    if (!kit) return text("This page isn't available.", 404);
+    if (!pagesOf(kit).some((p) => p.path === path)) return Response.redirect(new URL(prefix, req.url).toString(), 302);
+    const page = await getPage(env, slug, demo.liveVersion, path);
+    if (!page) return text("This page isn't available.", 404);
+    html = assemble(kit, page, slug, creditFor(tenant));
+    accent = kit.accent || demo.intake.primaryColor;
+    current = path;
+    if (path === "/") {
+      const [names, library] = await Promise.all([imageNames(env, slug, demo.liveVersion), listLibrary(env, tenant.id)]);
+      motion = heroMotion(
+        matchVideo(library, demo.intake, slug, pagesOf(kit).map((p) => p.name).join(" ")),
+        names.map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`),
+      );
+    }
+  } else {
+    // A single-page design (or the template while the first design is built).
+    if (sub) return Response.redirect(new URL(prefix, req.url).toString(), 302);
+    html = demo.html ?? renderPage(demo);
+    accent = demo.intake.primaryColor || demo.content.theme.primary;
+  }
+  const widget = chatWidget(widgetFor(tenant, demo.intake.chatWidget), accent);
+  const headers: Record<string, string> = { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "x-content-type-options": "nosniff", "cache-control": "public, max-age=30" };
+  if (sandbox) headers["content-security-policy"] = SANDBOX_CSP;
+  const res = finish(new Response(html, { headers }), { prefix, current, widget, leadUrl: `${prefix}/_lead`, heroMotion: motion, legacyHero: !!motion && !html.includes('class="hero-motion"') });
+  ctx.waitUntil(cache.put(req, res.clone()));
+  return res;
+}
+
+/** A preview photo. Its address names the site version, so it never changes and caches for a year. */
+export async function serveImage(req: Request, env: Env, ctx: Ctx, slug: string, version: string, name: string): Promise<Response> {
+  const cache = (caches as unknown as { default: Cache }).default;
+  const hit = await cache.match(req);
+  if (hit) return hit;
+  if (!(await publicDemo(env, slug))) return text("Not found", 404);
+  const bytes = await getImage(env, slug, version, name);
+  if (!bytes) return text("Not found", 404);
+  const res = new Response(bytes, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable" } });
+  ctx.waitUntil(cache.put(req, res.clone()));
+  return res;
+}
+
+/** A demo website's form submission. */
+export async function takeLead(req: Request, env: Env, slug: string): Promise<Response> {
+  const headers = { ...CORS, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" };
+  // Spam guard: a few posts per address, then a pause. (Checked before anything is stored.)
+  const key = `lead:${clientIp(req)}`;
+  if (await throttled(env, key, LEAD_TRIES)) return Response.json({ error: "Too many submissions. Please try again later." }, { status: 429, headers: { ...headers, "retry-after": "600" } });
+  const raw = await req.text();
+  if (raw.length > 20_000) return Response.json({ error: "Too long." }, { status: 413, headers });
+  let body: { page?: unknown; fields?: unknown };
+  try {
+    body = JSON.parse(raw) as typeof body;
+  } catch {
+    return Response.json({ error: "Bad request." }, { status: 400, headers });
+  }
+  const fields: Record<string, string> = {};
+  if (body.fields && typeof body.fields === "object")
+    for (const [k, v] of Object.entries(body.fields).slice(0, 30)) if (typeof v === "string" && v.trim()) fields[k.slice(0, 60)] = v.trim().slice(0, 2000);
+  if (!Object.keys(fields).length) return Response.json({ error: "Empty form." }, { status: 400, headers });
+  if (!(await publicDemo(env, slug))) return Response.json({ error: "This demo isn't available." }, { status: 404, headers });
+  await recordAttempt(env, key, LEAD_WINDOW_MS);
+  if ((await countLeads(env, slug)) >= LEAD_CAP) return Response.json({ error: "This form is full." }, { status: 429, headers });
+  await saveLead(env, slug, typeof body.page === "string" ? body.page.slice(0, 200) : "", fields);
+  return Response.json({ ok: true }, { headers });
+}
+
+/** The older template site as JSON (for the first GoHighLevel loader). */
+export async function templateJson(env: Env, slug: string): Promise<Response> {
+  const found = await publicDemo(env, slug);
+  if (!found) return Response.json({ error: "This demo isn't available." }, { status: 404, headers: CORS });
+  return Response.json(renderSite(found.demo), { headers: { ...CORS, "cache-control": "public, max-age=30" } });
+}

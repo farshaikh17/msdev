@@ -405,6 +405,8 @@ describe("finding leads", () => {
     ];
     await addBoard(ctx, "https://jobs.lever.co/acme");
     const rep = await runDiscovery(ctx, {
+      // Pinned like the other tests: the board's jobs were posted on 20 Sept, and a job older than 45 days is archived as stale.
+      today: "2026-09-30",
       fetcher: async (url: string) =>
         url.includes("/v0/postings/acme")
           ? { status: 200, json: async () => twice }

@@ -14,6 +14,8 @@ export interface LibraryEntry {
   /** Set for clips synced from the Google Drive folder. */
   driveId?: string | null;
   fileName?: string | null;
+  /** True for the library every account's demos can use (managed by Mianro staff). */
+  shared?: boolean;
   /** Lower-case words or phrases matched against the business's trade, name and services. */
   keywords: string[];
   urls: string[];

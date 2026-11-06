@@ -1,9 +1,10 @@
-/** The Forge Demo screens: sign-in, new demo + list, demo ready, settings. Plain HTML, no framework. */
+/** The Forge Demo screens: sign-in, set-up, invites, the dashboard and a demo. Plain HTML, no framework. */
 import { esc } from "../../../src/forge/render";
 import type { Intake } from "../../../src/forge/schema";
 import type { Lead, Listed, Stored } from "./db";
-import type { LibraryEntry } from "./hero";
 import { SWATCHES } from "./designer";
+import type { Session } from "./auth";
+import type { Usage } from "./tenants";
 
 const CSS = `
 :root{--bg:#f5f6f8;--surface:#fff;--ink:#172033;--muted:#5a6478;--line:#dde1e8;--ember:#d9601f;--ember-soft:#fbe9dd;--steel:#1d4f8c;--steel-soft:#e3ecf7;--ok:#217a4b;--ok-soft:#e1f2e8;--bad:#a32b2b;--bad-soft:#fbe4e4;--chrome:#e9ecf1;
@@ -63,18 +64,37 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 @keyframes sp{to{transform:rotate(360deg)}}
 .tag{font:600 .72rem var(--body);padding:3px 9px;border-radius:999px;background:var(--steel-soft);color:var(--steel)}
 .tag.bad{background:var(--bad-soft);color:var(--bad)}
+.credits{font:600 .78rem var(--body);padding:4px 10px;border-radius:999px;background:var(--steel-soft);color:var(--steel);white-space:nowrap}
+.right{margin-left:auto}
+.mono{font:.8rem var(--mono)}
 `;
 
 const COPY_JS = `document.addEventListener("click",async e=>{const b=e.target.closest("[data-copy]");if(!b)return;const t=b.getAttribute("data-copy");try{await navigator.clipboard.writeText(t);b.textContent="Copied";setTimeout(()=>b.textContent="Copy",1500)}catch{prompt("Copy this:",t)}});
 document.addEventListener("submit",e=>{const b=e.target.querySelector("button[data-busy]");if(b){b.disabled=true;b.textContent=b.getAttribute("data-busy")}});`;
 
-export function page(title: string, body: string, opts: { nav?: "new" | "settings" | null } = {}): Response {
-  const nav =
-    opts.nav === undefined || opts.nav === null
-      ? ""
-      : `<header class="top"><div class="top-in"><a class="brand" href="/"><i></i>Forge Demo</a><nav class="nav">
-<a href="/" class="${opts.nav === "new" ? "on" : ""}">Demos</a><a href="/settings" class="${opts.nav === "settings" ? "on" : ""}">Settings</a>
-<form method="post" action="/logout"><button class="linkbtn">Sign out</button></form></nav></div></header>`;
+export type NavItem = "demos" | "team" | "api" | "settings" | "admin";
+
+export interface PageOpts {
+  /** Which menu item is current. */
+  nav?: NavItem;
+  /** Who is signed in (the menu shows only for a signed-in person). */
+  session?: Session;
+}
+
+/** Owners (and Mianro staff) run the account; members just build demos. */
+export const isOwner = (s: Session) => s.user.role === "owner" || s.user.role === "admin";
+
+export const creditsText = (s: Session) => (s.tenant.unlimited ? "Unlimited builds" : `${s.tenant.credits} credit${s.tenant.credits === 1 ? "" : "s"} left`);
+
+export function page(title: string, body: string, opts: PageOpts = {}): Response {
+  const s = opts.session;
+  const link = (id: NavItem, href: string, label: string) => `<a href="${href}" class="${opts.nav === id ? "on" : ""}">${label}</a>`;
+  const nav = s
+    ? `<header class="top"><div class="top-in"><a class="brand" href="/"><i></i>Forge Demo</a><nav class="nav">
+${link("demos", "/", "Demos")}${isOwner(s) ? `${link("team", "/team", "Team")}${link("api", "/api", "API")}${link("settings", "/settings", "Settings")}` : ""}${s.user.role === "admin" ? link("admin", "/admin", "Admin") : ""}
+<span class="credits" title="${esc(s.user.email)}">${esc(s.tenant.name)} · ${esc(creditsText(s))}</span>
+<form method="post" action="/logout"><button class="linkbtn">Sign out</button></form></nav></div></header>`
+    : "";
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(title)} · Forge Demo</title><meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -83,23 +103,57 @@ export function page(title: string, body: string, opts: { nav?: "new" | "setting
   return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "SAMEORIGIN", "x-content-type-options": "nosniff", "referrer-policy": "same-origin" } });
 }
 
-const flash = (ok?: string, err?: string) =>
+export const flash = (ok?: string, err?: string) =>
   `${ok ? `<div class="flash ok" role="status">✓ ${esc(ok)}</div>` : ""}${err ? `<div class="flash bad" role="alert">${esc(err)}</div>` : ""}`;
 
-export function loginPage(error?: string, needsSetup = false): Response {
+const brand = `<a class="brand" href="/"><i></i>Forge Demo</a>`;
+
+export function loginPage(error?: string, canSetup = false): Response {
   return page(
     "Sign in",
-    `<main class="login card"><a class="brand" href="/"><i></i>Forge Demo</a>
-${needsSetup ? `<div class="flash bad">The team password isn't set yet. Add the FORGE_PASSWORD secret in Cloudflare.</div>` : ""}
+    `<main class="login card">${brand}
 ${flash(undefined, error)}
 <form method="post" action="/login" class="card" style="padding:0;border:0;gap:14px">
-<label for="pw">Team password<input id="pw" name="password" type="password" autocomplete="current-password" required autofocus></label>
-<button class="btn" type="submit">Sign in</button></form></main>`,
-    { nav: null },
+<label for="em">Email<input id="em" name="email" type="email" autocomplete="username" required autofocus></label>
+<label for="pw">Password<input id="pw" name="password" type="password" autocomplete="current-password" required></label>
+<button class="btn" type="submit">Sign in</button></form>
+${canSetup ? `<p class="note" style="margin:0"><a href="/setup">First time here? Set up the administrator account.</a></p>` : ""}</main>`,
   );
 }
 
-function fields(v?: Partial<Intake>): string {
+/** First-run setup: the one-off team password proves it's really the owner, then the first admin is made. */
+export function setupPage(error?: string): Response {
+  return page(
+    "Set up",
+    `<main class="login card">${brand}
+<div><h2>Set up the administrator</h2><p class="note" style="margin:6px 0 0">Forge Demo now has accounts, so each person signs in with their own email and password. Create the first administrator here. Enter the current team password to confirm it's you; after this it's no longer needed.</p></div>
+${flash(undefined, error)}
+<form method="post" action="/setup" class="card" style="padding:0;border:0;gap:14px">
+<label for="tp">Current team password<input id="tp" name="team" type="password" autocomplete="off" required autofocus></label>
+<label for="se">Your email<input id="se" name="email" type="email" autocomplete="username" required></label>
+<label for="sp">New password (10+ characters)<input id="sp" name="password" type="password" autocomplete="new-password" minlength="10" required></label>
+<label for="sc">New password again<input id="sc" name="confirm" type="password" autocomplete="new-password" minlength="10" required></label>
+<button class="btn" type="submit">Create administrator</button></form></main>`,
+  );
+}
+
+/** Accept an invitation, or choose a new password from a reset link. */
+export function invitePage(info: { kind: "invite" | "reset"; email: string; account: string }, token: string, error?: string): Response {
+  const invite = info.kind === "invite";
+  return page(
+    invite ? "Join" : "New password",
+    `<main class="login card">${brand}
+<div><h2>${invite ? `Join ${esc(info.account)}` : "Choose a new password"}</h2><p class="note" style="margin:6px 0 0">${invite ? "Choose a password to create your account." : `For ${esc(info.email)}.`}</p></div>
+${flash(undefined, error)}
+<form method="post" action="/invite/${esc(token)}" class="card" style="padding:0;border:0;gap:14px">
+${invite ? `<label>Email<input value="${esc(info.email)}" disabled></label>` : ""}
+<label for="ip">Password (10+ characters)<input id="ip" name="password" type="password" autocomplete="new-password" minlength="10" required autofocus></label>
+<label for="ic">Password again<input id="ic" name="confirm" type="password" autocomplete="new-password" minlength="10" required></label>
+<button class="btn" type="submit">${invite ? "Create my account" : "Save password"}</button></form></main>`,
+  );
+}
+
+export function fields(v?: Partial<Intake>): string {
   const t = (name: keyof Intake, label: string, ph: string, required = false, type = "text") =>
     `<label for="f-${name}">${label}<input id="f-${name}" name="${name}" type="${type}" value="${esc((v?.[name] as string) ?? "")}" placeholder="${esc(ph)}"${required ? " required" : ""}></label>`;
   const a = (name: keyof Intake, label: string, ph: string) =>
@@ -116,21 +170,26 @@ function fields(v?: Partial<Intake>): string {
   ).join("")}${radio("primaryColor", "custom", custom, `<i class="dot" style="background:${custom ? esc(color) : "#fff"}"></i>Custom`)}
 <input name="customColor" type="color" value="${custom ? esc(color) : "#2f5fd0"}" aria-label="Custom colour" style="width:44px;height:36px;padding:2px"></div>
 <p class="note" style="margin:0">Every site gets a light/dark switch; this sets which one it opens in.</p></fieldset>`;
-  return `<div class="grid">${t("businessName", "Business name *", "e.g. Vanguard Pipe & Water", true)}${t("industry", "Trade", "e.g. Plumbing, HVAC, Roofing")}${t("city", "City", "e.g. Myrtle Beach, SC")}${t("phone", "Phone", "e.g. (646) 594-9379")}</div>
+  return `<div class="grid">${t("businessName", "Business name", "e.g. Vanguard Pipe & Water")}${t("googleUrl", "or a Google Maps link to the business", "https://maps.app.goo.gl/…", false, "url")}${t("industry", "Trade", "e.g. Plumbing, HVAC, Roofing")}${t("city", "City", "e.g. Myrtle Beach, SC (gives the site a map)")}${t("phone", "Phone", "e.g. (646) 594-9379")}</div>
+<p class="note" style="margin:-6px 0 0">Type the name, or paste a Google Maps link and we read the name and location from it. A website address under "More details" fills in the phone, address and hours the business publishes.</p>
 ${look}
 <details><summary>More details (optional; the more you add, the more tailored the site)</summary><div class="grid">
+${t("websiteUrl", "Their current website (we read it for facts, photos and contact details)", "https://…", false, "url")}
 ${a("services", "Services", "Comma or line separated, e.g. Drain cleaning, Water heaters")}
 ${a("serviceAreas", "Service areas", "e.g. Myrtle Beach, Conway, Surfside Beach")}
+${t("address", "Street address", "e.g. 100 Main St, Myrtle Beach, SC 29577")}${t("hours", "Opening hours", "e.g. Mon–Fri 8am–5pm")}
 ${a("reviews", "Real reviews to quote", "One per paragraph, optionally ending — Name, Town. Leave empty for clearly-marked sample reviews.")}
 ${a("notes", "Other facts about the business", "e.g. Family owned since 2009, owner Matt, free estimates, 24/7")}
-${t("websiteUrl", "Their current website (we read it for facts and photos)", "https://…", false, "url")}
 ${a("photoUrls", "Photo links (one per line)", "Links to photos of their work, team or premises, e.g. from their Google listing or Facebook")}
 ${t("logoUrl", "Logo image link", "https://…", false, "url")}${t("heroImageUrl", "Main photo link", "https://…", false, "url")}
-${t("chatWidget", "Chat widget (GoHighLevel)", "Empty: the team's widget. Or paste a widget ID / embed code, or type off")}
+${t("chatWidget", "Chat widget (GoHighLevel)", "Empty: the account's widget. Or paste a widget ID / embed code, or type off")}
 </div></details>`;
 }
 
-export function homePage(demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, err?: string, ok?: string): Response {
+const stat = (label: string, value: string | number) => `<div class="card" style="gap:2px;padding:16px"><span class="note">${esc(label)}</span><b style="font:800 1.6rem var(--display)">${esc(String(value))}</b></div>`;
+
+export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string): Response {
+  const out = !s.tenant.unlimited && s.tenant.credits < 1;
   const rows = demos.length
     ? `<div class="table"><table><thead><tr><th>Business</th><th>Trade</th><th>City</th><th>Made</th><th></th></tr></thead><tbody>${demos
         .map(
@@ -142,14 +201,17 @@ export function homePage(demos: Listed[], siteUrl: (slug: string) => string, aiO
   return page(
     "Demos",
     `<main class="main">${flash(ok, err)}
-<div><h1>New demo website</h1><p class="lead">Type in a business and Claude designs a custom website of 15+ pages for it (to the design team's SOP), with your GoHighLevel chat widget in the site's colour and working forms. It takes about 15–20 minutes and builds in the background, so you can keep working.${aiOn ? "" : " (AI is off until ANTHROPIC_API_KEY is set, so sites use the built-in template.)"}</p></div>
-<form method="post" action="/demos" class="card">${fields()}<div><button class="btn ember" type="submit" data-busy="Starting…">Build demo website</button></div></form>
+<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${stat("Build credits", s.tenant.unlimited ? "Unlimited" : s.tenant.credits)}${stat("Demos", usage.demos)}${stat("Built this month", usage.buildsMonth)}${stat("Form submissions", usage.leads)}</div>
+${out ? `<div class="flash bad" role="alert">This account has no build credits left. Ask your Forge administrator to add more; sites you've already built keep working.</div>` : ""}
+<div><h1>New demo website</h1><p class="lead">Type in a business (or paste its Google Maps link) and Claude designs a custom website of 15+ pages for it (to the design team's SOP), with the GoHighLevel chat widget in the site's colour and working forms. It takes about 7–20 minutes and builds in the background, so you can keep working.${s.tenant.unlimited ? "" : " Each build uses 1 credit; a build that fails is refunded."}${aiOn ? "" : " (AI is off until ANTHROPIC_API_KEY is set, so sites use the built-in template.)"}</p></div>
+<form method="post" action="/demos" class="card">${fields()}<div><button class="btn ember" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build demo website</button></div></form>
 <section style="display:grid;gap:14px"><h2>All demos (${demos.length})</h2>${rows}</section></main>`,
-    { nav: "new" },
+    { nav: "demos", session: s },
   );
 }
 
 export function demoPage(
+  s: Session,
   d: Stored,
   links: { site: string; ghl: string; pages: { name: string; url: string }[] },
   progress: { done: number; total: number },
@@ -163,27 +225,29 @@ export function demoPage(
   const sheet = [new Date().toISOString().slice(0, 10), i.businessName, d.content.industry, i.city, i.phone, link].join("\t");
   const row = (title: string, shown: string, copy: string) =>
     `<div class="share-row"><div><b>${title}</b><span>${esc(shown)}</span></div>${copy ? `<button class="btn ghost" data-copy="${esc(copy)}">Copy</button>` : ""}</div>`;
+  const out = !s.tenant.unlimited && s.tenant.credits < 1;
+  const busy = d.buildStatus === "building";
   return page(
     i.businessName,
     `<main class="main">${flash(ok, err)}
 <div class="row" style="justify-content:space-between"><div><h1>${esc(i.businessName)}</h1>
 <p class="lead">${esc(d.content.industry)}${i.city ? ` · ${esc(i.city)}` : ""} · <span class="pill">${d.liveVersion ? `Designed by Claude · ${links.pages.length} pages` : d.html ? "Designed by Claude · 1 page" : "Template"}</span> · updated ${esc(d.updatedAt.slice(0, 16).replace("T", " "))} UTC${
-      d.buildCost ? ` · built for <b>$${d.buildCost.usd.toFixed(2)}</b> (${d.buildCost.calls} Claude calls)` : ""
+      s.user.role === "admin" && d.buildCost ? ` · built for <b>$${d.buildCost.usd.toFixed(2)}</b> (${d.buildCost.calls} Claude calls)` : ""
     }</p></div>
 <a class="btn" href="${esc(links.site)}" target="_blank" rel="noreferrer">Open site ↗</a></div>
 ${
-      d.buildStatus === "building"
+      busy
         ? `<div class="status" role="status"><span class="spin"></span><div><b>${
             d.buildStage === "pages" ? `Claude is writing the pages… ${progress.done} of ${progress.total} done` : "Claude is designing the look…"
-          }</b><br><span class="note">Usually 15–20 minutes in all. This page refreshes itself.${d.liveVersion || d.html ? " The current version stays live until the new one is complete." : " Until then the link shows a quick template version."}</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
+          }</b><br><span class="note">Usually 7–20 minutes in all. This page refreshes itself.${d.liveVersion || d.html ? " The current version stays live until the new one is complete." : " Until then the link shows a quick template version."}</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
         : d.buildStatus === "failed"
-          ? `<div class="status bad" role="alert"><div><b>The design build failed.</b> ${esc(d.buildError)}<br>The link still works${d.liveVersion || d.html ? " with the previous design" : " with the quick template version"}. Trying again keeps the pages already written.</div><form method="post" action="/demos/${esc(d.slug)}/rebuild"><button class="btn" type="submit">Try again</button></form></div>`
+          ? `<div class="status bad" role="alert"><div><b>The design build failed.</b> ${esc(d.buildError)}<br>The link still works${d.liveVersion || d.html ? " with the previous design" : " with the quick template version"}.${s.tenant.unlimited ? "" : " Your credit was refunded; trying again uses 1 credit."} Trying again keeps the pages already written.</div><form method="post" action="/demos/${esc(d.slug)}/rebuild"><button class="btn" type="submit"${out ? " disabled" : ""}>Try again</button></form></div>`
           : ""
     }
 <section class="card"><h2>Share it</h2><div class="share">
 ${row("Website link", links.site, links.site)}
 ${links.pages.length ? `<div class="row note">Pages: ${links.pages.map((p) => `<a href="${esc(p.url)}" target="_blank" rel="noreferrer">${esc(p.name)}</a>`).join(" · ")}</div>` : ""}
-${links.ghl ? row("On your GoHighLevel page", links.ghl, links.ghl) : row("On your GoHighLevel page", "Set up your GoHighLevel page first (Settings, top menu).", "")}
+${links.ghl ? row("On your GoHighLevel page", links.ghl, links.ghl) : row("On your GoHighLevel page", isOwner(s) ? "Set up your GoHighLevel page first (Settings, top menu)." : "Ask your account owner to set up the GoHighLevel page.", "")}
 ${row("Google Chat message", chat, chat)}
 ${row("Sheet row (date · business · trade · city · phone · link)", sheet.replace(/\t/g, " · "), sheet)}
 </div></section>
@@ -202,61 +266,10 @@ ${row("Sheet row (date · business · trade · city · phone · link)", sheet.re
         : `<p class="note" style="margin:0">Anything sent through the site's forms shows up here.</p>`
     }</section>
 <iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(i.businessName)}"></iframe>
-<form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Edit &amp; redesign</h2><p class="note">Change the details (or just press the button for a fresh design). Claude rebuilds it in the background; the links stay the same.</p>${fields(i)}
-<div><button class="btn" type="submit" data-busy="Starting…"${d.buildStatus === "building" ? " disabled" : ""}>Redesign site</button></div></form>
+<form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Edit &amp; redesign</h2><p class="note">Change the details (or just press the button for a fresh design). Claude rebuilds it in the background; the links stay the same.${s.tenant.unlimited ? "" : " A redesign uses 1 credit."}</p>${fields(i)}
+<div><button class="btn" type="submit" data-busy="Starting…"${busy || out ? " disabled" : ""}>Redesign site</button>${out ? ` <span class="note">No credits left.</span>` : ""}</div></form>
 <form method="post" action="/demos/${esc(d.slug)}/archive"><button class="btn danger" type="submit">Archive demo (its links stop working)</button></form>
 </main>`,
-    { nav: "new" },
-  );
-}
-
-function videoLibrary(videos: LibraryEntry[], folder: string): string {
-  const entry = (v?: LibraryEntry) => `<form method="post" action="/settings/videos" class="${v ? "share-row" : ""}" style="display:grid;gap:10px">
-${v ? `<input type="hidden" name="id" value="${v.id}">` : ""}
-${v?.driveId ? `<b style="font-size:.85rem">${esc(v.fileName ?? "")}${v.name === "Unsorted" ? ` <span class="tag bad">Needs a trade</span>` : ""}</b>` : ""}
-<div class="grid"><label>Trade<input name="name" value="${esc(v?.name ?? "")}" placeholder="e.g. HVAC" required></label>
-<label>Matches businesses whose trade, name or services mention<input name="keywords" value="${esc(v?.keywords.join(", ") ?? "")}" placeholder="e.g. hvac, air conditioning, heating, ac repair" required></label></div>
-${v?.driveId ? "" : `<label>Video links (one per line; a demo gets one of them)<textarea name="urls" rows="3" placeholder="https://…/clip.mp4" required>${esc(v?.urls.join("\n") ?? "")}</textarea></label>`}
-<div class="row"><button class="btn${v ? " ghost" : ""}" type="submit">${v ? "Save" : "Add to library"}</button>
-${v ? `${v.urls.map((u, n) => `<a href="${esc(u)}" target="_blank" rel="noreferrer">${v.driveId ? "Watch" : `Clip ${n + 1}`} ↗</a>`).join(" ")}${v.driveId ? "" : `<button class="btn danger" type="submit" formaction="/settings/videos/${v.id}/delete" formnovalidate>Remove</button>`}` : ""}</div></form>`;
-  const drive = videos.filter((v) => v.driveId);
-  const manual = videos.filter((v) => !v.driveId);
-  return `<section class="card"><h2>Hero videos</h2>
-<p class="note" style="margin:0">Each demo's home page has a moving hero. With a video for its trade, it plays that video (muted, looping); otherwise it slowly animates the site's photos. Drop new clips into the team's Google Drive folder: they're copied in every hour (or press Check now) and given a trade from their file name, so name them by what they show (e.g. "Electrician wiring panel.mp4"). Fix any trade or keywords below; changes show on matching demos within a minute, no rebuild needed. To remove a clip, remove it from the folder.</p>
-<form method="post" action="/settings/videos/sync" class="row" style="align-items:end">
-<label style="flex:1;min-width:240px">Google Drive folder (shared as "Anyone with the link")<input name="folder" value="https://drive.google.com/drive/folders/${esc(folder)}"></label>
-<button class="btn" type="submit" data-busy="Checking…">Check now</button>
-<a href="https://drive.google.com/drive/folders/${esc(folder)}" target="_blank" rel="noreferrer">Open folder ↗</a></form>
-${drive.length ? `<h3 style="margin:8px 0 0">From the folder (${drive.length})</h3><div class="share">${drive.map((v) => entry(v)).join("")}</div>` : `<p class="note" style="margin:0">No clips copied yet. Press Check now.</p>`}
-<details><summary>Videos hosted elsewhere (${manual.length})</summary><div class="share" style="margin-bottom:14px">${manual.map((v) => entry(v)).join("")}</div>
-<h3 style="margin:8px 0">Add by link</h3>${entry()}</details></section>`;
-}
-
-export function settingsPage(ghlPage: string, snippet: string, widget: string, defaultWidget: string, videos: LibraryEntry[], folder: string, ok?: string, err?: string): Response {
-  return page(
-    "Settings",
-    `<main class="main">${flash(ok, err)}
-<div><h1>Settings</h1><p class="lead">GoHighLevel page, chat widget, hero videos and team password.</p></div>
-<div><h2>Show demos on your GoHighLevel page</h2><p class="lead">Set this up once. After that every demo also opens on your own domain at <span class="pill">your-page?d=demo-name</span>.</p></div>
-<section class="card"><h2>1. Make the page in GoHighLevel</h2>
-<ol class="note" style="margin:0;padding-left:1.2rem;display:grid;gap:6px"><li>In Mianro Systems, create a blank funnel or website page with no header or footer, e.g. <b>/demo</b>.</li>
-<li>Add one full-width <b>Custom JS/HTML</b> element and paste the code below. Save and publish.</li></ol>
-<div class="row" style="justify-content:space-between"><b>Code for the Custom JS/HTML element</b><button class="btn ghost" data-copy="${esc(snippet)}">Copy</button></div>
-<pre>${esc(snippet)}</pre></section>
-<form method="post" action="/settings" class="card"><h2>2. Paste the page's address</h2>
-<label for="ghl">Published page address<input id="ghl" name="ghlPageUrl" type="url" value="${esc(ghlPage)}" placeholder="https://mianrosystems.com/demo"></label>
-<div><button class="btn" type="submit">Save</button></div></form>
-<form method="post" action="/settings/chat" class="card"><h2>Chat widget on every demo</h2>
-<p class="note" style="margin:0">Each demo site shows this GoHighLevel chat widget, recoloured to the site's primary colour. Leave empty for the Mianro default (<span class="pill">${esc(defaultWidget)}</span>), paste another widget's embed code or ID, or type <b>off</b>. A demo can also name its own widget under "More details".</p>
-<label for="cw">Widget ID or embed code<input id="cw" name="chatWidget" value="${esc(widget)}" placeholder="${esc(defaultWidget)}"></label>
-<div><button class="btn" type="submit">Save</button></div></form>
-${videoLibrary(videos, folder)}
-<form method="post" action="/settings/password" class="card"><h2>Team password</h2>
-<p class="note" style="margin:0">Changing it signs everyone else out; they sign in again with the new one.</p>
-<div class="grid"><label for="pw-cur">Current password<input id="pw-cur" name="current" type="password" autocomplete="current-password" required></label>
-<label for="pw-new">New password<input id="pw-new" name="next" type="password" autocomplete="new-password" minlength="10" required></label>
-<label for="pw-conf">New password again<input id="pw-conf" name="confirm" type="password" autocomplete="new-password" minlength="10" required></label></div>
-<div><button class="btn" type="submit">Change password</button></div></form></main>`,
-    { nav: "settings" },
+    { nav: "demos", session: s },
   );
 }

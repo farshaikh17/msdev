@@ -3,6 +3,7 @@ import { Intake, SiteContent, type Demo } from "../../../src/forge/schema";
 import type { Kit, PageDraft } from "./designer";
 import type { Env } from "./env";
 import { parseKeywords, parseVideoUrls, type LibraryEntry } from "./hero";
+import { recordBuildCost, refundBuild } from "./tenants";
 
 interface Row {
   html: string | null;
@@ -12,6 +13,7 @@ interface Row {
   build_usage: string | null;
   build_status: string;
   build_error: string | null;
+  tenant_id: number | null;
   slug: string;
   business_name: string;
   intake: string;
@@ -27,6 +29,8 @@ interface Row {
  * html is an older single-page design, and without that the built-in template shows.
  */
 export type Stored = Demo & {
+  /** The account this demo belongs to. */
+  tenantId: number;
   html: string | null;
   liveVersion: string | null;
   buildVersion: string | null;
@@ -62,6 +66,7 @@ function costFrom(raw: string | null): Stored["buildCost"] {
 function toDemo(r: Row): Stored {
   const stale = r.build_status === "building" && Date.now() - Date.parse(r.updated_at) > STALE_MS;
   return {
+    tenantId: r.tenant_id ?? 1,
     html: r.html ?? null,
     liveVersion: r.live_version ?? null,
     buildVersion: r.build_version ?? null,
@@ -93,18 +98,25 @@ export function makeSlug(name: string): string {
 
 export const SLUG = /^[a-z0-9-]{3,64}$/;
 
-export async function getDemo(env: Env, slug: string, activeOnly = true): Promise<Stored | null> {
+/**
+ * One demo by its link name. Pass `tenantId` for anything a signed-in person or an API key does,
+ * so one account can never reach another's demos; leave it out only for public pages.
+ */
+export async function getDemo(env: Env, slug: string, opts: { tenantId?: number; activeOnly?: boolean } = {}): Promise<Stored | null> {
   if (!SLUG.test(slug)) return null;
-  const r = await env.DB.prepare(`SELECT * FROM demos WHERE slug = ?${activeOnly ? " AND status = 'active'" : ""}`)
-    .bind(slug)
+  const { tenantId, activeOnly = true } = opts;
+  const r = await env.DB.prepare(`SELECT * FROM demos WHERE slug = ?${activeOnly ? " AND status = 'active'" : ""}${tenantId !== undefined ? " AND tenant_id = ?" : ""}`)
+    .bind(...(tenantId !== undefined ? [slug, tenantId] : [slug]))
     .first<Row>();
   return r ? toDemo(r) : null;
 }
 
-export async function listDemos(env: Env): Promise<Listed[]> {
+export async function listDemos(env: Env, tenantId: number): Promise<Listed[]> {
   const { results } = await env.DB.prepare(
-    "SELECT slug, business_name, intake, content, created_at, updated_at, build_status FROM demos WHERE status = 'active' ORDER BY created_at DESC LIMIT 200",
-  ).all<Row>();
+    "SELECT slug, business_name, intake, content, created_at, updated_at, build_status FROM demos WHERE tenant_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 200",
+  )
+    .bind(tenantId)
+    .all<Row>();
   return results.map((r) => {
     const intake = JSON.parse(r.intake) as { city?: string };
     const content = JSON.parse(r.content) as { industry?: string };
@@ -113,15 +125,22 @@ export async function listDemos(env: Env): Promise<Listed[]> {
   });
 }
 
-export async function saveDemo(env: Env, d: Demo): Promise<void> {
+/** Create a demo for an account, or update one it already has (a slug that belongs to another account is never touched). */
+export async function saveDemo(env: Env, d: Demo, tenantId: number): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO demos (slug, business_name, intake, content, written_by, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
+    `INSERT INTO demos (slug, business_name, intake, content, written_by, status, created_at, updated_at, tenant_id)
+     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)
      ON CONFLICT (slug) DO UPDATE SET business_name = excluded.business_name, intake = excluded.intake,
-       content = excluded.content, written_by = excluded.written_by, updated_at = excluded.updated_at`,
+       content = excluded.content, written_by = excluded.written_by, updated_at = excluded.updated_at
+       WHERE demos.tenant_id = excluded.tenant_id`,
   )
-    .bind(d.slug, d.intake.businessName, JSON.stringify(d.intake), JSON.stringify(d.content), d.writtenBy, d.createdAt, d.updatedAt)
+    .bind(d.slug, d.intake.businessName, JSON.stringify(d.intake), JSON.stringify(d.content), d.writtenBy, d.createdAt, d.updatedAt, tenantId)
     .run();
+}
+
+/** Save the intake with details filled in from the business's website or Google link. */
+export async function updateIntake(env: Env, slug: string, intake: Demo["intake"]): Promise<void> {
+  await env.DB.prepare("UPDATE demos SET intake = ? WHERE slug = ?").bind(JSON.stringify(intake), slug).run();
 }
 
 /** Start (or resume) building a version. The live site, if any, stays up until the new one is complete. */
@@ -179,24 +198,48 @@ export async function goLive(env: Env, slug: string, version: string): Promise<v
     for (const [k, v] of Object.entries(u)) if (typeof v === "number") total[k] = (total[k] ?? 0) + v;
   }
   await env.DB.prepare(
-    "UPDATE demos SET live_version = ?, build_status = 'ready', build_stage = NULL, build_error = NULL, build_usage = ?, updated_at = ? WHERE slug = ? AND build_version = ?",
+    "UPDATE demos SET live_version = ?, build_status = 'ready', build_stage = NULL, build_error = NULL, build_usage = ?, charged_version = NULL, updated_at = ? WHERE slug = ? AND build_version = ?",
   )
     .bind(version, JSON.stringify(total), new Date().toISOString(), slug, version)
     .run();
+  const owner = await env.DB.prepare("SELECT tenant_id FROM demos WHERE slug = ?").bind(slug).first<{ tenant_id: number }>();
+  if (owner) await recordBuildCost(env, owner.tenant_id, slug, version, total.cost_usd ?? 0, total.calls, "ready");
   await env.DB.prepare("DELETE FROM site_pages WHERE slug = ? AND version <> ?").bind(slug, version).run();
   await env.DB.prepare("DELETE FROM site_versions WHERE slug = ? AND version <> ?").bind(slug, version).run();
   await env.DB.prepare("DELETE FROM site_images WHERE slug = ? AND version <> ?").bind(slug, version).run();
 }
 
-/** Stop a build. Only the named version: a newer build that has started since is left alone. */
-export async function saveFailed(env: Env, slug: string, version: string, error: string): Promise<void> {
-  await env.DB.prepare("UPDATE demos SET build_status = 'failed', build_error = ?, updated_at = ? WHERE slug = ? AND build_version = ? AND build_status = 'building'")
+/**
+ * Stop a build. Only the named version: a newer build that has started since is left alone. What the
+ * partial build cost is recorded, and the credit taken for it is given back.
+ */
+export async function saveFailed(env: Env, slug: string, version: string, error: string): Promise<boolean> {
+  const r = await env.DB.prepare("UPDATE demos SET build_status = 'failed', build_error = ?, updated_at = ? WHERE slug = ? AND build_version = ? AND build_status = 'building'")
     .bind(error.slice(0, 500), new Date().toISOString(), slug, version)
     .run();
+  if (r.meta.changes !== 1) return false;
+  const rows = await env.DB.prepare(
+    "SELECT usage FROM site_versions WHERE slug = ?1 AND version = ?2 UNION ALL SELECT usage FROM site_pages WHERE slug = ?1 AND version = ?2 AND usage IS NOT NULL",
+  )
+    .bind(slug, version)
+    .all<{ usage: string | null }>();
+  let usd = 0;
+  for (const row of rows.results) usd += Number((JSON.parse(row.usage ?? "{}") as { cost_usd?: number }).cost_usd) || 0;
+  const owner = await env.DB.prepare("SELECT tenant_id FROM demos WHERE slug = ?").bind(slug).first<{ tenant_id: number }>();
+  if (owner && usd > 0) await recordBuildCost(env, owner.tenant_id, slug, version, usd, rows.results.length, "failed");
+  await refundBuild(env, slug, version);
+  return true;
 }
 
-export async function archiveDemo(env: Env, slug: string): Promise<void> {
-  await env.DB.prepare("UPDATE demos SET status = 'archived', updated_at = ? WHERE slug = ?").bind(new Date().toISOString(), slug).run();
+/** How many of an account's demos are being built right now (a build with no progress for 16 minutes doesn't count). */
+export async function buildingCount(env: Env, tenantId: number): Promise<number> {
+  const since = new Date(Date.now() - STALE_MS).toISOString();
+  const r = await env.DB.prepare("SELECT count(*) c FROM demos WHERE tenant_id = ? AND status = 'active' AND build_status = 'building' AND updated_at > ?").bind(tenantId, since).first<{ c: number }>();
+  return r?.c ?? 0;
+}
+
+export async function archiveDemo(env: Env, slug: string, tenantId: number): Promise<void> {
+  await env.DB.prepare("UPDATE demos SET status = 'archived', updated_at = ? WHERE slug = ? AND tenant_id = ?").bind(new Date().toISOString(), slug, tenantId).run();
 }
 
 export async function getSetting(env: Env, key: string): Promise<string> {
@@ -247,32 +290,61 @@ export async function imageNames(env: Env, slug: string, version: string): Promi
   return results.map((r) => r.name).sort((a, b) => Number(a.match(/\d+/)?.[0]) - Number(b.match(/\d+/)?.[0]));
 }
 
-export async function listVideos(env: Env): Promise<LibraryEntry[]> {
-  const { results } = await env.DB.prepare("SELECT id, name, keywords, urls, drive_id, file_name FROM video_library ORDER BY name, file_name").all<{
-    id: number;
-    name: string;
-    keywords: string;
-    urls: string;
-    drive_id: string | null;
-    file_name: string | null;
-  }>();
-  return results.map((r) => ({ id: r.id, name: r.name, keywords: parseKeywords(r.keywords), urls: parseVideoUrls(r.urls), driveId: r.drive_id, fileName: r.file_name }));
+interface VideoRow {
+  id: number;
+  name: string;
+  keywords: string;
+  urls: string;
+  drive_id: string | null;
+  file_name: string | null;
+  tenant_id: number | null;
 }
 
-export async function saveVideo(env: Env, e: { id?: number; name: string; keywords: string[]; urls: string[] }): Promise<void> {
+const toEntry = (r: VideoRow): LibraryEntry => ({
+  id: r.id,
+  name: r.name,
+  keywords: parseKeywords(r.keywords),
+  urls: parseVideoUrls(r.urls),
+  driveId: r.drive_id,
+  fileName: r.file_name,
+  shared: r.tenant_id === null,
+});
+
+const VIDEO_COLS = "id, name, keywords, urls, drive_id, file_name, tenant_id";
+
+/** The clips a demo of this account can use: Mianro's shared library plus the account's own. */
+export async function listLibrary(env: Env, tenantId: number): Promise<LibraryEntry[]> {
+  const { results } = await env.DB.prepare(`SELECT ${VIDEO_COLS} FROM video_library WHERE tenant_id IS NULL OR tenant_id = ? ORDER BY name, file_name`).bind(tenantId).all<VideoRow>();
+  return results.map(toEntry);
+}
+
+/** The shared library (managed by Mianro staff). */
+export async function listSharedVideos(env: Env): Promise<LibraryEntry[]> {
+  const { results } = await env.DB.prepare(`SELECT ${VIDEO_COLS} FROM video_library WHERE tenant_id IS NULL ORDER BY name, file_name`).all<VideoRow>();
+  return results.map(toEntry);
+}
+
+/** Clips an account added itself. */
+export async function listOwnVideos(env: Env, tenantId: number): Promise<LibraryEntry[]> {
+  const { results } = await env.DB.prepare(`SELECT ${VIDEO_COLS} FROM video_library WHERE tenant_id = ? ORDER BY name, file_name`).bind(tenantId).all<VideoRow>();
+  return results.map(toEntry);
+}
+
+/** Add or change an entry. `tenantId` null is the shared library; an entry can only be changed by the library it's in. */
+export async function saveVideo(env: Env, e: { id?: number; name: string; keywords: string[]; urls: string[] }, tenantId: number | null): Promise<void> {
   if (e.id && !e.urls.length)
     // A Drive clip: only its trade and keywords are edited; the link stays.
-    await env.DB.prepare("UPDATE video_library SET name = ?, keywords = ? WHERE id = ?").bind(e.name, e.keywords.join(", "), e.id).run();
+    await env.DB.prepare("UPDATE video_library SET name = ?, keywords = ? WHERE id = ? AND tenant_id IS ?").bind(e.name, e.keywords.join(", "), e.id, tenantId).run();
   else if (e.id)
-    await env.DB.prepare("UPDATE video_library SET name = ?, keywords = ?, urls = ? WHERE id = ?").bind(e.name, e.keywords.join(", "), e.urls.join("\n"), e.id).run();
+    await env.DB.prepare("UPDATE video_library SET name = ?, keywords = ?, urls = ? WHERE id = ? AND tenant_id IS ?").bind(e.name, e.keywords.join(", "), e.urls.join("\n"), e.id, tenantId).run();
   else
-    await env.DB.prepare("INSERT INTO video_library (name, keywords, urls, created_at) VALUES (?, ?, ?, ?)")
-      .bind(e.name, e.keywords.join(", "), e.urls.join("\n"), new Date().toISOString())
+    await env.DB.prepare("INSERT INTO video_library (name, keywords, urls, tenant_id, created_at) VALUES (?, ?, ?, ?, ?)")
+      .bind(e.name, e.keywords.join(", "), e.urls.join("\n"), tenantId, new Date().toISOString())
       .run();
 }
 
-export async function deleteVideo(env: Env, id: number): Promise<void> {
-  await env.DB.prepare("DELETE FROM video_library WHERE id = ?").bind(id).run();
+export async function deleteVideo(env: Env, id: number, tenantId: number | null): Promise<void> {
+  await env.DB.prepare("DELETE FROM video_library WHERE id = ? AND tenant_id IS ?").bind(id, tenantId).run();
 }
 
 /** A clip copied from the Drive folder (insert, or refresh if it's already there). */

@@ -173,59 +173,18 @@ JS/HTML element, and paste the code shown at the bottom of the Forge Demo page.
 Save that page's address on the same screen. The page then shows whichever demo
 its `?d=` names, so one GHL page serves every demo.
 
-**Standalone app on Cloudflare (free).** `cloudflare/forge/` is Forge Demo as its own
-small app on the Workers Free plan, with its demos in Cloudflare D1: sign-in with a team
-password, new demo, demo list, share links, GoHighLevel setup and chat widget settings.
-Claude Opus 5.5 designs each demo to the design team's website SOP: at least 15 pages
-(Home with 12+ sections and a quote form, About, Services, a page per service (4–6), Our
-Process, Our Work, Reviews, FAQs, Service Areas with a real map, Contact, Get a Quote,
-Privacy Policy and Terms), light and dark modes in the chosen primary colour, and the footer
-credit "Made with ♥ by Mianro Systems" (red heart, "Mianro Systems" linked to mianrosystems.com) on every page.
-The legal pages are our own draft wording, marked for the business to review. It builds in
-the background on a Cloudflare Queue: one job designs the look (styles, header, footer), then
-the pages are written side by side, sharing a cached prompt. The new site goes live only once
-every page is written; a failed build can be retried without paying again for pages already
-done. Cost: Claude Opus 5.5 (low effort) designs the look and writes the home page; the
-inner pages are written by Claude Haiku 5.5 from that design, so a site aims to cost about
-$1. Each demo's page in the app shows what its build actually cost. `CLAUDE_MODEL`,
-`CLAUDE_PAGE_MODEL` and `CLAUDE_EFFORT` (low / medium / high) override the defaults.
-
-**Photos.** The business's own photos (from its website or the photo links you add) come
-first. Each site also gets six AI-generated preview photos matched to its niche (Cloudflare
-Workers AI, FLUX.2 [klein]; free up to about 20 sites a day) for the hero, service and about
-sections. They're illustrative only: galleries and before/after stay labelled spaces for the
-business's real photos.
-
-**Moving hero.** The home page hero has a moving background, filled in when the page is served.
-If the hero video library has clips for the business's trade, it plays one, muted and looping,
-with the AI hero photo showing until it loads. Otherwise three of the site's photos cross-fade
-with a slow zoom and pan. The library fills itself from the design team's Google Drive folder
-(shared by link; no Google key needed): every hour (or Settings → Hero videos → Check now) new
-clips are copied into Workers KV and given a trade and keywords from their file name, and clips
-removed from the folder leave the library. The team can correct any clip's trade in Settings;
-matching sites update within a minute, without a rebuild.
-
-**Security.** Everything in the team app sits behind the sign-in; strangers can't start a build
-(so can't spend Claude credit), change a setting or see demo data. Wrong passwords are limited to
-5 per address per 15 minutes, the public form endpoint accepts 8 posts per address per 10 minutes
-and stores at most 300 per demo, and new demo links carry 8 random hex digits so they can't be
-found by trying. Pages are marked noindex. Limits are per address, so a bot network spread over
-many addresses is slowed but not stopped: use a long password (Settings → Team password), and keep
-the Drive video folder shared as Viewer (an editor link lets anyone swap the clips demos play).
-The free Workers plan's daily request allowance can't be protected without a custom domain.
-
-Every form on a demo site really sends: submissions are saved and listed on the demo's page
-in the team app.
-
-The sites are served by a second Worker, `forge-sites`, at `/<demo>/<page>` on its own
-origin, so AI-written pages can't reach the team app. Every page gets the GoHighLevel chat
-widget, recoloured to the site's primary colour (set the widget in GoHighLevel setup, or
-per demo under "More details"; `off` turns it off).
-
-Deploy with `npm run forge:deploy` (applies database migrations, then deploys both Workers).
-Secrets, set in Cloudflare → Workers → forge-demo → Settings → Variables and Secrets:
-`FORGE_PASSWORD` (sign-in) and `ANTHROPIC_API_KEY` (without it, sites use the built-in
-template).
+**The product: Forge Demo on Cloudflare (free plan).** `cloudflare/forge/` is Forge Demo as its
+own app: Claude designs a 15+ page website for a business from just its name (or Google Maps
+link) in 7–20 minutes for about $0.90, to the design team's website SOP, with AI photos, a
+moving hero (library video or animated photos), working forms, the GoHighLevel chat widget in
+the site's colour, and the "Made with ♥" credit. Teams and agencies each have their own
+**account** (people, roles, build credits, white-label footer credit, chat widget, GoHighLevel
+page, API keys and a signed webhook), and Mianro staff run an **Admin** console (accounts,
+credits, costs, suspension, the shared hero-video library). Accounts are strictly isolated from
+each other. Everything lives on the Cloudflare Workers Free plan.
+**Full guide: [`cloudflare/forge/README.md`](cloudflare/forge/README.md)** (what it does, how to
+onboard a customer, the API, security, running and recovering it). Deploy with
+`npm run forge:deploy`.
 
 Code: `src/forge/` (schema, generator, template, storage), pages in `src/app/forge/`,
 public routes `src/app/p/[slug]` and `src/app/api/forge/[slug]`, Cloudflare app in

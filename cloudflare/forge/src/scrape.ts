@@ -3,12 +3,16 @@
  * APIs). Returns its title, description, readable text (capped) and image
  * links, all as plain data for Claude to draw on.
  */
+import { pickBusiness, type BusinessInfo } from "./places";
+
 export interface SiteFacts {
   url: string;
   title: string;
   description: string;
   text: string;
   images: string[];
+  /** The details the business publishes about itself (schema.org data, tel: links), when it does. */
+  business?: BusinessInfo;
 }
 
 const TEXT_CAP = 7000;
@@ -37,6 +41,9 @@ export async function readWebsite(url: string): Promise<SiteFacts | null> {
   const seen = new Set<string>();
   let skipDepth = 0;
   let inTitle = false;
+  const ld: string[] = [];
+  let ldBuf = "";
+  const tels: string[] = [];
   const addImg = (src: string | null, photoOnly = true) => {
     if (!src || facts.images.length >= IMAGE_CAP) return;
     try {
@@ -55,6 +62,16 @@ export async function readWebsite(url: string): Promise<SiteFacts | null> {
     .on('meta[name="description"], meta[property="og:description"]', {
       element: (e) => void (facts.description ||= e.getAttribute("content") ?? ""),
     })
+    .on('script[type="application/ld+json"]', {
+      text: (t) => {
+        ldBuf += t.text;
+        if (t.lastInTextNode) {
+          if (ld.length < 12 && ldBuf.length < 200_000) ld.push(ldBuf);
+          ldBuf = "";
+        }
+      },
+    })
+    .on('a[href^="tel:"]', { element: (e) => void (tels.length < 6 && tels.push(e.getAttribute("href")!.slice(4))) })
     .on('meta[property="og:image"]', { element: (e) => addImg(e.getAttribute("content"), false) })
     .on("img", { element: (e) => addImg(e.getAttribute("src") ?? e.getAttribute("data-src") ?? e.getAttribute("srcset")) })
     .on("script, style, noscript, svg, template", {
@@ -75,6 +92,7 @@ export async function readWebsite(url: string): Promise<SiteFacts | null> {
   } catch {
     return null;
   }
+  facts.business = pickBusiness(ld, tels);
   facts.title = facts.title.replace(/\s+/g, " ").trim().slice(0, 200);
   facts.description = facts.description.trim().slice(0, 500);
   facts.text = facts.text.replace(/\s+/g, " ").trim().slice(0, TEXT_CAP);

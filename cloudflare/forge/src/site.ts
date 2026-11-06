@@ -6,6 +6,7 @@
 import { esc } from "../../../src/forge/render";
 import { CREDIT, CREDIT_CSS, CREDIT_MARKER, tidyCss, type Kit, type PageDraft } from "./designer";
 import type { HTMLElement } from "./env";
+import type { Tenant } from "./tenants";
 import { HERO_CSS, LEGACY_HERO_BG } from "./hero";
 
 /** Mianro's GoHighLevel chat widget, used unless Settings or the demo names another. */
@@ -44,8 +45,28 @@ const BASE_CSS = `.legal{max-width:760px;margin:0 auto;padding:clamp(48px,8vw,11
 export const HEADER_CSS = `header a,header button,header summary,header li,header [class*="phone"],header [class*="btn"]{white-space:nowrap}
 @media (min-width:900px) and (max-width:1279px){header>*{zoom:.88}}`;
 
+/**
+ * The footer credit for an account's sites. Mianro's own line is the default (the design SOP);
+ * Mianro can switch an account to its own name and link, or to none.
+ */
+export function creditFor(t: Pick<Tenant, "creditMode" | "creditName" | "creditUrl">): string {
+  if (t.creditMode === "none") return "";
+  const name = t.creditName.trim();
+  if (t.creditMode === "custom" && name) {
+    const url = /^https:\/\/[^\s"'<>]+$/.test(t.creditUrl) ? t.creditUrl : "";
+    const who = url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(name)}</a>` : esc(name);
+    return `<span class="mianro-credit">Made with <span class="mianro-heart" role="img" aria-label="love">♥</span> by ${who}</span>`;
+  }
+  return CREDIT;
+}
+
+/** The chat widget for a site: the demo's own, else the account's; only Mianro's account falls back to the Mianro widget. */
+export function widgetFor(tenant: Pick<Tenant, "id" | "chatWidget">, demoWidget: string): string {
+  return widgetId(demoWidget, widgetId(tenant.chatWidget, tenant.id === 1 ? DEFAULT_WIDGET_ID : ""));
+}
+
 /** One page of a multi-page site as a full HTML document. */
-export function assemble(kit: Kit, page: PageDraft, slug: string): string {
+export function assemble(kit: Kit, page: PageDraft, slug: string, credit: string = CREDIT): string {
   const key = JSON.stringify(`fg-theme-${slug}`);
   // Apply a saved light/dark choice before the first paint.
   const boot = `<script>try{var t=localStorage.getItem(${key});if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>`;
@@ -54,7 +75,7 @@ export function assemble(kit: Kit, page: PageDraft, slug: string): string {
 ${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${HEADER_CSS}\n${HERO_CSS}\n${CREDIT_CSS}</style></head><body>
 ${kit.header}
 ${page.body}
-${kit.footer.split(CREDIT_MARKER).join(CREDIT)}
+${kit.footer.split(CREDIT_MARKER).join(credit)}
 <script>${kit.script}</script></body></html>`;
 }
 

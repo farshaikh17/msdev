@@ -1,319 +1,29 @@
 /**
- * Forge Demo on Cloudflare Workers (Free plan): Claude Opus 5.5 designs a
- * custom multi-page demo website for a business, the team shares it, and it
- * shows on a GoHighLevel page.
+ * Forge Demo on Cloudflare Workers (Free plan): Claude Opus 5.5 designs a custom multi-page demo
+ * website for a business; agencies and teams (accounts) each build their own, share them, and
+ * show them on a GoHighLevel page.
  *
  * This code runs as two Workers:
- * forge-demo (the team app)
- *   Team:   /, /demos/<slug>, /settings (signed in with the team password)
- *   Public: GET /s/<slug>[/<page>]  redirects to forge-sites (served here, sandboxed, when SITES_ORIGIN is unset)
- *           GET /api/s/<slug>       template sites as JSON (older GoHighLevel loader)
- *   Queue:  forge-builds — a "kit" job designs the site (CSS, header, footer, script),
- *           then one "page" job per page (each up to 15 min). The legal pages are our own wording.
+ * forge-demo (the app people sign in to, plus the API)
+ *   Accounts:  /, /demos/<slug>, /team, /api, /settings (owners), /admin (Mianro staff)
+ *   API:       /api/v1/…  with an API key
+ *   Public:    GET /s/<slug>[/<page>]  redirects to forge-sites (served here, sandboxed, when SITES_ORIGIN is unset)
+ *              GET /api/s/<slug>       template sites as JSON (older GoHighLevel loader)
+ *   Queue:     forge-builds — a "kit" job designs the site, then one "page" job per page (each up to 15 min);
+ *              "video" jobs copy hero clips from Google Drive.
+ *   Hourly:    sync the shared hero-video folder, clear old rate-limit counters.
  * forge-sites (ROLE=sites, its own origin)
- *   Public: GET /<slug>[/<page>]    the demo website, with the GoHighLevel chat widget
- *           POST /<slug>/_lead      the site's form submissions (shown on the demo in the team app)
+ *   Public:    GET /<slug>[/<page>]    the demo website, with the account's chat widget
+ *              POST /<slug>/_lead      the site's form submissions (shown on the demo in the app)
  */
-import { renderPage, renderSite } from "../../../src/forge/render";
-import { draftContent } from "../../../src/forge/copy";
-import { Intake, type Demo } from "../../../src/forge/schema";
-import { changePassword, checkPassword, MIN_PASSWORD, passwordSet, sessionCookie, signedIn, signOutCookie } from "./auth";
-import {
-  archiveDemo,
-  getDemo,
-  getKit,
-  getPage,
-  getSetting,
-  goLive,
-  listDemos,
-  listLeads,
-  makeSlug,
-  markBuilding,
-  pagesDone,
-  saveDemo,
-  saveFailed,
-  saveKit,
-  deleteVideo,
-  clearAttempts,
-  countLeads,
-  getImage,
-  imageNames,
-  listVideos,
-  saveImage,
-  pruneThrottle,
-  recordAttempt,
-  saveVideo,
-  saveLead,
-  savePage,
-  setSetting,
-  throttled,
-  touchBuild,
-} from "./db";
-import { designKit, designSitePage, factsBlock, Fatal, pagesOf, planSite, sitemapFor, TryLater, type Plan } from "./designer";
-import { heroMotion, matchVideo, parseKeywords, parseVideoUrls } from "./hero";
-import { previewImages } from "./images";
-import { DEFAULT_FOLDER, folderId, FOLDER_KEY, importClip, serveVideo, syncFolder } from "./drive";
+import { handleApp } from "./app";
+import { build } from "./build";
+import { pruneThrottle } from "./db";
+import { importClip, serveVideo, syncFolder } from "./drive";
 import type { BuildJob, Ctx, Env, MessageBatch, VideoJob } from "./env";
-import { privacyPage, termsPage } from "./legal";
-import { readWebsite } from "./scrape";
-import { assemble, chatWidget, DEFAULT_WIDGET_ID, finish, widgetId } from "./site";
-import { demoPage, homePage, loginPage, settingsPage } from "./ui";
+import { CORS, serveImage, serveSite, takeLead, text } from "./serve";
 
-const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, OPTIONS" };
-const GHL_KEY = "ghlPageUrl";
-const WIDGET_KEY = "chatWidget";
-/** How often a job retries when Claude is busy (rate limit, overload) before the build fails. */
-const BUSY_TRIES = 4;
-/** How often a page is written again after a bad reply before the build fails (a page costs about a cent). */
-const PAGE_TRIES = 3;
-/** Sites served from the app's own origin run with an opaque origin: no cookies, no access to the app. */
-const SANDBOX_CSP = "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation";
-
-const redirect = (to: string, extra: Record<string, string> = {}) => new Response(null, { status: 303, headers: { location: to, ...extra } });
-const withMsg = (path: string, kind: "ok" | "error", text: string) => `${path}?${kind}=${encodeURIComponent(text)}`;
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)) || "Something went wrong.";
-
-function intakeFrom(f: FormData): Intake {
-  const g = (k: string) => String(f.get(k) ?? "").trim();
-  const color = g("primaryColor") === "custom" ? g("customColor") : g("primaryColor");
-  const parsed = Intake.safeParse({
-    businessName: g("businessName"),
-    industry: g("industry"),
-    city: g("city"),
-    phone: g("phone"),
-    services: g("services"),
-    serviceAreas: g("serviceAreas"),
-    reviews: g("reviews"),
-    notes: g("notes"),
-    logoUrl: g("logoUrl"),
-    heroImageUrl: g("heroImageUrl"),
-    primaryColor: color,
-    mode: g("mode") || "auto",
-    websiteUrl: g("websiteUrl"),
-    photoUrls: g("photoUrls"),
-    chatWidget: g("chatWidget"),
-  });
-  if (!parsed.success) throw new Error(parsed.error.issues.map((i) => i.message).join(". "));
-  checkWidget(parsed.data.chatWidget);
-  return parsed.data;
-}
-
-function checkWidget(v: string): void {
-  if (v && !/^(off|none|no)$/i.test(v) && !widgetId(v, ""))
-    throw new Error("That chat widget code has no widget ID in it. Paste the GoHighLevel embed code, the widget ID, or type off.");
-}
-
-function ghlLink(pageUrl: string, slug: string): string {
-  if (!pageUrl) return "";
-  try {
-    const u = new URL(pageUrl);
-    u.searchParams.set("d", slug);
-    return u.toString();
-  } catch {
-    return "";
-  }
-}
-
-/** The code pasted into GoHighLevel: shows the demo site full-screen for whatever ?d= names. */
-export function ghlSnippet(sitesBase: string): string {
-  return `<style>html,body{margin:0;height:100%;overflow:hidden}#forge-site{position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2147483000;background:#fff}</style>
-<iframe id="forge-site" title="Website" allow="clipboard-write"></iframe>
-<script>
-(function () {
-  var d = new URLSearchParams(location.search).get("d");
-  var f = document.getElementById("forge-site");
-  if (!d || !/^[a-z0-9-]{3,64}$/.test(d)) { f.srcdoc = '<p style="font:16px system-ui;text-align:center;padding:80px 20px;color:#475569">Open this page from a Forge demo link (it ends in ?d=…).</p>'; return; }
-  f.src = ${JSON.stringify(sitesBase)} + d;
-})();
-</script>`;
-}
-
-/** Where demo sites live: the forge-sites Worker, or this one at /s/ when SITES_ORIGIN is unset. */
-const sitesBase = (env: Env, origin: string) => (env.SITES_ORIGIN ? `${env.SITES_ORIGIN.replace(/\/+$/, "")}/` : `${origin}/s/`);
-
-const text = (body: string, status: number) => new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8" } });
-
-/** A demo website page. `prefix` is the demo's address on this origin ("/<slug>" or "/s/<slug>"); `sub` the page path ("" for home). */
-async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, sub: string, prefix: string, sandbox: boolean): Promise<Response> {
-  const cache = (caches as unknown as { default: Cache }).default;
-  const hit = await cache.match(req);
-  if (hit) return hit;
-  const demo = await getDemo(env, slug);
-  if (!demo) return text("This demo isn't available.", 404);
-  let html: string;
-  let accent: string;
-  let current: string | null = null;
-  let motion = "";
-  if (demo.liveVersion) {
-    const path = sub || "/";
-    const kit = await getKit(env, slug, demo.liveVersion);
-    if (!kit) return text("This page isn't available.", 404);
-    if (!pagesOf(kit).some((p) => p.path === path)) return Response.redirect(new URL(prefix, req.url).toString(), 302);
-    const page = await getPage(env, slug, demo.liveVersion, path);
-    if (!page) return text("This page isn't available.", 404);
-    html = assemble(kit, page, slug);
-    accent = kit.accent || demo.intake.primaryColor;
-    current = path;
-    if (path === "/") {
-      const [names, library] = await Promise.all([imageNames(env, slug, demo.liveVersion), listVideos(env)]);
-      motion = heroMotion(
-        matchVideo(library, demo.intake, slug, pagesOf(kit).map((p) => p.name).join(" ")),
-        names.map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`),
-      );
-    }
-  } else {
-    // A single-page design (or the template while the first design is built).
-    if (sub) return Response.redirect(new URL(prefix, req.url).toString(), 302);
-    html = demo.html ?? renderPage(demo);
-    accent = demo.intake.primaryColor || demo.content.theme.primary;
-  }
-  const widget = chatWidget(widgetId(demo.intake.chatWidget, widgetId(await getSetting(env, WIDGET_KEY), DEFAULT_WIDGET_ID)), accent);
-  const headers: Record<string, string> = { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "x-content-type-options": "nosniff", "cache-control": "public, max-age=30" };
-  if (sandbox) headers["content-security-policy"] = SANDBOX_CSP;
-  const res = finish(new Response(html, { headers }), { prefix, current, widget, leadUrl: `${prefix}/_lead`, heroMotion: motion, legacyHero: !!motion && !html.includes('class="hero-motion"') });
-  ctx.waitUntil(cache.put(req, res.clone()));
-  return res;
-}
-
-/** A preview photo. Its address names the site version, so it never changes and caches for a year. */
-async function serveImage(req: Request, env: Env, ctx: Ctx, slug: string, version: string, name: string): Promise<Response> {
-  const cache = (caches as unknown as { default: Cache }).default;
-  const hit = await cache.match(req);
-  if (hit) return hit;
-  const bytes = await getImage(env, slug, version, name);
-  if (!bytes) return text("Not found", 404);
-  const res = new Response(bytes, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable" } });
-  ctx.waitUntil(cache.put(req, res.clone()));
-  return res;
-}
-
-/** A demo website's form submission. */
-/** Wrong passwords allowed per address, and how long the count lasts. */
-const LOGIN_TRIES = 5;
-const LOGIN_WINDOW_MIN = 15;
-/** Form posts allowed per address per demo window, and stored submissions allowed per demo. */
-const LEAD_TRIES = 8;
-const LEAD_WINDOW_MS = 10 * 60_000;
-const LEAD_CAP = 300;
-
-const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") ?? "unknown";
-
-async function takeLead(req: Request, env: Env, slug: string): Promise<Response> {
-  const headers = { ...CORS, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" };
-  // Spam guard: a few posts per address, then a pause. (Checked before anything is stored.)
-  const key = `lead:${clientIp(req)}`;
-  if (await throttled(env, key, LEAD_TRIES)) return Response.json({ error: "Too many submissions. Please try again later." }, { status: 429, headers: { ...headers, "retry-after": "600" } });
-  const raw = await req.text();
-  if (raw.length > 20_000) return Response.json({ error: "Too long." }, { status: 413, headers });
-  let body: { page?: unknown; fields?: unknown };
-  try {
-    body = JSON.parse(raw) as typeof body;
-  } catch {
-    return Response.json({ error: "Bad request." }, { status: 400, headers });
-  }
-  const fields: Record<string, string> = {};
-  if (body.fields && typeof body.fields === "object")
-    for (const [k, v] of Object.entries(body.fields).slice(0, 30)) if (typeof v === "string" && v.trim()) fields[k.slice(0, 60)] = v.trim().slice(0, 2000);
-  if (!Object.keys(fields).length) return Response.json({ error: "Empty form." }, { status: 400, headers });
-  if (!(await getDemo(env, slug))) return Response.json({ error: "This demo isn't available." }, { status: 404, headers });
-  await recordAttempt(env, key, LEAD_WINDOW_MS);
-  if ((await countLeads(env, slug)) >= LEAD_CAP) return Response.json({ error: "This form is full." }, { status: 429, headers });
-  await saveLead(env, slug, typeof body.page === "string" ? body.page.slice(0, 200) : "", fields);
-  return Response.json({ ok: true }, { headers });
-}
-
-async function templateJson(env: Env, slug: string): Promise<Response> {
-  const demo = await getDemo(env, slug);
-  if (!demo) return Response.json({ error: "This demo isn't available." }, { status: 404, headers: CORS });
-  return Response.json(renderSite(demo), { headers: { ...CORS, "cache-control": "public, max-age=30" } });
-}
-
-const newVersion = () => `${Date.now().toString(36)}${[...crypto.getRandomValues(new Uint8Array(3))].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
-
-/**
- * Queue a background design build. `resume` names a failed build to pick up where it stopped (only
- * the missing pages are written, so nothing is paid for twice). Without a key the template is all there is.
- */
-async function startBuild(env: Env, slug: string, resume: string | null = null): Promise<void> {
-  if (!env.ANTHROPIC_API_KEY) return;
-  const v = resume;
-  const kit = v ? await getKit(env, slug, v) : null;
-  if (v && kit) {
-    const done = await pagesDone(env, slug, v);
-    await markBuilding(env, slug, v, "pages");
-    const missing = pagesOf(kit).filter((p) => !done.includes(p.path));
-    if (!missing.length) return goLive(env, slug, v);
-    for (const p of missing) await env.BUILDS.send({ slug, version: v, stage: "page", path: p.path });
-    return;
-  }
-  const version = newVersion();
-  await markBuilding(env, slug, version, "kit");
-  await env.BUILDS.send({ slug, version, stage: "kit" });
-}
-
-/** Queue consumer. Returns how many seconds to wait before running the job again, or "done". */
-async function build(env: Env, job: BuildJob, attempts: number): Promise<"done" | number> {
-  const demo = await getDemo(env, job.slug);
-  // Ignore jobs from a build that has since been replaced, finished or failed.
-  if (!demo || demo.buildStatus !== "building" || demo.buildVersion !== job.version) return "done";
-  const { slug, version } = job;
-  try {
-    if (job.stage === "kit") {
-      const site = demo.intake.websiteUrl ? await readWebsite(demo.intake.websiteUrl) : null;
-      // A cheap planning step picks niche-fitting services and describes the preview photos,
-      // which Workers AI then generates (free) and the site serves from its own address.
-      const plan: Plan | null = await planSite(env, demo.intake, site).catch((e) => (console.log("plan failed", errText(e)), null));
-      const images = await previewImages(env, plan?.imagePrompts ?? []);
-      await Promise.all(images.map((img) => saveImage(env, slug, version, img.name, img.description, img.bytes)));
-      const imgBase = `${env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : ""}/${slug}/_img/${version}/`;
-      const previews = images.map((img) => ({ url: imgBase + img.name, description: img.description }));
-      const pages = sitemapFor(demo.intake, plan?.services);
-      const jobs: Promise<void>[] = [];
-      const { kit, usage } = await designKit(env, factsBlock(demo.intake, site, slug, plan, previews), pages);
-      // The planning call is counted with the design.
-      const u = usage as Record<string, unknown>;
-      await saveKit(env, slug, version, kit, { ...u, cost_usd: (Number(u.cost_usd) || 0) + (plan?.cost ?? 0) });
-      await savePage(env, slug, version, "/privacy", privacyPage(demo.intake), null);
-      await savePage(env, slug, version, "/terms", termsPage(demo.intake), null);
-      await touchBuild(env, slug, version, "pages");
-      // The pages are written side by side (the queue runs several jobs at once). The home page and
-      // the first inner page start at once; the other inner pages wait a little so the prompt they
-      // share is already cached when they ask for it.
-      pages
-        .filter((p) => p.kind === "ai")
-        .forEach((p, n) => jobs.push(env.BUILDS.send({ slug, version, stage: "page", path: p.path }, n <= 1 ? undefined : { delaySeconds: 30 })));
-      await Promise.all(jobs);
-      return "done";
-    }
-    const kit = await getKit(env, slug, version);
-    if (!kit) throw new Error("The site's design went missing. Press Redesign to start again.");
-    const spec = pagesOf(kit).find((p) => p.path === job.path);
-    if (!spec) return "done";
-    if (!(await pagesDone(env, slug, version)).includes(spec.path)) {
-      const { page, usage } = await designSitePage(env, kit, spec);
-      await savePage(env, slug, version, spec.path, page, usage);
-      await touchBuild(env, slug, version, "pages");
-    }
-    const done = await pagesDone(env, slug, version);
-    if (pagesOf(kit).every((p) => done.includes(p.path))) await goLive(env, slug, version);
-    return "done";
-  } catch (e) {
-    if (e instanceof TryLater && attempts < BUSY_TRIES) {
-      console.log("claude busy, retrying", slug, job.stage);
-      await touchBuild(env, slug, version, job.stage === "kit" ? "kit" : "pages");
-      return 60;
-    }
-    // One bad page shouldn't stop the site: write it again (the other pages carry on meanwhile).
-    if (job.stage === "page" && !(e instanceof Fatal) && attempts < PAGE_TRIES) {
-      console.log("page failed, retrying", slug, job.path, errText(e));
-      await touchBuild(env, slug, version, "pages");
-      return 5;
-    }
-    console.error("build failed", slug, job.stage, errText(e));
-    await saveFailed(env, slug, version, errText(e));
-    return "done";
-  }
-}
 
 /** /<slug> plus an optional page path such as /services or /services/drain-cleaning. */
 const PAGE_PATH = /^\/([a-z0-9-]{3,64})((?:\/[a-z0-9-]+){1,2})?$/;
@@ -322,185 +32,22 @@ const PAGE_PATH = /^\/([a-z0-9-]{3,64})((?:\/[a-z0-9-]+){1,2})?$/;
 async function handleSites(req: Request, env: Env, ctx: Ctx): Promise<Response> {
   const path = new URL(req.url).pathname.replace(/\/+$/, "") || "/";
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...CORS, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" } });
+  const read = req.method === "GET" || req.method === "HEAD";
   let m = path.match(/^\/([a-z0-9-]{3,64})\/_lead$/);
   if (m && req.method === "POST") return takeLead(req, env, m[1]);
   m = path.match(/^\/_v\/([A-Za-z0-9_-]{10,80})\.mp4$/);
-  if (m && (req.method === "GET" || req.method === "HEAD")) return serveVideo(req, env, m[1]);
+  if (m && read) return serveVideo(req, env, m[1]);
   m = path.match(/^\/([a-z0-9-]{3,64})\/_img\/([a-z0-9]{6,40})\/(photo-\d{1,2}\.jpg)$/);
-  if (m && (req.method === "GET" || req.method === "HEAD")) return serveImage(req, env, ctx, m[1], m[2], m[3]);
+  if (m && read) return serveImage(req, env, ctx, m[1], m[2], m[3]);
   m = path.match(PAGE_PATH);
-  if (m && (req.method === "GET" || req.method === "HEAD")) return serveSite(req, env, ctx, m[1], m[2] ?? "", `/${m[1]}`, false);
-  return text("Nothing here. Demo links look like /business-name-1a2b.", 404);
-}
-
-async function handle(req: Request, env: Env, ctx: Ctx): Promise<Response> {
-  const url = new URL(req.url);
-  const path = url.pathname.replace(/\/+$/, "") || "/";
-  const q = (k: string) => url.searchParams.get(k) ?? undefined;
-  const origin = url.origin;
-  const base = sitesBase(env, origin);
-  const site = (slug: string) => `${base}${slug}`;
-
-  // Public demo websites.
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
-  let m = path.match(/^\/s\/([a-z0-9-]+)\/_lead$/);
-  if (m && req.method === "POST") return takeLead(req, env, m[1]);
-  m = path.match(/^\/s\/([a-z0-9-]+)((?:\/[a-z0-9-]+){1,2})?$/);
-  if (m && req.method === "GET") {
-    if (env.SITES_ORIGIN) return Response.redirect(`${site(m[1])}${m[2] ?? ""}`, 302);
-    return serveSite(req, env, ctx, m[1], m[2] ?? "", `/s/${m[1]}`, true);
-  }
-  m = path.match(/^\/api\/s\/([a-z0-9-]+)$/);
-  if (m && req.method === "GET") return templateJson(env, m[1]);
-
-  // Sign-in.
-  if (path === "/login" && req.method === "POST") {
-    // Wrong guesses are counted per address: after a few, that address waits before it can try again.
-    const key = `login:${clientIp(req)}`;
-    if (await throttled(env, key, LOGIN_TRIES)) {
-      const r = loginPage(`Too many wrong passwords. Try again in ${LOGIN_WINDOW_MIN} minutes.`, false);
-      return new Response(r.body, { status: 429, headers: { ...Object.fromEntries(r.headers), "retry-after": String(LOGIN_WINDOW_MIN * 60) } });
-    }
-    const f = await req.formData();
-    if (await checkPassword(env, String(f.get("password") ?? ""))) {
-      await clearAttempts(env, key);
-      return redirect("/", { "set-cookie": await sessionCookie(env) });
-    }
-    await recordAttempt(env, key, LOGIN_WINDOW_MIN * 60_000);
-    return loginPage("That password isn't right.", !(await passwordSet(env)));
-  }
-  if (path === "/logout" && req.method === "POST") return redirect("/login", { "set-cookie": signOutCookie });
-  if (!(await signedIn(req, env))) return path === "/login" || req.method === "GET" ? loginPage(undefined, !(await passwordSet(env))) : redirect("/login");
-  if (path === "/login") return redirect("/");
-
-  const aiOn = !!env.ANTHROPIC_API_KEY;
-
-  if (path === "/" && req.method === "GET") return homePage(await listDemos(env), site, aiOn, q("error"), q("ok"));
-
-  if (path === "/demos" && req.method === "POST") {
-    try {
-      const intake = intakeFrom(await req.formData());
-      const now = new Date().toISOString();
-      // The template version goes live at once; Claude's design replaces it when ready.
-      const demo: Demo = { slug: makeSlug(intake.businessName), intake, content: draftContent(intake), writtenBy: "draft", createdAt: now, updatedAt: now };
-      await saveDemo(env, demo);
-      await startBuild(env, demo.slug);
-      return redirect(withMsg(`/demos/${demo.slug}`, "ok", aiOn ? "Started. Claude is designing the site." : "Demo website ready"));
-    } catch (e) {
-      return redirect(withMsg("/", "error", errText(e)));
-    }
-  }
-
-  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive)?$/);
-  if (m) {
-    const [, slug, action] = m;
-    const demo = await getDemo(env, slug);
-    if (!demo) return redirect(withMsg("/", "error", "That demo doesn't exist or was archived."));
-    if (!action && req.method === "GET") {
-      const ghl = ghlLink(await getSetting(env, GHL_KEY), slug);
-      const building = demo.buildStatus === "building" && demo.buildVersion ? demo.buildVersion : null;
-      const [done, buildKit, liveKit, leads] = await Promise.all([
-        building ? pagesDone(env, slug, building).then((d) => d.length) : 0,
-        building ? getKit(env, slug, building) : null,
-        demo.liveVersion ? getKit(env, slug, demo.liveVersion) : null,
-        listLeads(env, slug),
-      ]);
-      const pages = liveKit ? pagesOf(liveKit).map((p) => ({ name: p.name, url: `${site(slug)}${p.path === "/" ? "" : p.path}` })) : [];
-      const total = (buildKit ? pagesOf(buildKit) : sitemapFor(demo.intake)).length;
-      return demoPage(demo, { site: site(slug), ghl, pages }, { done, total }, leads, q("ok"), q("error"));
-    }
-    if ((action === "/rewrite" || action === "/rebuild") && req.method === "POST") {
-      if (demo.buildStatus === "building") return redirect(withMsg(`/demos/${slug}`, "error", "A design is already being built. Wait for it to finish."));
-      try {
-        if (action === "/rewrite") {
-          const intake = intakeFrom(await req.formData());
-          await saveDemo(env, { ...demo, intake, content: draftContent(intake), writtenBy: "draft", updatedAt: new Date().toISOString() });
-        }
-        // "Try again" after a failure resumes; "Redesign" starts a fresh design.
-        await startBuild(env, slug, action === "/rebuild" && demo.buildStatus === "failed" ? demo.buildVersion : null);
-        return redirect(withMsg(`/demos/${slug}`, "ok", aiOn ? "Claude is redesigning the site. Same links." : "Updated (same links)."));
-      } catch (e) {
-        return redirect(withMsg(`/demos/${slug}`, "error", errText(e)));
-      }
-    }
-    if (action === "/archive" && req.method === "POST") {
-      await archiveDemo(env, slug);
-      return redirect(withMsg("/", "ok", `Archived ${demo.intake.businessName}. Its links stop working within 30 seconds.`));
-    }
-  }
-
-  if (path === "/settings" && req.method === "GET")
-    return settingsPage(await getSetting(env, GHL_KEY), ghlSnippet(base), await getSetting(env, WIDGET_KEY), DEFAULT_WIDGET_ID, await listVideos(env), folderId(await getSetting(env, FOLDER_KEY)) || DEFAULT_FOLDER, q("ok"), q("error"));
-  if (path === "/settings/videos/sync" && req.method === "POST") {
-    const raw = String((await req.formData()).get("folder") ?? "").trim();
-    if (raw) {
-      const id = folderId(raw);
-      if (!id) return redirect(withMsg("/settings", "error", "Paste the Google Drive folder's link (it contains /folders/…)."));
-      await setSetting(env, FOLDER_KEY, id);
-    }
-    try {
-      const r = await syncFolder(env);
-      return redirect(
-        withMsg("/settings", "ok", `Folder checked: ${r.total} clips. ${r.added ? `${r.added} new, being copied now (refresh in a minute)` : "Nothing new"}${r.removed ? `; ${r.removed} removed` : ""}.`),
-      );
-    } catch (e) {
-      return redirect(withMsg("/settings", "error", errText(e)));
-    }
-  }
-  if (path === "/settings/videos" && req.method === "POST") {
-    const f = await req.formData();
-    const name = String(f.get("name") ?? "").trim().slice(0, 60);
-    const keywords = parseKeywords(String(f.get("keywords") ?? ""));
-    const urls = parseVideoUrls(String(f.get("urls") ?? ""));
-    if (!name || !keywords.length) return redirect(withMsg("/settings", "error", "Give the trade a name and at least one keyword."));
-    const id = Number(f.get("id")) || undefined;
-    // Clips from the Drive folder have no links field (their link is fixed); only trade and keywords change.
-    const fromDrive = !!id && (await listVideos(env)).some((v) => v.id === id && v.driveId);
-    if (!urls.length && !fromDrive) return redirect(withMsg("/settings", "error", "Paste at least one video link (https, ending in .mp4, or a GoHighLevel media link)."));
-    await saveVideo(env, { id, name, keywords, urls: fromDrive ? [] : urls });
-    return redirect(withMsg("/settings", "ok", `${id ? "Saved" : "Added"} hero videos for ${name}`));
-  }
-  if (path === "/settings/password" && req.method === "POST") {
-    const f = await req.formData();
-    const current = String(f.get("current") ?? "");
-    const next = String(f.get("next") ?? "");
-    if (!(await checkPassword(env, current))) return redirect(withMsg("/settings", "error", "The current password isn't right."));
-    if (next.length < MIN_PASSWORD) return redirect(withMsg("/settings", "error", `Use at least ${MIN_PASSWORD} characters for the new password.`));
-    if (next !== String(f.get("confirm") ?? "")) return redirect(withMsg("/settings", "error", "The new passwords don't match."));
-    await changePassword(env, next);
-    // Keep this browser signed in with the new password; everyone else signs in again.
-    return redirect(withMsg("/settings", "ok", "Password changed. Share the new one with the team."), { "set-cookie": await sessionCookie(env) });
-  }
-  m = path.match(/^\/settings\/videos\/(\d+)\/delete$/);
-  if (m && req.method === "POST") {
-    await deleteVideo(env, Number(m[1]));
-    return redirect(withMsg("/settings", "ok", "Removed from the video library"));
-  }
-  if (path === "/settings/chat" && req.method === "POST") {
-    const raw = String((await req.formData()).get("chatWidget") ?? "").trim();
-    try {
-      checkWidget(raw);
-    } catch (e) {
-      return redirect(withMsg("/settings", "error", errText(e)));
-    }
-    const id = /^(off|none|no)$/i.test(raw) ? "off" : widgetId(raw, "");
-    await setSetting(env, WIDGET_KEY, id);
-    return redirect(withMsg("/settings", "ok", id === "off" ? "Chat widget turned off for all demos" : id ? "Chat widget saved" : "Chat widget reset to the Mianro default"));
-  }
-  if (path === "/settings" && req.method === "POST") {
-    const raw = String((await req.formData()).get("ghlPageUrl") ?? "").trim();
-    if (raw && !/^https?:\/\/[^\s]+$/.test(raw)) return redirect(withMsg("/settings", "error", "Paste the full page address, starting with https://"));
-    await setSetting(env, GHL_KEY, raw);
-    return redirect(withMsg("/settings", "ok", raw ? "GoHighLevel page saved" : "GoHighLevel page removed"));
-  }
-
-  return new Response("Not found", { status: 404 });
+  if (m && read) return serveSite(req, env, ctx, m[1], m[2] ?? "", `/${m[1]}`, false);
+  return text("Nothing here. Demo links look like /business-name-1a2b3c4d.", 404);
 }
 
 const worker = {
   async fetch(req: Request, env: Env, ctx: Ctx): Promise<Response> {
     try {
-      return env.ROLE === "sites" ? await handleSites(req, env, ctx) : await handle(req, env, ctx);
+      return env.ROLE === "sites" ? await handleSites(req, env, ctx) : await handleApp(req, env, ctx);
     } catch (e) {
       console.error(e);
       return new Response("Something went wrong. Please try again.", { status: 500 });
@@ -526,7 +73,7 @@ const worker = {
       else msg.retry({ delaySeconds: next });
     }
   },
-  /** Hourly: pick up clips added to (or removed from) the team's Drive folder. */
+  /** Hourly: pick up clips added to (or removed from) the shared Drive folder. */
   async scheduled(_event: unknown, env: Env): Promise<void> {
     await pruneThrottle(env).catch(() => undefined);
     await syncFolder(env).catch((e) => console.error("video sync failed", errText(e)));
@@ -534,3 +81,6 @@ const worker = {
 };
 
 export default worker;
+
+// Re-exported for tests and tooling.
+export { ghlSnippet } from "./ghl";

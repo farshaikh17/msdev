@@ -248,8 +248,10 @@ The kind of business this video suits, 1–3 words (e.g. HVAC, Auto Repair, Med 
 
 /** Google's keyless map embed for the service area, or "" when no place is known. */
 export function mapEmbed(i: Intake): string {
-  const place = i.city || splitList(i.serviceAreas)[0] || "";
-  return place ? `https://maps.google.com/maps?q=${encodeURIComponent(place)}&z=10&output=embed` : "";
+  // The most exact place we know: coordinates from a Google link or the website, then the street address, then the city.
+  const exact = i.mapQuery || i.address;
+  const place = exact || i.city || splitList(i.serviceAreas)[0] || "";
+  return place ? `https://www.google.com/maps?q=${encodeURIComponent(place)}&z=${exact ? 15 : 12}&output=embed` : "";
 }
 
 const SYSTEM = `You are the lead designer and copywriter at Mianro Systems, a web studio that builds premium multi-page websites for local service businesses (trades, home services, clinics, salons, auto, cleaning, wellness). A sales rep will open the site on a call with the business owner, so it must look like a finished, expensive, custom website made just for them: a working multi-page site, not a mockup.
@@ -389,6 +391,8 @@ export function factsBlock(i: Intake, site: SiteFacts | null, slug: string, plan
   add("Trade", i.industry || (generic ? "(not given; work it out from the name and services)" : `(not given; likely ${p.industry})`));
   add("City", i.city);
   add("Phone", i.phone);
+  add("Street address (show it in the contact details and footer)", i.address);
+  add("Opening hours", i.hours);
   add("Services", splitList(i.services).join("; ") || (plan?.services.length ? `${plan.services.join("; ")} (typical for this niche; describe them generally, without claims specific to this business)` : ""));
   add("Service areas", splitList(i.serviceAreas).join("; ") || (i.city ? `(not given: show ${i.city} and say "and surrounding areas"; don't list other towns)` : ""));
   add("Other facts", i.notes);

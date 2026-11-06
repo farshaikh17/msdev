@@ -58,6 +58,14 @@ export const Intake = z.object({
   photoUrls: z.string().trim().max(4000).default(""),
   /** GoHighLevel chat widget for this demo (its ID, or the pasted embed code). Empty: the team default. */
   chatWidget: z.string().trim().max(2000).default(""),
+  /** Street address (shown on the contact page and used for the map). Filled from the business's website or Google link when blank. */
+  address: z.string().trim().max(200).default(""),
+  /** Opening hours as plain text, e.g. "Mon–Fri 8am–5pm". */
+  hours: z.string().trim().max(300).default(""),
+  /** A Google Maps link to the business (we read its name and location from the link; no Google key needed). */
+  googleUrl: z.union([z.literal(""), z.url()]).default(""),
+  /** What the map shows when it isn't just the address/city, e.g. "25.7617,-80.1918" from a Google link. */
+  mapQuery: z.string().trim().max(200).default(""),
 });
 export type Intake = z.infer<typeof Intake>;
 

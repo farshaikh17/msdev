@@ -4,7 +4,7 @@
  * New clips are copied into Workers KV (the sites Worker plays them from there) and given a trade
  * from their file name; clips removed from the folder leave the library.
  */
-import { deleteDriveVideo, driveVideoIds, getSetting, listVideos, saveDriveVideo } from "./db";
+import { deleteDriveVideo, driveVideoIds, getSetting, listSharedVideos, saveDriveVideo } from "./db";
 import { classifyClip } from "./designer";
 import type { Env } from "./env";
 
@@ -72,7 +72,7 @@ export async function importClip(env: Env, driveId: string): Promise<void> {
   if ((await driveVideoIds(env)).includes(driveId)) return;
   const { name, bytes } = await download(driveId);
   await env.VIDEOS.put(videoKey(driveId), bytes);
-  const trades = [...new Set((await listVideos(env)).map((v) => v.name).filter((t) => t !== "Unsorted"))];
+  const trades = [...new Set((await listSharedVideos(env)).map((v) => v.name).filter((t) => t !== "Unsorted"))];
   const { trade, keywords } = await classifyClip(env, name, trades).catch(() => ({ trade: "Unsorted", keywords: [] as string[] }));
   const base = env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : "";
   await saveDriveVideo(env, { driveId, fileName: name, name: trade, keywords, url: `${base}/_v/${driveId}.mp4` });

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Intake } from "@/forge/schema";
 import { costOf, CREDIT_MARKER, factsBlock, mapEmbed, parseParts, sitemapFor, tidyCss, type Kit } from "../cloudflare/forge/src/designer";
 import { clearAttempts, makeSlug, pruneThrottle, recordAttempt, throttled } from "../cloudflare/forge/src/db";
+import { formatPhone, mergeIntake, parseMapsUrl, pickBusiness } from "../cloudflare/forge/src/places";
 import { folderId, parseFolder, serveVideo } from "../cloudflare/forge/src/drive";
 import { heroMotion, matchVideo, parseKeywords, parseVideoUrls } from "../cloudflare/forge/src/hero";
 import { privacyPage, termsPage } from "../cloudflare/forge/src/legal";
@@ -45,7 +46,10 @@ describe("Forge worker — multi-page sites", () => {
   });
 
   it("maps the real service area", () => {
-    expect(mapEmbed(Intake.parse({ businessName: "Acme", city: "Kettering, OH" }))).toBe("https://maps.google.com/maps?q=Kettering%2C%20OH&z=10&output=embed");
+    expect(mapEmbed(Intake.parse({ businessName: "Acme", city: "Kettering, OH" }))).toBe("https://www.google.com/maps?q=Kettering%2C%20OH&z=12&output=embed");
+    // A street address or coordinates give a closer map than the city alone.
+    expect(mapEmbed(Intake.parse({ businessName: "Acme", city: "Kettering, OH", address: "12 Main St, Kettering, OH" }))).toContain("12%20Main%20St");
+    expect(mapEmbed(Intake.parse({ businessName: "Acme", city: "Kettering, OH", mapQuery: "39.68,-84.17" }))).toBe("https://www.google.com/maps?q=39.68%2C-84.17&z=15&output=embed");
     expect(mapEmbed(Intake.parse({ businessName: "Acme" }))).toBe("");
   });
 
@@ -246,5 +250,54 @@ describe("Forge worker — rate limiting", () => {
   it("makes demo links that can't be guessed by trying", () => {
     expect(makeSlug("Pollux Air Conditioning")).toMatch(/^pollux-air-conditioning-[0-9a-f]{8}$/);
     expect(makeSlug("Pollux Air Conditioning")).not.toBe(makeSlug("Pollux Air Conditioning"));
+  });
+});
+
+describe("Forge worker — details from a website and Google link", () => {
+  const ld = JSON.stringify({
+    "@context": "https://schema.org",
+    "@graph": [
+      { "@type": "WebSite", name: "Pollux Air" },
+      {
+        "@type": ["HVACBusiness", "LocalBusiness"],
+        name: "Pollux Air Conditioning",
+        telephone: "+1-305-956-6855",
+        address: { "@type": "PostalAddress", streetAddress: "100 Biscayne Blvd", addressLocality: "Miami", addressRegion: "FL", postalCode: "33132" },
+        geo: { latitude: "25.7743", longitude: -80.1881 },
+        openingHoursSpecification: [{ dayOfWeek: ["https://schema.org/Monday", "Tuesday"], opens: "08:00", closes: "17:00" }],
+      },
+    ],
+  });
+
+  it("reads the business's own details from its schema.org data", () => {
+    const b = pickBusiness([ld], []);
+    expect(b).toMatchObject({ name: "Pollux Air Conditioning", phone: "+1-305-956-6855", street: "100 Biscayne Blvd", city: "Miami", region: "FL", postal: "33132", lat: 25.7743, lng: -80.1881 });
+    expect(b?.hours).toBe("Mon, Tue 08:00–17:00");
+  });
+
+  it("falls back to a tel: link, ignores broken data, and returns nothing when there's nothing", () => {
+    expect(pickBusiness(["{not json"], ["tel:+13059566855"])?.phone).toBe("+13059566855");
+    expect(pickBusiness([], [])).toBeUndefined();
+    expect(pickBusiness([JSON.stringify({ "@type": "WebSite", name: "x" })], [])).toBeUndefined();
+  });
+
+  it("fills only what was left blank, never what was typed", () => {
+    const typed = Intake.parse({ businessName: "Pollux", phone: "(786) 000-1111" });
+    const { intake, filled } = mergeIntake(typed, pickBusiness([ld], []));
+    expect(intake.phone).toBe("(786) 000-1111");
+    expect(intake.city).toBe("Miami, FL");
+    expect(intake.address).toBe("100 Biscayne Blvd, Miami, FL 33132");
+    expect(intake.mapQuery).toBe("25.7743,-80.1881");
+    expect(filled).toEqual(["address", "city", "hours", "mapQuery"]);
+    expect(formatPhone("+13059566855")).toBe("(305) 956-6855");
+  });
+
+  it("reads the name and location out of Google Maps links", () => {
+    const long = "https://www.google.com/maps/place/Pollux+Air+Conditioning/@25.7743,-80.1881,17z/data=!3m1!4b1!4m6!3m5!1s0x88d9b:0xabc!8m2!3d25.77431!4d-80.18811!16s%2Fg%2F11abc";
+    expect(parseMapsUrl(long)).toEqual({ name: "Pollux Air Conditioning", lat: 25.77431, lng: -80.18811 });
+    expect(parseMapsUrl("https://www.google.com/maps/search/?api=1&query=Joe%27s+Plumbing+Orlando")).toEqual({ name: "Joe's Plumbing Orlando", lat: undefined, lng: undefined });
+    expect(parseMapsUrl("https://www.google.com/maps?q=28.5,-81.3")).toEqual({ name: "", lat: 28.5, lng: -81.3 });
+    expect(parseMapsUrl("https://example.com/maps/place/Evil/@1.0,2.0")).toBeNull();
+    expect(parseMapsUrl("not a url")).toBeNull();
   });
 });

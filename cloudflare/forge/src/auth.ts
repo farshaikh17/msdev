@@ -1,60 +1,91 @@
 /**
- * Team sign-in: one shared password. It starts as the FORGE_PASSWORD secret; once someone
- * changes it in the app, a salted hash of the new one (in the settings table) is used instead.
- * A signed-in browser holds a cookie of "<expiry>.<HMAC(expiry)>", keyed by the password,
- * so changing the password signs everyone out.
+ * Sign-in. People have an email and password (PBKDF2). A signed-in browser holds a cookie of
+ * "<user id>.<password version>.<expiry>.<signature>", signed with a secret the app makes for
+ * itself; changing a password (or removing a person) bumps the version, which ends their sessions.
+ * The one-off "team password" of the first version is only used to set up the first admin.
  */
-import { getSetting, setSetting } from "./db";
+import { hashPassword, hmac, same, verifyPassword } from "./crypto";
+import { getSetting } from "./db";
 import type { Env } from "./env";
-
-const HASH_KEY = "teamPasswordHash";
-export const MIN_PASSWORD = 10;
+import { getTenant, getUser, getUserByEmail, touchLogin, type Tenant, type User } from "./tenants";
 
 const COOKIE = "forge_session";
 const DAYS = 30;
-const enc = new TextEncoder();
+const SECRET_KEY = "appSecret";
+const TEAM_HASH_KEY = "teamPasswordHash";
+export const MIN_PASSWORD = 10;
 
-async function hmac(secret: string, data: string): Promise<string> {
-  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(data)));
-  return btoa(String.fromCharCode(...sig)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+export interface Session {
+  user: User;
+  tenant: Tenant;
 }
 
-/** Constant-time string compare. */
-function same(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let d = 0;
-  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return d === 0;
+/** The app's signing secret: made on first use and kept in the database. */
+async function appSecret(env: Env): Promise<string> {
+  let s = await getSetting(env, SECRET_KEY);
+  if (!s) {
+    const fresh = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    // Two first requests at once: INSERT OR IGNORE keeps one of them, and both then read that one.
+    await env.DB.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind(SECRET_KEY, fresh).run();
+    s = await getSetting(env, SECRET_KEY);
+  }
+  return s;
 }
 
-/** The password set in the app ("<salt>.<hash>"), if any. */
-const stored = (env: Env) => getSetting(env, HASH_KEY);
-
-/** What session cookies are keyed by: the stored hash, else the FORGE_PASSWORD secret. */
-async function cookieKey(env: Env): Promise<string> {
-  return (await stored(env)) || env.FORGE_PASSWORD || "";
+export async function sessionCookie(env: Env, user: Pick<User, "id" | "pwVersion">): Promise<string> {
+  const exp = Date.now() + DAYS * 86400_000;
+  const body = `${user.id}.${user.pwVersion}.${exp}`;
+  return `${COOKIE}=${body}.${await hmac(await appSecret(env), body)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${DAYS * 86400}`;
 }
 
-/** True when a password exists (in the app or as the Cloudflare secret). */
-export async function passwordSet(env: Env): Promise<boolean> {
-  return !!(await cookieKey(env));
-}
+export const signOutCookie = `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 
-export async function signedIn(req: Request, env: Env): Promise<boolean> {
-  const key = await cookieKey(env);
-  if (!key) return false;
+/** Who is signed in on this request: their account, if the cookie is genuine, fresh and still allowed. */
+export async function currentSession(req: Request, env: Env): Promise<Session | null> {
   const raw = (req.headers.get("cookie") ?? "").split(/;\s*/).find((c) => c.startsWith(`${COOKIE}=`))?.slice(COOKIE.length + 1);
-  if (!raw) return false;
-  const [exp, sig] = raw.split(".");
-  if (!exp || !sig || Number(exp) < Date.now()) return false;
-  return same(sig, await hmac(key, exp));
+  const parts = raw?.split(".");
+  if (!parts || parts.length !== 4) return null;
+  const [id, version, exp, sig] = parts;
+  if (!(Number(exp) > Date.now())) return null;
+  if (!same(sig, await hmac(await appSecret(env), `${id}.${version}.${exp}`))) return null;
+  const user = await getUser(env, Number(id));
+  if (!user || user.status !== "active" || user.pwVersion !== Number(version)) return null;
+  const tenant = await getTenant(env, user.tenantId);
+  if (!tenant || tenant.status !== "active") return null;
+  return { user, tenant };
 }
 
-export async function checkPassword(env: Env, given: string): Promise<boolean> {
-  const hash = await stored(env);
-  if (hash) {
-    const [salt, want] = hash.split(".");
+/** A made-up hash to compare against when the email is unknown, so timing doesn't reveal which emails exist. */
+let decoy: Promise<string> | undefined;
+
+/** Check an email and password. Returns the user, or null. */
+export async function checkLogin(env: Env, email: string, password: string): Promise<User | null> {
+  const u = await getUserByEmail(env, email);
+  if (!u || u.status !== "active") {
+    await verifyPassword(password, await (decoy ??= hashPassword("not-a-real-password")));
+    return null;
+  }
+  if (!(await verifyPassword(password, u.pwHash))) return null;
+  const tenant = await getTenant(env, u.tenantId);
+  if (!tenant || tenant.status !== "active") return null;
+  await touchLogin(env, u.id);
+  return u;
+}
+
+/** Re-check a signed-in person's own password (before they change it). */
+export async function checkOwnPassword(env: Env, userId: number, password: string): Promise<boolean> {
+  const row = await env.DB.prepare("SELECT pw_hash FROM users WHERE id = ?").bind(userId).first<{ pw_hash: string }>();
+  return !!row && (await verifyPassword(password, row.pw_hash));
+}
+
+/**
+ * The first version had one shared team password (the FORGE_PASSWORD secret, later changeable in
+ * the app). Setting up the first admin account needs it, so a stranger can't claim a fresh app.
+ */
+export async function checkTeamPassword(env: Env, given: string): Promise<boolean> {
+  const stored = await getSetting(env, TEAM_HASH_KEY);
+  if (stored) {
+    const [salt, want] = stored.split(".");
     return same(await hmac(salt, given), want ?? "");
   }
   if (!env.FORGE_PASSWORD) return false;
@@ -62,16 +93,15 @@ export async function checkPassword(env: Env, given: string): Promise<boolean> {
   return same(a, b);
 }
 
-/** Replace the team password (everyone else is signed out). */
-export async function changePassword(env: Env, next: string): Promise<void> {
-  const salt = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16)))).replace(/[^a-zA-Z0-9]/g, "");
-  await setSetting(env, HASH_KEY, `${salt}.${await hmac(salt, next)}`);
+/** Plain checks for a new password. Returns the problem, or "" when it's fine. */
+export function passwordProblem(password: string, confirm?: string): string {
+  if (password.length < MIN_PASSWORD) return `Use at least ${MIN_PASSWORD} characters for the password.`;
+  if (confirm !== undefined && password !== confirm) return "The two passwords don't match.";
+  return "";
 }
 
-export async function sessionCookie(env: Env): Promise<string> {
-  const exp = String(Date.now() + DAYS * 86400_000);
-  const value = `${exp}.${await hmac(await cookieKey(env), exp)}`;
-  return `${COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${DAYS * 86400}`;
+/** Reject form posts that come from another website (cookies are SameSite=Lax as well). */
+export function sameOrigin(req: Request): boolean {
+  const origin = req.headers.get("origin");
+  return !origin || origin === new URL(req.url).origin;
 }
-
-export const signOutCookie = `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
