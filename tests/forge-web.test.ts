@@ -101,7 +101,7 @@ describe("price packs and examples", () => {
   it("features only demos that staff chose, while their account is active", async () => {
     const admin = await setupAdmin(h);
     const acct = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 3);
-    const slug = (await (await call(h, "/demos", { cookie: acct.cookie, form: { businessName: "Pollux Air", city: "Orlando, FL" } })).headers.get("location"))!.match(/demos\/([a-z0-9-]+)/)![1];
+    const slug = (await call(h, "/demos", { cookie: acct.cookie, form: { businessName: "Pollux Air", city: "Orlando, FL" } })).headers.get("location")!.match(/demos\/([a-z0-9-]+)/)![1];
     expect(await html(await call(h, "/examples"))).not.toContain("Pollux Air");
     await call(h, "/admin/site", { cookie: admin, form: { name0: "Solo", credits0: "5", price0: "$30", featured: "0", showcase: `https://sites.test/${slug}` } });
     expect(await html(await call(h, "/examples"))).toContain("Pollux Air");
@@ -168,11 +168,11 @@ describe("forms", () => {
   });
 
   it("refuses cross-site posts", async () => {
-    const r = await h && (await (await import("../cloudflare/forge/src/index")).default.fetch(
+    const r = await (await import("../cloudflare/forge/src/index")).default.fetch(
       new Request("https://forge.test/contact", { method: "POST", headers: { origin: "https://evil.test", "content-type": "application/x-www-form-urlencoded" }, body: "name=a&email=a@b.co&message=x" }),
       h.env,
       { waitUntil: () => undefined } as never,
-    ));
+    );
     expect(r.status).toBe(403);
     expect(inquiries(h)).toHaveLength(0);
   });

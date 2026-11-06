@@ -8,7 +8,7 @@ npx wrangler d1 migrations apply forge-qa --local -c $Q/wrangler.qa.jsonc --pers
 npx wrangler dev -c $Q/wrangler.qa.jsonc --local --persist-to $Q/state --port 8799 > $Q/dev.log 2>&1 &
 SERVER=$!
 until curl -s -o /dev/null localhost:8799/; do sleep 1; done
-NODE_PATH="$(npm root -g):$PWD/node_modules" node $Q/e2e.cjs
+NODE_PATH="$(npm root -g):$PWD/node_modules" node $Q/e2e.mjs
 CODE=$?
 kill $SERVER 2>/dev/null; pkill -f "wrangler dev -c $Q" 2>/dev/null
 exit $CODE

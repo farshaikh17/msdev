@@ -1,7 +1,12 @@
-const { chromium } = require("playwright");
-require("fs").mkdirSync(require("path").join(__dirname, "shots"), { recursive: true });
+import { createRequire } from "node:module";
+import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+const { chromium } = createRequire(import.meta.url)("playwright");
+const HERE = dirname(fileURLToPath(import.meta.url));
+mkdirSync(join(HERE, "shots"), { recursive: true });
 const BASE = "http://localhost:8799";
-const SHOTS = process.env.SHOTS || require("path").join(__dirname, "shots");
+const SHOTS = process.env.SHOTS || join(HERE, "shots");
 const fails = [];
 const log = (m) => console.log(m);
 async function step(name, fn) {
@@ -154,7 +159,7 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
     const mk = await fetch(BASE + "/api/v1/demos", { method: "POST", headers: { authorization: "Bearer " + apiKey, "content-type": "application/json" }, body: JSON.stringify({ businessName: "API Dummy Dental", city: "Tampa, FL" }) }); ok(mk.status === 200 || mk.status === 201 || mk.status === 202, "create " + mk.status);
     const list = await (await fetch(BASE + "/api/v1/demos", { headers: { authorization: "Bearer " + apiKey } })).json(); ok(JSON.stringify(list).includes("API Dummy Dental"), "not in list");
   });
-  await step("owner cannot reach admin", async () => { const r = await op.goto(BASE + "/admin"); ok(!(await op.isVisible("text=Inquiries")), "owner sees admin"); });
+  await step("owner cannot reach admin", async () => { await op.goto(BASE + "/admin"); ok(!(await op.isVisible("text=Inquiries")), "owner sees admin"); });
   await step("owner can change their own password and sign back in", async () => {
     await op.goto(BASE + "/settings"); ok(await op.isVisible("text=Password") || (await op.content()).includes("assword"), "no password card");
   });
