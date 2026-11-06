@@ -43,16 +43,16 @@ export interface Faq {
 }
 
 export const FAQS: Faq[] = [
-  { q: "What is a Forge demo?", a: "A complete, multi-page website for one specific business, designed by AI from its name, location and (when it has one) its current website. You send it to the business owner before they've paid anything. It is a preview to win the client, not a finished, hosted site." },
-  { q: "How fast is a build?", a: "A new site is normally ready in a few minutes. You type the business name (or paste its Google Maps link), and Forge designs the pages, writes the copy, makes the photos and puts the form and map in place." },
-  { q: "What does a site contain?", a: "A home page plus the pages a local business actually needs: services (with a page per service), about, reviews, gallery, contact and quote forms, a map, FAQs and the legal pages. Every page matches one design system and works on phones." },
-  { q: "What is a credit?", a: "One credit is one finished site. If a build fails, the credit is refunded automatically. Re-designing the same business with new instructions uses a new credit." },
-  { q: "Can I put my own brand on it?", a: "Yes. The small credit line at the bottom of every demo can carry your agency's name and link, or be removed. Ask us to switch it on for your account." },
-  { q: "Where do my clients see the demo?", a: "Every demo has its own link. You can send the link, add it to a GoHighLevel page, post it to Google Chat, or load it into your own system with our API and webhooks." },
-  { q: "Do I need an API key or any technical setup?", a: "No. You sign in, type a business name and press Build. The API and webhooks are there if you want to connect your own tools." },
-  { q: "How do I pay?", a: "Credit packs are invoiced by Mianro Systems. There is no online checkout yet, so we send the invoice when you apply and add the credits when it is paid." },
-  { q: "Who owns the sites?", a: "Demos are previews that belong to your account. When a client signs, we can hand you the pages so you can finish and publish them with your own tools." },
-  { q: "Is my clients' data safe?", a: "Each account only ever sees its own demos and form submissions. Sign-in is rate-limited, passwords are stored hashed, demo sites run isolated from the app, and an account can be switched off instantly." },
+  { q: "What is Forge?", a: "Forge designs a complete, multi-page website for a local business from just its name and location (and its current website or Google listing, when it has one). Business owners use it to get a site they'd be proud of; agencies and freelancers use it to show every prospect a finished site before they pay." },
+  { q: "How fast is a build?", a: "A new site is usually ready in minutes. Forge plans the pages, writes the copy, makes the photos and puts the forms, map and chat in place on its own." },
+  { q: "What does a site include?", a: "A home page plus the pages a local business actually needs: services (with a page for each), about, reviews, gallery, service areas, FAQs, quote and contact forms, a map and the legal pages. Every page shares one design, works on phones and has a light and a dark mode." },
+  { q: "Is the preview really free?", a: "Yes. Tell us the business and we'll build a complete preview and send you the link. If you'd like it launched on your domain, we'll talk you through the options; there's nothing to pay to see it." },
+  { q: "What is a credit?", a: "For partners, one credit is one finished site. If a build fails, the credit is refunded automatically. Re-designing the same business with new instructions uses a new credit." },
+  { q: "Can I put my own brand on it?", a: "Partners can. The small credit line at the bottom of every site can carry your agency's name and link, or be removed altogether." },
+  { q: "Where do people see the site?", a: "Every site has its own link. Send it by text or email, add it to a GoHighLevel page, or load it into your own system with the API and webhooks." },
+  { q: "How do partners pay?", a: "Credit packs are invoiced by Mianro Systems. We add the credits as soon as the invoice is paid." },
+  { q: "Who owns the site?", a: "The site you commission is yours. Partners own the previews they build in their account, and when a client signs we help move it onto the client's domain." },
+  { q: "Is my data safe?", a: "Each account only ever sees its own sites and form submissions. Sign-in is rate-limited, passwords are stored hashed, sites run isolated from the app, and any account can be switched off at once." },
 ];
 
 export interface Guide {

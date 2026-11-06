@@ -5,11 +5,19 @@ import type { Lead, Listed, Stored } from "./db";
 import { SWATCHES } from "./designer";
 import type { Session } from "./auth";
 import type { Usage } from "./tenants";
+import { ic } from "./web-ui";
+
+const THEME_BOOT = `(function(){var d=document.documentElement,t;try{t=localStorage.getItem("forge-theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";d.setAttribute("data-theme",t)})()`;
+const THEME_JS = `document.addEventListener("click",function(e){var b=e.target.closest("[data-theme-toggle]");if(!b)return;var d=document.documentElement,t=d.getAttribute("data-theme")==="dark"?"light":"dark";d.setAttribute("data-theme",t);try{localStorage.setItem("forge-theme",t)}catch(x){}});`;
+const toggle = (cls = "tbtn") => `<button class="${cls}" type="button" data-theme-toggle aria-label="Switch light or dark mode" title="Light or dark mode">${ic("sun", "sun")}${ic("moon", "moon")}</button>`;
 
 const CSS = `
 :root{--bg:#f5f6f8;--surface:#fff;--ink:#172033;--muted:#5a6478;--line:#dde1e8;--ember:#d9601f;--ember-soft:#fbe9dd;--steel:#1d4f8c;--steel-soft:#e3ecf7;--ok:#217a4b;--ok-soft:#e1f2e8;--bad:#a32b2b;--bad-soft:#fbe4e4;--chrome:#e9ecf1;
 --display:"Bricolage Grotesque","Figtree",system-ui,sans-serif;--body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace}
-@media (prefers-color-scheme:dark){:root{--bg:#11151d;--surface:#181e29;--ink:#e8ecf3;--muted:#9aa4b6;--line:#2a3242;--ember:#f08447;--ember-soft:#3a2418;--steel:#7fb0ea;--steel-soft:#1c2a3e;--ok:#6fd19c;--ok-soft:#173326;--bad:#f19a9a;--bad-soft:#3a1c1c;--chrome:#222a38;color-scheme:dark}}
+[data-theme=dark]{--bg:#11151d;--surface:#181e29;--ink:#e8ecf3;--muted:#9aa4b6;--line:#2a3242;--ember:#f08447;--ember-soft:#3a2418;--steel:#7fb0ea;--steel-soft:#1c2a3e;--ok:#6fd19c;--ok-soft:#173326;--bad:#f19a9a;--bad-soft:#3a1c1c;--chrome:#222a38;color-scheme:dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme]){--bg:#11151d;--surface:#181e29;--ink:#e8ecf3;--muted:#9aa4b6;--line:#2a3242;--ember:#f08447;--ember-soft:#3a2418;--steel:#7fb0ea;--steel-soft:#1c2a3e;--ok:#6fd19c;--ok-soft:#173326;--bad:#f19a9a;--bad-soft:#3a1c1c;--chrome:#222a38;color-scheme:dark}}
+.tbtn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:inline-grid;place-items:center;cursor:pointer;padding:0}.tbtn svg{width:17px;height:17px}.tbtn .moon{display:none}[data-theme=dark] .tbtn .sun{display:none}[data-theme=dark] .tbtn .moon{display:block}
+.tcorner{position:fixed;top:14px;right:14px;z-index:5}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--body)}
 a{color:var(--steel)}
@@ -94,13 +102,13 @@ export function page(title: string, body: string, opts: PageOpts = {}): Response
     ? `<header class="top"><div class="top-in"><a class="brand" href="/"><i></i>Forge Demo</a><nav class="nav">
 ${link("demos", "/", "Demos")}${isOwner(s) ? `${link("team", "/team", "Team")}${link("api", "/api", "API")}${link("settings", "/settings", "Settings")}` : ""}${s.user.role === "admin" ? link("admin", "/admin", "Admin") : ""}
 <span class="credits" title="${esc(s.user.email)}">${esc(s.tenant.name)} · ${esc(creditsText(s))}</span>
-<form method="post" action="/logout"><button class="linkbtn">Sign out</button></form></nav></div></header>`
-    : "";
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+${toggle()}<form method="post" action="/logout"><button class="linkbtn">Sign out</button></form></nav></div></header>`
+    : `<div class="tcorner">${toggle()}</div>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><script>${THEME_BOOT}</script>
 <title>${esc(title)} · Forge Demo</title><meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;600;700&family=JetBrains+Mono&display=swap">
-<style>${CSS}</style></head><body>${nav}${body}<script>${COPY_JS}</script></body></html>`;
+<style>${CSS}</style></head><body>${nav}${body}<script>${COPY_JS}${THEME_JS}</script></body></html>`;
   return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "SAMEORIGIN", "x-content-type-options": "nosniff", "referrer-policy": "same-origin" } });
 }
 

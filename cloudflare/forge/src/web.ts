@@ -2,9 +2,6 @@
  * The public Forge website (no sign-in): routes, the price packs and examples Mianro staff choose,
  * and the contact / sample / reseller-application forms, which land in the admin console.
  */
-import { draftContent } from "../../../src/forge/copy";
-import { renderPage } from "../../../src/forge/render";
-import { Intake } from "../../../src/forge/schema";
 import { getDemo, getSetting, imageNames, recordAttempt, throttled } from "./db";
 import { sameOrigin } from "./auth";
 import type { Env } from "./env";
@@ -14,7 +11,6 @@ import { DEFAULT_PLANS, GUIDES, TRADES, type Plan, guideBySlug, tradeBySlug } fr
 import {
   type FormKind,
   type Showcase,
-  examplesPage,
   faqPage,
   formPage,
   guidePage,
@@ -31,7 +27,10 @@ import {
   thanksPage,
   tradePage,
   tradesIndex,
+  workDetail,
+  workIndex,
 } from "./web-ui";
+import { WORK, workById } from "./web-work";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const FORM_TRIES = 5;
@@ -94,27 +93,6 @@ async function showcase(env: Env, origin: string): Promise<Showcase[]> {
     out.push({ slug, name: demo.intake.businessName, trade: demo.content.industry || "Local business", url: `${base}${slug}`, image });
   }
   return out;
-}
-
-// ---- Fictional sample sites (always available, no account needed) -----------------------------
-
-const SAMPLE_INTAKES = [
-  { slug: "harbor-plumbing", businessName: "Harbor Plumbing Co", industry: "Plumbing", city: "Tampa, FL", phone: "(813) 555-0142", primaryColor: "#1d6fb8" },
-  { slug: "bright-smile-dental", businessName: "Bright Smile Dental", industry: "Dentistry", city: "Austin, TX", phone: "(512) 555-0188", primaryColor: "#14917f" },
-  { slug: "casa-verde-kitchen", businessName: "Casa Verde Kitchen", industry: "Restaurant", city: "Miami, FL", phone: "(305) 555-0116", primaryColor: "#c8502a" },
-];
-
-export const SAMPLES: Showcase[] = SAMPLE_INTAKES.map((i) => ({ slug: i.slug, name: i.businessName, trade: `${i.industry} · sample`, url: `/examples/sample/${i.slug}`, image: null }));
-
-function sampleSite(slug: string): Response | null {
-  const found = SAMPLE_INTAKES.find((i) => i.slug === slug);
-  if (!found) return null;
-  const intake = Intake.parse(found);
-  const now = new Date(0).toISOString();
-  const html = renderPage({ slug, intake, content: draftContent(intake), writtenBy: "draft", createdAt: now, updatedAt: now });
-  return new Response(html, {
-    headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "x-content-type-options": "nosniff", "cache-control": "public, max-age=300", "content-security-policy": "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox" },
-  });
 }
 
 // ---- Inquiries -------------------------------------------------------------------------------
@@ -221,7 +199,7 @@ async function takeForm(req: Request, env: Env, forcedKind?: FormKind): Promise<
 
 // ---- Routes ----------------------------------------------------------------------------------
 
-const SITEMAP_PATHS = ["/", "/how-it-works", "/pricing", "/resellers", "/resellers/apply", "/examples", "/trades", "/guides", "/faq", "/contact", "/terms", "/privacy"];
+const SITEMAP_PATHS = ["/", "/work", "/preview", "/how-it-works", "/pricing", "/resellers", "/resellers/apply", "/trades", "/guides", "/faq", "/contact", "/terms", "/privacy"];
 
 /** The public website. Returns null when the path is not part of it (so the app handles it). */
 export async function handleWeb(req: Request, env: Env, path: string, signedIn: boolean): Promise<Response | null> {
@@ -229,7 +207,7 @@ export async function handleWeb(req: Request, env: Env, path: string, signedIn: 
   const origin = url.origin;
   const get = req.method === "GET" || req.method === "HEAD";
   const post = req.method === "POST";
-  const page = (title: string, desc: string, body: string, extra: { jsonld?: unknown[]; status?: number; noindex?: boolean } = {}) =>
+  const page = (title: string, desc: string, body: string, extra: { jsonld?: unknown[]; status?: number; noindex?: boolean; image?: string } = {}) =>
     shell({ title, desc, path, origin, signedIn, ...extra }, body);
 
   if (post && path === "/contact") return takeForm(req, env);
@@ -239,34 +217,43 @@ export async function handleWeb(req: Request, env: Env, path: string, signedIn: 
   if (path === "/robots.txt")
     return new Response(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /demos\nDisallow: /settings\nDisallow: /team\nDisallow: /api\nDisallow: /s/\n\nSitemap: ${origin}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
   if (path === "/sitemap.xml") {
-    const urls = [...SITEMAP_PATHS, ...TRADES.map((t) => `/trades/${t.slug}`), ...GUIDES.map((g) => `/guides/${g.slug}`)];
+    const urls = [...SITEMAP_PATHS, ...WORK.map((w) => `/work/${w.id}`), ...TRADES.map((t) => `/trades/${t.slug}`), ...GUIDES.map((g) => `/guides/${g.slug}`)];
     return new Response(
       `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map((u) => `<url><loc>${origin}${u === "/" ? "/" : u}</loc></url>`).join("")}</urlset>`,
       { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } },
     );
   }
   if (path === "/favicon.svg")
-    return new Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#e4572e"/><text x="16" y="23" font-size="20" font-family="Georgia,serif" font-weight="700" text-anchor="middle" fill="#fff">F</text></svg>', { headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" } });
+    return new Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f2a33a"/><stop offset=".55" stop-color="#e4572e"/><stop offset="1" stop-color="#b8321a"/></linearGradient></defs><rect width="32" height="32" rx="9" fill="url(#g)"/><path d="M17.3 6 9.5 17.5h6.2L14.7 26l7.8-11.5h-6.2L17.3 6Z" fill="#fff"/></svg>', { headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" } });
 
   let m: RegExpMatchArray | null;
   if (path === "/") {
     if (signedIn) return null; // signed-in people see their dashboard here
     const plans = await getPlans(env);
-    return page("Forge: show local businesses their new website before they pay", "Forge designs a complete, multi-page website for any local business in minutes. Agencies send the link, win the client, and resell it under their own brand.", homePage(plans, await showcase(env, origin)), { jsonld: homeLd(origin, plans) });
+    return page("Forge: premium websites for local businesses, designed in minutes", "Forge designs a complete, multi-page website for any local business from just its name. See yours free before you pay, or resell Forge under your own brand.", homePage(plans, await showcase(env, origin)), { jsonld: homeLd(origin, plans) });
   }
   if (path === "/how-it-works") return page("How Forge works", "Type a business name and Forge designs a complete multi-page website in minutes: services, photos, forms and a map.", howPage());
   if (path === "/pricing") {
     const plans = await getPlans(env);
     return page("Forge pricing: simple credit packs", "One credit builds one finished website. Failed builds are refunded and packs never expire.", pricingPage(plans), { jsonld: homeLd(origin, plans).slice(2) });
   }
-  if (path === "/resellers") return page("Resell Forge under your own brand", "A white-label program for agencies: your name on every demo, team sign-ins, API keys and webhooks.", resellersPage());
+  if (path === "/resellers") return page("Forge for agencies: resell websites under your own brand", "A white-label partner program: your name on every site, team sign-ins, API keys, webhooks and simple credit packs.", resellersPage());
   if (path === "/resellers/apply") {
     const plan = url.searchParams.get("plan") ?? "";
-    return page("Apply to the Forge reseller program", "Tell us about your agency and we'll set up your account.", formPage({ kind: "reseller", values: { plan: plan.slice(0, 40) } }));
+    return page("Become a Forge partner", "Tell us about your agency and we'll set up your account.", formPage({ kind: "reseller", values: { plan: plan.slice(0, 40) } }));
   }
-  if (path === "/examples") return page("Websites built by Forge", "See multi-page websites Forge designed from just a business name.", examplesPage(await showcase(env, origin), SAMPLES));
-  m = path.match(/^\/examples\/sample\/([a-z0-9-]+)$/);
-  if (m) return sampleSite(m[1]) ?? page("Page not found · Forge", "", notFoundPage(), { status: 404, noindex: true });
+  if (path === "/examples") return Response.redirect(`${origin}/work`, 301);
+  if (path === "/work") return page("Our work: websites built with Forge", "Real, live websites built with Forge for HVAC, plumbing, electrical, pest control, landscaping and more.", workIndex(await showcase(env, origin)), { image: "/work/proair.webp" });
+  m = path.match(/^\/work\/([a-z0-9-]+)$/);
+  if (m) {
+    const w = workById(m[1]);
+    if (!w) return page("Page not found · Forge", "", notFoundPage(), { status: 404, noindex: true });
+    return page(`${w.name}: ${w.trade} website · Forge`, w.blurb, workDetail(w), { image: `/work/${w.id}.webp` });
+  }
+  if (path === "/preview") {
+    const trade = url.searchParams.get("trade") ?? "";
+    return page("Get your free website preview · Forge", "Tell us your business and we'll build a complete preview of its new website, free.", formPage({ kind: "sample", values: { trade: tradeBySlug(trade) ? trade : "" } }));
+  }
   if (path === "/trades") return page("Websites for every local trade", "Forge designs tailored websites for plumbers, electricians, dentists, restaurants and more.", tradesIndex(url.searchParams.get("q") ?? ""));
   m = path.match(/^\/trades\/([a-z0-9-]+)$/);
   if (m) {

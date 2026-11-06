@@ -68,8 +68,21 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
     const bg = await p.evaluate(() => getComputedStyle(document.body).backgroundColor); ok(bg !== "rgb(251, 245, 234)", "still light"); await d.close();
   });
 
+  await step("theme switch flips light/dark and is remembered", async () => {
+    const c = await ctx({ colorScheme: "light" }); const p = await c.newPage(); await p.goto(BASE + "/");
+    ok((await p.getAttribute("html", "data-theme")) === "light", "did not start light");
+    await p.click(".menu [data-theme-toggle]"); ok((await p.getAttribute("html", "data-theme")) === "dark", "did not switch");
+    await p.goto(BASE + "/work"); ok((await p.getAttribute("html", "data-theme")) === "dark", "not remembered");
+    await p.goto(BASE + "/login"); ok((await p.getAttribute("html", "data-theme")) === "dark", "app ignores it"); await c.close();
+  });
+  await step("work page filters and every screenshot loads", async () => {
+    const p = await (await ctx()).newPage(); await p.goto(BASE + "/work", { waitUntil: "networkidle" });
+    await p.click("[data-filter] button[data-v=custom]"); const shown = await p.locator(".wcard:not([hidden])").count(); ok(shown === 6, "custom filter shows " + shown);
+    const broken = await p.evaluate(async () => { const out = []; for (const im of document.images) { if (!im.complete) await new Promise((r) => { im.onload = im.onerror = r; }); if (!im.naturalWidth) out.push(im.src); } return out; });
+    ok(!broken.length, "broken images: " + broken.join(", "));
+  });
   await step("trade search box finds a trade", async () => {
-    await vp.goto(BASE + "/"); await vp.fill(".search input", "dentist"); await vp.click(".search button"); await vp.waitForURL("**/trades?q=dentist");
+    await vp.goto(BASE + "/trades"); await vp.fill(".search input", "dentist"); await vp.click(".search button"); await vp.waitForURL("**/trades?q=dentist");
     ok(await vp.isVisible("a[href='/trades/dentists']"), "no dentists result");
   });
 
@@ -177,7 +190,7 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
   await step("admin features the dummy demo on the public Examples page", async () => {
     await ap.goto(BASE + "/admin/site"); await ap.fill("textarea[name=showcase]", `${BASE}/s/${slug}`); await ap.click("button[type=submit]");
     ok(await ap.isVisible("text=Saved"), "not saved"); const p = await (await ctx()).newPage(); await p.goto(BASE + "/examples"); ok(await p.isVisible("text=Dummy Plumbing Co"), "not on examples"); await p.screenshot({ path: SHOTS + "/qa-examples.png" });
-    await p.goto(BASE + "/"); ok(await p.isVisible("text=Real sites, built by Forge"), "not on home");
+    await p.goto(BASE + "/"); ok((await p.content()).includes("Dummy Plumbing Co"), "not on home");
   });
   await step("suspending the account switches off sign-in, site, form and examples", async () => {
     await ap.goto(BASE + "/admin"); await ap.click("a:has-text('Dummy Agency Co')"); await ap.click("button:has-text('Suspend account')");

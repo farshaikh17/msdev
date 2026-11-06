@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { ADMIN, call, cookieOf, html, loc, makeAccount, makeHarness, setupAdmin, type Harness } from "./forge-harness";
 import { GUIDES, TRADES } from "../cloudflare/forge/src/web-content";
+import { WORK } from "../cloudflare/forge/src/web-work";
 import { parsePlans, parseSlugs } from "../cloudflare/forge/src/web";
 
 let h: Harness;
@@ -14,16 +15,16 @@ const inquiries = (h: Harness) => h.db.prepare("SELECT * FROM inquiries ORDER BY
 describe("public pages", () => {
   it("shows the marketing home to signed-out visitors, and the dashboard to signed-in people", async () => {
     const out = await html(await call(h, "/"));
-    expect(out).toContain("Show every local business their");
+    expect(out).toContain("Websites that win the work.");
     expect(out).toContain('href="/login"');
     const cookie = await setupAdmin(h);
     const inn = await html(await call(h, "/", { cookie }));
-    expect(inn).not.toContain("Show every local business their");
+    expect(inn).not.toContain("Websites that win the work.");
     expect(inn).toContain("Sign out");
   });
 
   it("serves every public page, trade page and guide with a title, description and canonical link", async () => {
-    const paths = ["/how-it-works", "/pricing", "/resellers", "/resellers/apply", "/examples", "/trades", "/guides", "/faq", "/contact", "/terms", "/privacy", ...TRADES.map((t) => `/trades/${t.slug}`), ...GUIDES.map((g) => `/guides/${g.slug}`)];
+    const paths = ["/work", "/preview", "/preview?trade=plumbers", ...WORK.map((w) => `/work/${w.id}`), "/how-it-works", "/pricing", "/resellers", "/resellers/apply", "/trades", "/guides", "/faq", "/contact", "/terms", "/privacy", ...TRADES.map((t) => `/trades/${t.slug}`), ...GUIDES.map((g) => `/guides/${g.slug}`)];
     for (const p of paths) {
       const r = await call(h, p);
       expect(r.status, p).toBe(200);
@@ -36,7 +37,7 @@ describe("public pages", () => {
   });
 
   it("returns a real 404 for unknown pages, trades and guides", async () => {
-    for (const p of ["/nope", "/trades/unicorns", "/guides/nothing"]) expect((await call(h, p)).status, p).toBe(404);
+    for (const p of ["/nope", "/trades/unicorns", "/guides/nothing", "/work/nobody"]) expect((await call(h, p)).status, p).toBe(404);
   });
 
   it("sends signed-out visitors from app pages to sign-in", async () => {
@@ -71,7 +72,7 @@ describe("public pages", () => {
 
   it("has the red-heart credit with the link only on Mianro Systems", async () => {
     const out = await html(await call(h, "/"));
-    expect(out).toContain('Made with <span class="heart">♥</span> by <a style="display:inline" href="https://mianrosystems.com">Mianro Systems</a>');
+    expect(out).toContain('Made with <span class="heart">♥</span> by <a href="https://mianrosystems.com">Mianro Systems</a>');
   });
 });
 
@@ -101,12 +102,12 @@ describe("price packs and examples", () => {
   it("features only demos that staff chose, while their account is active", async () => {
     const admin = await setupAdmin(h);
     const acct = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 3);
-    const slug = (await call(h, "/demos", { cookie: acct.cookie, form: { businessName: "Pollux Air", city: "Orlando, FL" } })).headers.get("location")!.match(/demos\/([a-z0-9-]+)/)![1];
-    expect(await html(await call(h, "/examples"))).not.toContain("Pollux Air");
+    const slug = (await call(h, "/demos", { cookie: acct.cookie, form: { businessName: "Zephyr Dummy Plumbing", city: "Orlando, FL" } })).headers.get("location")!.match(/demos\/([a-z0-9-]+)/)![1];
+    expect(await html(await call(h, "/work"))).not.toContain("Zephyr Dummy Plumbing");
     await call(h, "/admin/site", { cookie: admin, form: { name0: "Solo", credits0: "5", price0: "$30", featured: "0", showcase: `https://sites.test/${slug}` } });
-    expect(await html(await call(h, "/examples"))).toContain("Pollux Air");
+    expect(await html(await call(h, "/work"))).toContain("Zephyr Dummy Plumbing");
     await call(h, `/admin/tenants/${acct.id}/status`, { cookie: admin, form: { status: "suspended" } });
-    expect(await html(await call(h, "/examples"))).not.toContain("Pollux Air");
+    expect(await html(await call(h, "/work"))).not.toContain("Zephyr Dummy Plumbing");
   });
 
   it("parses packs and links safely", () => {
@@ -235,17 +236,41 @@ describe("hostile input", () => {
   });
 });
 
-describe("sample sites", () => {
-  it("lists three fictional samples on Examples and serves each one isolated and unindexed", async () => {
-    const list = await html(await call(h, "/examples"));
-    for (const n of ["Harbor Plumbing Co", "Bright Smile Dental", "Casa Verde Kitchen"]) expect(list).toContain(n);
-    for (const s of ["harbor-plumbing", "bright-smile-dental", "casa-verde-kitchen"]) {
-      const r = await call(h, `/examples/sample/${s}`);
-      expect(r.status, s).toBe(200);
-      expect(r.headers.get("content-security-policy")).toContain("sandbox");
-      expect(r.headers.get("x-robots-tag")).toBe("noindex");
-      expect(await html(r)).toContain("555-01");
+describe("the redesigned site", () => {
+  it("shows every portfolio site with its screenshot, and sends /examples to /work", async () => {
+    const work = await html(await call(h, "/work"));
+    for (const w of WORK) {
+      expect(work).toContain(w.name.replace(/&/g, "&amp;").replace(/'/g, "&#39;"));
+      expect(work).toContain(`/work/${w.id}-long.webp`);
     }
-    expect((await call(h, "/examples/sample/nope")).status).toBe(404);
+    const r = await call(h, "/examples");
+    expect(r.status).toBe(301);
+    expect(r.headers.get("location")).toMatch(/\/work$/);
+  });
+
+  it("gives each project a page that links to the live site and to a matching preview", async () => {
+    const w = WORK[0]!;
+    const page = await html(await call(h, `/work/${w.id}`));
+    expect(page).toContain(`href="${w.url}"`);
+    expect(page).toContain(`/preview?trade=${w.tradeSlug}`);
+  });
+
+  it("has a light/dark switch that is applied before the page paints, on the site and in the app", async () => {
+    const site = await html(await call(h, "/"));
+    expect(site).toContain("data-theme-toggle");
+    expect(site.indexOf("forge-theme")).toBeLessThan(site.indexOf("<style>"));
+    expect(site).toContain("[data-theme=dark]");
+    const login = await html(await call(h, "/login"));
+    expect(login).toContain("data-theme-toggle");
+    const admin = await setupAdmin(h);
+    expect(await html(await call(h, "/", { cookie: admin }))).toContain("data-theme-toggle");
+  });
+
+  it("asks for a free preview with the trade carried through, and ignores unknown trades", async () => {
+    expect(await html(await call(h, "/preview?trade=plumbers"))).toContain('name="trade" value="plumbers"');
+    expect(await html(await call(h, "/preview?trade=%3Cx%3E"))).not.toContain('name="trade"');
+    const r = await call(h, "/contact", { form: { kind: "sample", name: "Owner", email: "o@biz.test", message: "Joe's Plumbing, Tampa", trade: "plumbers" } });
+    expect(loc(r)).toContain("/thanks?k=sample");
+    expect(await html(await call(h, "/thanks?k=sample"))).toContain("Your preview is on its way");
   });
 });
