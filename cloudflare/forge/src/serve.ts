@@ -21,6 +21,7 @@ import type { Ctx, Env } from "./env";
 import { heroMotion, matchVideo } from "./hero";
 import { assemble, chatWidget, creditFor, finish, widgetFor } from "./site";
 import { getTenant } from "./tenants";
+import { deliver } from "./webhook";
 
 export const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, OPTIONS" };
 /** Sites served from the app's own origin run with an opaque origin: no cookies, no access to the app. */
@@ -99,7 +100,7 @@ export async function serveImage(req: Request, env: Env, ctx: Ctx, slug: string,
 }
 
 /** A demo website's form submission. */
-export async function takeLead(req: Request, env: Env, slug: string): Promise<Response> {
+export async function takeLead(req: Request, env: Env, ctx: Ctx, slug: string): Promise<Response> {
   const headers = { ...CORS, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" };
   // Spam guard: a few posts per address, then a pause. (Checked before anything is stored.)
   const key = `lead:${clientIp(req)}`;
@@ -116,10 +117,14 @@ export async function takeLead(req: Request, env: Env, slug: string): Promise<Re
   if (body.fields && typeof body.fields === "object")
     for (const [k, v] of Object.entries(body.fields).slice(0, 30)) if (typeof v === "string" && v.trim()) fields[k.slice(0, 60)] = v.trim().slice(0, 2000);
   if (!Object.keys(fields).length) return Response.json({ error: "Empty form." }, { status: 400, headers });
-  if (!(await publicDemo(env, slug))) return Response.json({ error: "This demo isn't available." }, { status: 404, headers });
+  const found = await publicDemo(env, slug);
+  if (!found) return Response.json({ error: "This demo isn't available." }, { status: 404, headers });
   await recordAttempt(env, key, LEAD_WINDOW_MS);
   if ((await countLeads(env, slug)) >= LEAD_CAP) return Response.json({ error: "This form is full." }, { status: 429, headers });
-  await saveLead(env, slug, typeof body.page === "string" ? body.page.slice(0, 200) : "", fields);
+  const page = typeof body.page === "string" ? body.page.slice(0, 200) : "";
+  await saveLead(env, slug, page, fields);
+  // Tell the account's own system (its CRM automation) right away, without making the visitor wait.
+  if (found.tenant.webhookUrl) ctx.waitUntil(deliver(env, found.tenant, "lead.created", found.demo, { page, fields }));
   return Response.json({ ok: true }, { headers });
 }
 

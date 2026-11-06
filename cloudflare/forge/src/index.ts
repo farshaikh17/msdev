@@ -34,7 +34,7 @@ async function handleSites(req: Request, env: Env, ctx: Ctx): Promise<Response> 
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...CORS, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" } });
   const read = req.method === "GET" || req.method === "HEAD";
   let m = path.match(/^\/([a-z0-9-]{3,64})\/_lead$/);
-  if (m && req.method === "POST") return takeLead(req, env, m[1]);
+  if (m && req.method === "POST") return takeLead(req, env, ctx, m[1]);
   m = path.match(/^\/_v\/([A-Za-z0-9_-]{10,80})\.mp4$/);
   if (m && read) return serveVideo(req, env, m[1]);
   m = path.match(/^\/([a-z0-9-]{3,64})\/_img\/([a-z0-9]{6,40})\/(photo-\d{1,2}\.jpg)$/);

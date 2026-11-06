@@ -74,12 +74,13 @@ Owners make API keys under **API**. `Authorization: Bearer fk_live_…` works on
 
 - `POST /api/v1/demos`: build a demo (same fields as the form; 201, or 402 no credits, 422 a
   field is wrong, 429 too many builds / requests)
-- `GET /api/v1/demos/{slug}` · `GET /api/v1/demos` · `GET /api/v1/me`
+- `GET /api/v1/demos/{slug}` · `GET /api/v1/demos/{slug}/leads` (form submissions) · `GET /api/v1/demos` · `GET /api/v1/me`
 
 60 requests a minute per key. Keys are stored only as hashes (shown once). Under **Settings** an
 account can set a **webhook** address: it receives signed `demo.ready` / `demo.failed` messages
-(and `ping`) so its own automation can post to Google Chat, add a sheet row or update
-GoHighLevel. The in-app **API** page documents the messages and how to verify the signature
+when a build ends, `lead.created` the moment a visitor submits a form on one of its demo sites
+(with the submitted fields), and `ping` for a test, so its own automation can create the contact in
+its CRM, post to Google Chat, add a sheet row or update GoHighLevel. The in-app **API** page documents the messages and how to verify the signature
 (`x-forge-signature` = HMAC-SHA256 of `"<timestamp>.<body>"`).
 
 ## Photos and videos

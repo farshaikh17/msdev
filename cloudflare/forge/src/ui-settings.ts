@@ -146,18 +146,19 @@ ${code(`201 Created
 <p class="note" style="margin:0">Errors: 401 bad key · 402 no credits left · 422 a field is wrong · 429 too many requests or builds running at once.</p></section>
 <section class="card"><h2>Check a demo and list demos</h2>
 ${code(`GET ${base}/demos/{slug}      → { slug, business_name, status, site_url, pages: [...], error }
+GET ${base}/demos/{slug}/leads → { leads: [ { page, fields, received_at } ] }   (latest 50 form submissions)
 GET ${base}/demos            → { demos: [...] }   (latest 100)
 GET ${base}/me               → { account, credits, unlimited }`)}
 <p class="note" style="margin:0">status is <b>building</b>, <b>ready</b> or <b>failed</b> (or <b>template</b> while only the quick starter site exists). Send the key as <span class="mono">Authorization: Bearer …</span>. Limit: 60 requests a minute per key.</p></section>
 <section class="card"><h2>Webhook messages</h2>
-<p class="note" style="margin:0">Set the address under Settings. We send <b>demo.ready</b> and <b>demo.failed</b> (and <b>ping</b> for a test) as a POST with a JSON body and these headers:</p>
+<p class="note" style="margin:0">Set the address under Settings. We send <b>demo.ready</b> and <b>demo.failed</b> when a build ends, <b>lead.created</b> the moment a visitor submits a form on one of your demo sites, and <b>ping</b> for a test, as a POST with a JSON body and these headers:</p>
 ${code(`x-forge-event: demo.ready
 x-forge-timestamp: 1767225600
 x-forge-signature: sha256=<hex>      ← HMAC-SHA256 of "<timestamp>.<raw body>" with your signing secret
 
 { "event": "demo.ready", "created_at": "…", "demo": { "slug": "…", "business_name": "…", "status": "ready",
   "site_url": "…", "pages": [ { "name": "Home", "url": "…" }, … ] } }`)}
-<p class="note" style="margin:0">Check the signature and reject messages older than a few minutes. Answer with any 2xx status.</p></section></main>`,
+<p class="note" style="margin:0"><b>lead.created</b> carries the submission as well: <span class="mono">"lead": { "page": "/quote", "fields": { "name": "…", "phone": "…", "message": "…" } }</span>, so you can create the contact in your CRM straight away. Check the signature and reject messages older than a few minutes. Answer with any 2xx status.</p></section></main>`,
     { nav: "api", session: s },
   );
 }

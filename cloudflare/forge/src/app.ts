@@ -92,7 +92,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
   // ---- Public: demo sites on this origin, the template JSON, and the API ----------------------
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   let m = path.match(/^\/s\/([a-z0-9-]+)\/_lead$/);
-  if (m && post) return takeLead(req, env, m[1]);
+  if (m && post) return takeLead(req, env, ctx, m[1]);
   m = path.match(/^\/s\/([a-z0-9-]+)((?:\/[a-z0-9-]+){1,2})?$/);
   if (m && req.method === "GET") {
     if (env.SITES_ORIGIN) return Response.redirect(`${site(m[1])}${m[2] ?? ""}`, 302);

@@ -441,3 +441,56 @@ describe("the existing Mianro demos survive the move to accounts", () => {
     expect(old.prepare("SELECT name, unlimited, ghl_page_url, chat_widget FROM tenants WHERE id = 1").get()).toMatchObject({ name: "Mianro Systems", unlimited: 1, ghl_page_url: "https://mianrosystems.com/demo", chat_widget: "off" });
   });
 });
+
+describe("leads reach the account's own system", () => {
+  const post = (hh: Harness, slug: string, fields: Record<string, string>, ip = "192.0.2.77") => call(hh, `/s/${slug}/_lead`, { json: { page: "/quote", fields }, ip });
+
+  it("stores a form submission, sends lead.created to the webhook, and the API can read it back", async () => {
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test");
+    const c = await makeAccount(h, admin, "Cedar Marketing", "owner@c.test");
+    await call(h, "/settings/webhook", { cookie: b.cookie, form: { webhookUrl: "https://hooks.example.com/forge" } });
+    const key = (await html(await call(h, "/api/keys", { cookie: b.cookie, form: { name: "k" } }))).match(/fk_live_[A-Za-z0-9_-]{20,}/)![0];
+    const otherKey = (await html(await call(h, "/api/keys", { cookie: c.cookie, form: { name: "k" } }))).match(/fk_live_[A-Za-z0-9_-]{20,}/)![0];
+    const slug = slugOf(await build(h, b.cookie, "Bravo Barbers"));
+
+    const seen: { body: string; headers: Headers }[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_u, init) => {
+      seen.push({ body: String(init?.body), headers: new Headers(init?.headers) });
+      return new Response("ok");
+    });
+    const sent: Promise<unknown>[] = [];
+    // The app hands the notification to waitUntil; capture it so the test can wait for it.
+    const { default: worker } = await import("../cloudflare/forge/src/index");
+    const res = await worker.fetch(
+      new Request(`https://app.test/s/${slug}/_lead`, { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": "192.0.2.80" }, body: JSON.stringify({ page: "/quote", fields: { name: "Dana", phone: "555-0101", message: "Need a fade" } }) }),
+      h.env,
+      { waitUntil: (p: Promise<unknown>) => void sent.push(p) },
+    );
+    expect(res.status).toBe(200);
+    await Promise.all(sent);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].headers.get("x-forge-event")).toBe("lead.created");
+    expect(JSON.parse(seen[0].body)).toMatchObject({ event: "lead.created", demo: { slug, business_name: "Bravo Barbers" }, lead: { page: "/quote", fields: { name: "Dana", phone: "555-0101", message: "Need a fade" } } });
+
+    const mine = (await (await call(h, `/api/v1/demos/${slug}/leads`, { bearer: key })).json()) as { leads: { fields: Record<string, string>; page: string }[] };
+    expect(mine.leads).toHaveLength(1);
+    expect(mine.leads[0]).toMatchObject({ page: "/quote", fields: { name: "Dana" } });
+    // Another account can't read them.
+    expect((await call(h, `/api/v1/demos/${slug}/leads`, { bearer: otherKey })).status).toBe(404);
+    // The owner sees it on the demo page too.
+    expect(await html(await call(h, `/demos/${slug}`, { cookie: b.cookie }))).toContain("Need a fade");
+  });
+
+  it("a suspended account's forms stop, and an empty or junk submission isn't stored", async () => {
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test");
+    const slug = slugOf(await build(h, b.cookie, "Bravo Barbers"));
+    expect((await post(h, slug, {}, "192.0.2.81")).status).toBe(400);
+    expect((await call(h, `/s/${slug}/_lead`, { method: "POST", ip: "192.0.2.82" })).status).toBe(400);
+    expect((await post(h, slug, { name: "Ok" }, "192.0.2.83")).status).toBe(200);
+    await call(h, `/admin/tenants/${b.id}/status`, { cookie: admin, form: { status: "suspended" } });
+    expect((await post(h, slug, { name: "After" }, "192.0.2.84")).status).toBe(404);
+    expect((h.db.prepare("SELECT count(*) c FROM leads WHERE slug = ?").get(slug) as { c: number }).c).toBe(1);
+  });
+});

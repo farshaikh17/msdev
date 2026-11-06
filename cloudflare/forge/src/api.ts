@@ -3,7 +3,7 @@
  * key (Authorization: Bearer fk_live_…). Every call works only on the key's own account.
  */
 import { Invalid, NoCredits, createDemo, rawFields, startMessage } from "./demos";
-import { getDemo, getKit, listDemos, recordAttempt, throttled, type Stored } from "./db";
+import { getDemo, getKit, listDemos, listLeads, recordAttempt, throttled, type Stored } from "./db";
 import { pagesOf } from "./designer";
 import type { Env } from "./env";
 import { findApiKey, getTenant } from "./tenants";
@@ -54,6 +54,13 @@ export async function handleApi(req: Request, env: Env, path: string, sitesBase:
     const d = await getDemo(env, one[1], { tenantId: tenant.id });
     if (!d) return fail(404, "No demo with that slug on this account.");
     return json(await demoJson(env, d, site(d.slug)));
+  }
+
+  const leads = path.match(/^\/api\/v1\/demos\/([a-z0-9-]{3,64})\/leads$/);
+  if (leads && req.method === "GET") {
+    const d = await getDemo(env, leads[1], { tenantId: tenant.id });
+    if (!d) return fail(404, "No demo with that slug on this account.");
+    return json({ leads: (await listLeads(env, d.slug)).map((l) => ({ page: l.page, fields: l.fields, received_at: l.createdAt })) });
   }
 
   return fail(404, "Unknown API path. See the API page in the app.");
