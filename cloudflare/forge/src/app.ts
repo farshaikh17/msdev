@@ -61,7 +61,7 @@ import { demoPage, homePage, invitePage, isOwner, loginPage, page, setupPage } f
 import { adminInquiriesPage, adminPage, adminSitePage, adminTenantPage, adminVideosPage } from "./ui-admin";
 import { apiPage, passwordCard, settingsPage, teamPage } from "./ui-settings";
 import { deliver, newWebhookSecret, webhookUrlProblem } from "./webhook";
-import { countNewInquiries, getPlans, getShowcaseSlugs, handleWeb, listInquiries, parsePlans, parseSlugs, setInquiryStatus, webNotFound } from "./web";
+import { countNewInquiries, getPlans, getShowcaseSlugs, handleWeb, listInquiries, parsePlans, parseSlugs, payUrlOk, setInquiryStatus, webNotFound } from "./web";
 
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, OPTIONS" };
 /** Wrong passwords allowed per address (and per email), and how long the count lasts. */
@@ -405,12 +405,14 @@ async function handleAdmin(req: Request, env: Env, s: Session, path: string, ori
     if (!post) return adminSitePage(s, await getPlans(env), (await getShowcaseSlugs(env)).join("\n"), flashQ);
     const f = await req.formData();
     const featured = Number(f.get("featured"));
-    const raw = [0, 1, 2, 3].map((i) => ({ name: String(f.get(`name${i}`) ?? ""), credits: Number(f.get(`credits${i}`)), price: String(f.get(`price${i}`) ?? ""), blurb: String(f.get(`blurb${i}`) ?? ""), featured: featured === i }));
+    const raw = [0, 1, 2, 3].map((i) => ({ name: String(f.get(`name${i}`) ?? ""), credits: Number(f.get(`credits${i}`)), price: String(f.get(`price${i}`) ?? ""), blurb: String(f.get(`blurb${i}`) ?? ""), payUrl: String(f.get(`pay${i}`) ?? "").trim(), featured: featured === i }));
+    const badPay = raw.filter((r) => r.name.trim() && r.payUrl && !payUrlOk(r.payUrl)).map((r) => r.name.trim());
     const plans = parsePlans(raw.filter((r) => r.name.trim()));
     const slugs = parseSlugs(String(f.get("showcase") ?? ""));
     const unknown: string[] = [];
     for (const slug of slugs) if (!(await getDemo(env, slug))) unknown.push(slug);
     if (!plans.length) return adminSitePage(s, await getPlans(env), slugs.join("\n"), { err: "Keep at least one pack, with a name and a number of credits." });
+    if (badPay.length) return adminSitePage(s, plans, slugs.join("\n"), { err: `The payment link for ${badPay.join(", ")} isn't a valid https link.` });
     if (unknown.length) return adminSitePage(s, plans, slugs.join("\n"), { err: `These demos don't exist: ${unknown.join(", ")}` });
     await setSetting(env, "web_plans", JSON.stringify(plans));
     await setSetting(env, "web_showcase", slugs.join(" "));

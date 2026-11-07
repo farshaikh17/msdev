@@ -245,6 +245,7 @@ a.card:hover{border-color:var(--ember);transform:translateY(-2px)}.card p{color:
 .trade{display:grid;gap:4px;padding:20px 22px;border-radius:16px;background:var(--surface);border:1px solid var(--line);text-decoration:none;color:var(--ink);font-weight:600;transition:.2s}
 .trade small{font-weight:400;color:var(--muted);font-size:.86rem}.trade:hover{border-color:var(--ember);transform:translateY(-2px)}
 .split{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}@media (max-width:900px){.split{grid-template-columns:1fr}}
+.toc{margin:6px 0 0;padding-left:20px;columns:2;column-gap:28px}@media (max-width:600px){.toc{columns:1}}
 .prose{max-width:720px}.prose h2{margin:44px 0 14px;font-size:1.75rem}.prose p{margin:0 0 18px;font-size:1.07rem;color:var(--ink2)}
 .search{display:flex;gap:8px;background:var(--surface);border:1px solid var(--line2);border-radius:999px;padding:6px;max-width:560px;box-shadow:var(--shadow)}
 .search input{flex:1;min-width:0;border:0;background:transparent;font:inherit;padding:10px 16px;color:var(--ink)}.search input:focus{outline:0}.search:focus-within{border-color:var(--ember)}
@@ -461,7 +462,7 @@ export function plansHtml(plans: Plan[]): string {
   return `<div class="plans">${plans
     .map(
       (p) =>
-        `<div class="plan rv${p.featured ? " hot" : ""}">${p.featured ? '<span class="tagx">Most popular</span>' : ""}<h3>${esc(p.name)}</h3><div class="price">${esc(p.price)}</div><div class="per">${p.credits} credits · about ${esc(per(p))} per site</div><p>${esc(p.blurb)}</p><a class="btn${p.featured ? " hot" : " ghost"}" href="/resellers/apply?plan=${encodeURIComponent(p.name)}">Choose ${esc(p.name)}</a></div>`,
+        `<div class="plan rv${p.featured ? " hot" : ""}">${p.featured ? '<span class="tagx">Most popular</span>' : ""}<h3>${esc(p.name)}</h3><div class="price">${esc(p.price)}</div><div class="per">${p.credits} credits · about ${esc(per(p))} per site</div><p>${esc(p.blurb)}</p>${p.payUrl ? `<a class="btn${p.featured ? " hot" : " ghost"}" href="${esc(p.payUrl)}" target="_blank" rel="noopener">Buy ${esc(p.name)} ${ic("out")}</a><a class="small" style="text-align:center" href="/resellers/apply?plan=${encodeURIComponent(p.name)}">New partner? Apply first</a>` : `<a class="btn${p.featured ? " hot" : " ghost"}" href="/resellers/apply?plan=${encodeURIComponent(p.name)}">Choose ${esc(p.name)}</a>`}</div>`,
     )
     .join("")}</div>`;
 }
@@ -526,7 +527,7 @@ export function pricingPage(plans: Plan[]): string {
 <div class="cta-row" style="justify-content:flex-start"><a class="btn hot" href="/preview">Get my free preview ${ic("arrow")}</a><a class="btn ghost" href="https://forge.mianrosystems.com/pricing" target="_blank" rel="noopener">See Forge plans ${ic("out")}</a></div></div>
 <div class="acard dark rv"><span class="eyebrow">For agencies &amp; freelancers</span><h3 style="font-size:2rem">Credit packs</h3><p class="lead" style="font-size:1.05rem">One credit builds one finished site. Failed builds are refunded automatically, and packs never expire.</p>
 <ul class="ticks"><li>${ic("check")}Your brand on every site</li><li>${ic("check")}Unlimited team members</li><li>${ic("check")}API keys and signed webhooks</li></ul><a class="btn" style="background:#fff;color:#10172a" href="#packs">See the packs ${ic("arrow")}</a></div></div></div></section>
-<section class="alt" id="packs"><div class="wrap"><div class="center rv" style="margin-bottom:44px"><span class="eyebrow">Partner packs</span><h2 style="margin-top:14px">Credit packs</h2></div>${plansHtml(plans)}<p class="small center" style="margin-top:22px">Packs are invoiced by Mianro Systems. We add the credits as soon as the invoice is paid.</p></div></section>
+<section class="alt" id="packs"><div class="wrap"><div class="center rv" style="margin-bottom:44px"><span class="eyebrow">Partner packs</span><h2 style="margin-top:14px">Credit packs</h2></div>${plansHtml(plans)}<p class="small center" style="margin-top:22px">${plans.some((p) => p.payUrl) ? "Pay securely online; we add the credits to your account as soon as the payment arrives." : "Packs are invoiced by Mianro Systems. We add the credits as soon as the invoice is paid."}</p></div></section>
 <section><div class="wrap split"><div class="rv"><h2>Included in every pack</h2><ul class="ticks" style="margin-top:22px">${INCLUDED.map((i) => `<li>${ic("check")}${esc(i)}</li>`).join("")}</ul></div>
 <div class="card rv"><h3>Need a bigger volume?</h3><p>Building hundreds of previews a month? Tell us how many and we'll put together a custom pack.</p><a class="btn" style="justify-self:start" href="/contact">Talk to us ${ic("arrow")}</a></div></div></section>
 <section class="alt"><div class="wrap"><div class="center rv" style="margin-bottom:40px"><h2>Pricing questions</h2></div>${faqList(FAQS.filter((f) => /credit|pay|brand|own/i.test(f.q)))}</div></section>${ctaBand()}`;
@@ -638,27 +639,126 @@ export function thanksPage(kind: FormKind): string {
   return `<section><div class="wrap" style="max-width:780px"><div class="okbox"><span class="ico">${ic("check")}</span><h1 style="font-size:clamp(2rem,4vw,2.8rem)">${reseller ? "Application received" : kind === "sample" ? "Your preview is on its way" : "Thanks, we've got it"}</h1><p class="lead">${reseller ? "We'll review it and reply within one business day with next steps and your first invoice." : kind === "sample" ? "We'll build it and email you the link, usually within one business day." : "We'll reply by email, usually within one business day."}</p><div class="cta-row" style="justify-content:flex-start"><a class="btn" href="/work">Browse our work</a><a class="btn ghost" href="/">Home</a></div></div></div></section>`;
 }
 
-const LEGAL_UPDATED = "November 2026";
+const LEGAL_UPDATED = "November 7, 2026";
+
+interface LegalSection {
+  h: string;
+  p: string[];
+}
+
+function legalDoc(title: string, intro: string, sections: LegalSection[]): string {
+  const id = (i: number) => `s${i + 1}`;
+  return `<div class="pagehead"><div class="wrap"><span class="eyebrow">Legal</span><h1>${esc(title)}</h1><p class="small" style="margin-top:14px">Last updated ${LEGAL_UPDATED}</p></div></div>
+<section class="tight"><div class="wrap"><article class="prose"><p>${intro}</p>
+<nav aria-label="Contents" class="card" style="margin:28px 0"><b>Contents</b><ol class="toc">${sections.map((x, i) => `<li><a href="#${id(i)}">${esc(x.h)}</a></li>`).join("")}</ol></nav>
+${sections.map((x, i) => `<h2 id="${id(i)}">${i + 1}. ${esc(x.h)}</h2>${x.p.map((t) => `<p>${t}</p>`).join("")}`).join("")}</article></div></section>`;
+}
+
+const CONTACT = `<a href="/contact">our contact form</a>`;
 
 export function termsPage(): string {
-  return `<div class="pagehead"><div class="wrap"><h1>Terms of service</h1><p class="small" style="margin-top:14px">Last updated ${LEGAL_UPDATED}</p></div></div><section class="tight"><div class="wrap"><article class="prose">
-<h2>The service</h2><p>Forge is provided by Mianro Systems ("we"). It lets approved accounts create preview websites for businesses and share them by link. A preview is a draft meant to help win a client; it is not a hosted production website unless we agree otherwise in writing.</p>
-<h2>Accounts and credits</h2><p>Access is by invitation. You are responsible for what happens under your account and for keeping sign-ins private. One credit builds one site; credits are refunded when a build fails and are otherwise not refundable. Packs are invoiced and credits are added when payment is received.</p>
-<h2>What you may build</h2><p>Only build previews for real businesses you have a genuine reason to contact, and only with information you are entitled to use. Do not use Forge for anything unlawful, misleading or harmful, to impersonate a business, or to send unsolicited messages in breach of the law that applies to you. You are responsible for following those laws.</p>
-<h2>Content and AI</h2><p>Previews are written by AI from the details you provide and public information. Check them before you rely on them, including any claims, prices, licences or reviews. Photos in previews are illustrative.</p>
-<h2>Availability</h2><p>We work to keep Forge running but do not promise it will always be available. We may suspend an account that breaks these terms or puts others at risk, and we may change or end features with notice where we can.</p>
-<h2>Liability</h2><p>To the extent the law allows, our liability for any claim is limited to the amount you paid us in the three months before the claim, and we are not liable for indirect or lost-profit losses.</p>
-<h2>Contact</h2><p>Questions about these terms: use the <a href="/contact">contact form</a>.</p></article></div></section>`;
+  return legalDoc(
+    "Terms of service",
+    `These terms are an agreement between you and Mianro Systems ("Mianro", "we", "us") for the use of Forge, including this website, the Forge app, the API and the websites Forge creates. By creating an account, buying credits or using Forge you agree to them. If you use Forge for a company, you confirm you can accept these terms on its behalf.`,
+    [
+      { h: "The service", p: [
+        "Forge designs websites for businesses using artificial intelligence. A build creates a multi-page website (a \"site\") for the business you describe, hosted by us at its own link so you can share it. Builds come in two styles: Standard and Studio (our creative tier).",
+        "Unless we agree otherwise in writing, a site hosted by Forge is a preview: a draft to show a business what its website could be. Launching a site on a business's own domain, ongoing hosting, edits and support are separate services that we quote and agree with you directly.",
+      ] },
+      { h: "Accounts", p: [
+        "Accounts are created by invitation. You must be at least 18 and use Forge for business purposes. Keep your sign-in details private and tell us straight away if you think someone else has used them. You are responsible for everything done under your account, including by team members you invite.",
+        "Account owners can invite team members, create API keys and connect webhooks. Anyone holding an API key can act for your account, so keep keys secret and revoke ones you no longer need.",
+      ] },
+      { h: "Credits, payments and refunds", p: [
+        "Builds use credits: a Standard build uses 1 credit and a Studio build uses 3. Credits are bought in packs at the prices shown when you buy. You can pay through a payment link (for example Stripe or GoHighLevel) or by invoice; credits are added once payment is received. Prices exclude any taxes that apply, which you pay.",
+        "If a build fails and cannot finish, its credits are returned to your account automatically. Credits used for a build that finished are not refunded, including when you ask for a redesign. Unused credits do not expire while your account is open. Except where the law requires otherwise, payments for credits are not refundable. We may change prices for future purchases; credits you already hold are not affected.",
+      ] },
+      { h: "Acceptable use", p: [
+        "Only build sites for real businesses you have a genuine reason to contact, using information you are entitled to use. You must not use Forge to impersonate a business or person, to deceive or defraud anyone, to publish unlawful, hateful or infringing material, to collect personal data unlawfully, or to send messages that break the anti-spam, telemarketing or privacy laws that apply to you (for example CAN-SPAM, the TCPA, GDPR or PECR).",
+        "You must not try to break into, overload or reverse engineer Forge, get around its limits, or use it to build a competing service. We may limit, suspend or close an account that breaks these rules.",
+      ] },
+      { h: "Your content and the businesses you build for", p: [
+        "You keep ownership of what you give us (business details, text, photos, logos and links). You give us permission to store and process it to provide Forge, including sending it to the AI providers that write and design the sites. You confirm you have the right to use it.",
+        "Sites may contain a business's name, address, phone number and public details. If the business asks you to stop, or asks us to take a site down, we may remove it. Visitors who fill in a form on a site send their details to the account that built it; that account is responsible for handling them lawfully.",
+      ] },
+      { h: "AI-generated content", p: [
+        "Sites are written and designed by AI from the details provided and public information. AI can be wrong. Check every site before you rely on it or show it to anyone, including any statements about services, prices, licences, guarantees, opening hours or reviews. Photos created for previews are illustrative: do not present them as a business's real work, team or premises.",
+      ] },
+      { h: "Ownership and licence", p: [
+        "Forge, its software, motion engine, design systems, templates and branding belong to Mianro. We give you a licence to use Forge while your account is open.",
+        "The words and design of a site you build are yours to use for the business it was built for, during your account and after you leave, provided you have paid for the credits used. Partners may present sites under their own brand where white-labelling is switched on for their account. The underlying Forge code and engine stay ours, and you may not resell them on their own.",
+      ] },
+      { h: "Other services we use", p: [
+        "Forge relies on other providers, including Cloudflare (hosting, storage and image generation), Anthropic (AI writing and design), Google (fonts and maps), jsDelivr (animation libraries on Studio sites) and GoHighLevel (the optional chat widget). Their services have their own terms, and we are not responsible for their availability.",
+      ] },
+      { h: "Availability and changes", p: [
+        "We work to keep Forge running and your sites online, but we do not promise it will always be available or free of errors. We may change, improve or remove features; if a change materially reduces what you paid for, we will tell you and, where fair, offer a pro-rata credit.",
+      ] },
+      { h: "Suspension and closing your account", p: [
+        "You can ask us to close your account at any time through " + CONTACT + ". We may suspend or close an account that breaks these terms, puts others at risk, or is unpaid. While an account is suspended its sign-ins, sites and forms are switched off. Before we delete anything you have asked to keep, you can ask us for a copy of your sites' pages and your form submissions.",
+      ] },
+      { h: "Disclaimers", p: [
+        "Forge is provided \"as is\" and \"as available\". To the extent the law allows, we make no promises beyond those in these terms, including about fitness for a particular purpose, the results a site will bring, or that AI-generated content is accurate.",
+      ] },
+      { h: "Limitation of liability", p: [
+        "To the extent the law allows, our total liability for any claims about Forge is limited to the amount you paid us in the three months before the claim, and we are not liable for indirect or consequential losses, lost profits, lost revenue or lost data. Nothing in these terms limits liability that cannot be limited by law.",
+      ] },
+      { h: "Indemnity", p: [
+        "You will cover our reasonable losses and costs if a claim is brought against us because of content you supplied, the way you used a site, or your breach of these terms or of the law.",
+      ] },
+      { h: "Governing law", p: [
+        "These terms are governed by the laws of the place where Mianro Systems is registered, and its courts have jurisdiction, unless the law where you live gives you the right to bring a claim locally.",
+      ] },
+      { h: "Changes to these terms", p: [
+        "We may update these terms. We will post the new version here with a new date, and tell account owners about important changes before they take effect. Continuing to use Forge after that means you accept them.",
+      ] },
+      { h: "Contact", p: [`Questions about these terms: write to us through ${CONTACT}.`] },
+    ],
+  );
 }
 
 export function privacyPage(): string {
-  return `<div class="pagehead"><div class="wrap"><h1>Privacy policy</h1><p class="small" style="margin-top:14px">Last updated ${LEGAL_UPDATED}</p></div></div><section class="tight"><div class="wrap"><article class="prose">
-<h2>What we collect</h2><p>On this website: the details you type into our forms (name, email, phone, company, message) and, if you use the switch, your light or dark mode choice, kept in your own browser. We do not use advertising trackers. When you use an account: your email, a hashed password, the businesses you build previews for, and the form submissions that arrive on those previews.</p>
-<h2>How we use it</h2><p>To reply to you, run your account, keep the service secure and invoice you. We do not sell personal information.</p>
-<h2>Who sees it</h2><p>Only our staff, and the service providers that run Forge for us (our hosting, our AI providers and our fonts provider). Each account can see only its own data.</p>
-<h2>Visitors to preview sites</h2><p>When someone fills in a form on a preview site, the details go to the account that built it. That account decides what to do with them and is responsible for doing so lawfully.</p>
-<h2>Keeping and deleting</h2><p>We keep inquiries for as long as needed to follow up. You can ask us to delete your details at any time through the <a href="/contact">contact form</a>.</p>
-<h2>Security</h2><p>Passwords are stored hashed, sign-in attempts are limited, preview sites are isolated from the app, and accounts cannot see one another's data.</p></article></div></section>`;
+  return legalDoc(
+    "Privacy policy",
+    `This policy explains what personal information Mianro Systems ("Mianro", "we", "us") collects through Forge (this website, the Forge app, the API and the sites Forge hosts), why, who we share it with and the choices you have.`,
+    [
+      { h: "Who is responsible", p: [
+        "Mianro Systems is responsible for the information on this website and in Forge accounts. For form submissions made on a site an account built, that account decides how the information is used; we store and pass it on for them.",
+      ] },
+      { h: "What we collect", p: [
+        "<b>When you contact us</b> (contact, free preview and partner forms): your name, email, and anything else you choose to give us, such as phone, company, website, the business you'd like a preview for and your message.",
+        "<b>When you have an account</b>: your email, a securely hashed password (we never store or see the password itself), your role, sign-in times, the businesses you build sites for and the details you enter about them, your credits and payments history, API keys (stored only as a fingerprint) and webhook settings.",
+        "<b>On the sites Forge hosts</b>: what visitors type into a site's forms, with the page they used.",
+        "<b>Technical data</b>: to stop abuse we keep a short-lived count of sign-in attempts and form posts per internet address; these counters are cleared within about an hour. Our hosting provider also keeps standard request logs for security.",
+      ] },
+      { h: "Cookies and similar storage", p: [
+        "The Forge app uses one essential cookie to keep you signed in. This website and the sites we host do not use advertising or analytics trackers. Your light or dark mode choice is saved in your own browser, and Studio sites remember in your browser whether you've seen their intro animation; neither is sent to us. The optional GoHighLevel chat widget on hosted sites may set its own cookies under GoHighLevel's policy.",
+      ] },
+      { h: "How we use it", p: [
+        "To reply to you and send the preview or information you asked for; to create and run your account and build and host your sites; to deliver form submissions and webhook messages to the account that owns a site; to bill you and keep financial records; to keep Forge secure and prevent abuse; and to improve Forge. We do not sell personal information, and we do not share it for cross-context behavioural advertising.",
+        "Where data-protection laws such as the GDPR apply, we rely on: performing our contract with you (accounts and builds), our legitimate interests (security, replying to enquiries, improving Forge), legal obligations (records), and your consent where we ask for it.",
+      ] },
+      { h: "Who we share it with", p: [
+        "Only with providers that run Forge for us, under agreements that protect it: Cloudflare (hosting, database, file storage and image generation), Anthropic (AI writing and design: it receives the business details you enter for a build), Google (web fonts and map embeds load from Google when a page is viewed), jsDelivr (animation libraries load on Studio sites), GoHighLevel (only if a site uses the chat widget) and your chosen payment provider (if you pay through a payment link). We may also share information if the law requires it or to protect people's safety or our rights.",
+      ] },
+      { h: "International transfers", p: [
+        "Our providers may process information in the United States and other countries. Where the law requires it, we use recognised safeguards such as standard contractual clauses.",
+      ] },
+      { h: "How long we keep it", p: [
+        "Enquiries: as long as needed to follow up, and no longer than 24 months without further contact. Accounts and their sites: while the account is open, then up to 90 days after it closes (longer only where the law requires us to keep records, such as invoices). Form submissions on hosted sites: while the site's account is open, unless the account deletes them sooner. Abuse-prevention counters: about an hour.",
+      ] },
+      { h: "Your rights", p: [
+        `Depending on where you live, you can ask to see, correct, download or delete your information, object to or restrict how we use it, and withdraw consent. California residents have the rights in the CCPA/CPRA, including to know and delete, and we will not treat you differently for using them. Ask through ${CONTACT}; we'll confirm your identity and reply within the time the law gives us. You can also complain to your local data-protection authority.`,
+        "If you sent your details through a form on a site built by one of our customers, contact that business first; we will help them respond.",
+      ] },
+      { h: "Security", p: [
+        "Passwords are stored as salted hashes, sign-in attempts are rate-limited, each account can only see its own data, hosted sites run separately from the app, and access to our systems is restricted to staff who need it. No system is perfectly secure, so we will tell you and the authorities about a breach where the law requires.",
+      ] },
+      { h: "Children", p: ["Forge is for businesses and is not directed at children under 16. We do not knowingly collect their information."] },
+      { h: "Changes to this policy", p: ["We may update this policy and will post the new version here with a new date. Important changes will be announced to account owners."] },
+      { h: "Contact", p: [`Questions or requests about your information: write to us through ${CONTACT}.`] },
+    ],
+  );
 }
 
 export function notFoundPage(): string {

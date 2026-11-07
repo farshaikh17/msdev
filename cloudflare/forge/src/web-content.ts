@@ -50,7 +50,7 @@ export const FAQS: Faq[] = [
   { q: "What is a credit?", a: "For partners, one credit is one finished site. If a build fails, the credit is refunded automatically. Re-designing the same business with new instructions uses a new credit." },
   { q: "Can I put my own brand on it?", a: "Partners can. The small credit line at the bottom of every site can carry your agency's name and link, or be removed altogether." },
   { q: "Where do people see the site?", a: "Every site has its own link. Send it by text or email, add it to a GoHighLevel page, or load it into your own system with the API and webhooks." },
-  { q: "How do partners pay?", a: "Credit packs are invoiced by Mianro Systems. We add the credits as soon as the invoice is paid." },
+  { q: "How do partners pay?", a: "Partners buy credit packs online through a secure payment link, or by invoice from Mianro Systems. We add the credits as soon as the payment arrives." },
   { q: "Who owns the site?", a: "The site you commission is yours. Partners own the previews they build in their account, and when a client signs we help move it onto the client's domain." },
   { q: "Is my data safe?", a: "Each account only ever sees its own sites and form submissions. Sign-in is rate-limited, passwords are stored hashed, sites run isolated from the app, and any account can be switched off at once." },
 ];
@@ -146,6 +146,8 @@ export interface Plan {
   price: string;
   blurb: string;
   featured?: boolean;
+  /** A Stripe or GoHighLevel payment link (https). Without one, choosing the pack opens the partner application. */
+  payUrl?: string;
 }
 
 /** Starting prices. Mianro staff can change them under Admin → Website. */

@@ -307,3 +307,33 @@ describe("Forge Studio on the public site", () => {
     expect(page).toContain("Studio · 3 credits");
   });
 });
+
+describe("payment links and legal pages", () => {
+  const packs = (pay0: string) => ({ name0: "Solo", credits0: "5", price0: "$30", blurb0: "One", pay0, name1: "", name2: "", name3: "", featured: "0", showcase: "" });
+
+  it("shows a Buy button when a pack has a payment link, and the application otherwise", async () => {
+    expect(await html(await call(h, "/pricing"))).toContain("/resellers/apply?plan=Agency");
+    const admin = await setupAdmin(h);
+    expect((await call(h, "/admin/site", { cookie: admin, form: packs("https://buy.stripe.com/test_123") })).status).toBe(303);
+    const pricing = await html(await call(h, "/pricing"));
+    expect(pricing).toContain('href="https://buy.stripe.com/test_123" target="_blank" rel="noopener">Buy Solo');
+    expect(pricing).toContain("Pay securely online");
+    expect(await html(await call(h, "/admin/site", { cookie: admin }))).toContain('value="https://buy.stripe.com/test_123"');
+  });
+
+  it("refuses payment links that aren't plain https", async () => {
+    const admin = await setupAdmin(h);
+    for (const bad of ["javascript:alert(1)", "http://pay.example.com/x", 'https://x.com/"><script>']) {
+      const page = await html(await call(h, "/admin/site", { cookie: admin, form: packs(bad) }));
+      expect(page, bad).toContain("isn&#39;t a valid https link");
+    }
+    expect(parsePlans([{ name: "A", credits: 3, payUrl: "javascript:alert(1)" }])[0]!.payUrl).toBeUndefined();
+  });
+
+  it("publishes complete terms and privacy pages with a contents list", async () => {
+    const terms = await html(await call(h, "/terms"));
+    for (const t of ["Credits, payments and refunds", "AI-generated content", "Acceptable use", "Limitation of liability", 'href="#s1"']) expect(terms).toContain(t);
+    const privacy = await html(await call(h, "/privacy"));
+    for (const t of ["Cookies and similar storage", "Who we share it with", "How long we keep it", "Your rights", "Anthropic", "Cloudflare"]) expect(privacy).toContain(t);
+  });
+});

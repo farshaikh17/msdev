@@ -50,6 +50,9 @@ export async function getPlans(env: Env): Promise<Plan[]> {
   return DEFAULT_PLANS;
 }
 
+/** A payment link we'll send buyers to: https, a real host, no spaces or quotes. */
+export const payUrlOk = (u: string) => /^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/[^\s"'<>]*)?$/i.test(u) && u.length <= 500;
+
 export function parsePlans(raw: unknown): Plan[] {
   if (!Array.isArray(raw)) return [];
   const out: Plan[] = [];
@@ -58,7 +61,8 @@ export function parsePlans(raw: unknown): Plan[] {
     const name = String(p?.name ?? "").trim().slice(0, 30);
     const credits = Math.trunc(Number(p?.credits));
     if (!name || !(credits >= 1 && credits <= 100000)) continue;
-    out.push({ name, credits, price: String(p?.price ?? "").trim().slice(0, 14), blurb: String(p?.blurb ?? "").trim().slice(0, 140), featured: !!p?.featured });
+    const pay = String(p?.payUrl ?? "").trim();
+    out.push({ name, credits, price: String(p?.price ?? "").trim().slice(0, 14), blurb: String(p?.blurb ?? "").trim().slice(0, 140), featured: !!p?.featured, ...(payUrlOk(pay) ? { payUrl: pay } : {}) });
   }
   if (out.length && !out.some((p) => p.featured)) out[Math.min(1, out.length - 1)].featured = true;
   return out;
