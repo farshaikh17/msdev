@@ -200,7 +200,7 @@ describe("when things go wrong", () => {
     // The page shows the failure and that the credit came back.
     const page = await html(await call(h, `/demos/${slug}`, { cookie: b.cookie }));
     expect(page).toContain("The design build failed.");
-    expect(page).toContain("Your credit was refunded");
+    expect(page).toContain("Your credits were refunded; trying again uses 1 credit.");
   });
 
   it("'Try again' picks up where a failed build stopped, writing only the missing pages", async () => {
@@ -345,7 +345,7 @@ describe("Studio builds", () => {
     const admin = await setupAdmin(h);
     const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 2);
     const r = await studio(b.cookie, "Studio Barbers");
-    expect(loc(r)).toContain("No build credits left");
+    expect(loc(r)).toContain("A Studio build needs 3 credits and this account has 2");
     expect((await getTenant(h.env, b.id))!.credits).toBe(2);
     expect(loc(await build(h, b.cookie, "Plain Barbers"))).toMatch(/\/demos\//);
   });

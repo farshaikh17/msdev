@@ -24,7 +24,7 @@ import {
   setSetting,
   throttled,
 } from "./db";
-import { Invalid, NoCredits, checkWidget, createDemo, rawFields, redesignDemo, startMessage } from "./demos";
+import { Invalid, NoCredits, checkWidget, createDemo, noCreditsText, rawFields, redesignDemo, startMessage } from "./demos";
 import { pagesOf, sitemapFor } from "./designer";
 import { DEFAULT_FOLDER, FOLDER_KEY, folderId, syncFolder } from "./drive";
 import type { Ctx, Env } from "./env";
@@ -200,7 +200,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
       const msg = startMessage(r.start);
       return redirect(withMsg(`/demos/${r.slug}`, msg.err ? "error" : "ok", msg.err ?? msg.ok ?? "Started."));
     } catch (e) {
-      if (e instanceof NoCredits) return redirect(withMsg("/", "error", "No build credits left. Ask your Forge administrator to add more."));
+      if (e instanceof NoCredits) return redirect(withMsg("/", "error", noCreditsText(e)));
       if (e instanceof Invalid) return redirect(withMsg("/", "error", e.message));
       throw e;
     }
@@ -231,7 +231,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
         const msg = startMessage(result);
         return redirect(withMsg(`/demos/${slug}`, msg.err ? "error" : "ok", msg.err ?? msg.ok ?? "Started."));
       } catch (e) {
-        if (e instanceof NoCredits) return redirect(withMsg(`/demos/${slug}`, "error", "No build credits left. Ask your Forge administrator to add more."));
+        if (e instanceof NoCredits) return redirect(withMsg(`/demos/${slug}`, "error", noCreditsText(e)));
         if (e instanceof Invalid) return redirect(withMsg(`/demos/${slug}`, "error", e.message));
         throw e;
       }

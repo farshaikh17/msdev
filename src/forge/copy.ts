@@ -4,7 +4,7 @@
  * and the Cloudflare app (cloudflare/forge), which uses Claude.
  */
 import { z } from "zod";
-import { presetFor, type Preset } from "./presets";
+import { GENERIC, presetFor, type Preset } from "./presets";
 import { ICONS, SiteContent, type Intake } from "./schema";
 
 export const DEFAULT_MODEL = "gemini-3.8-flash";
@@ -32,8 +32,17 @@ export function parseReviews(s: string): { quote: string; name: string; context:
 
 const place = (i: Intake) => i.city || "your area";
 
+/** "auto repair shop" -> "Auto Repair Shop" (short joining words stay lower case). */
+const titleCase = (s: string) =>
+  s
+    .trim()
+    .toLowerCase()
+    .replace(/\b([a-z])([a-z]*)/g, (w, a: string, b: string, at: number) => (at > 0 && /^(and|or|of|the|a|an|in|for|&)$/.test(w) ? w : a.toUpperCase() + b));
+
 export function draftContent(i: Intake): SiteContent {
-  const p = presetFor(i.industry, i.businessName, i.services);
+  // A trade we have no preset for keeps its own name rather than becoming "Home Services".
+  const found = presetFor(i.industry, i.businessName, i.services);
+  const p = found === GENERIC && i.industry.trim() ? { ...found, industry: titleCase(i.industry).slice(0, 60) } : found;
   const name = i.businessName;
   const where = place(i);
   const services = splitList(i.services);

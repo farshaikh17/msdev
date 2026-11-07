@@ -24,6 +24,18 @@ const SITES = "https://forge-sites.dev1-024.workers.dev/";
 
 export const WORK: Work[] = [
   {
+    id: "bobs",
+    name: "Bob's Garage",
+    trade: "Auto repair",
+    place: "Cynthiana, KY",
+    kind: "instant",
+    url: `${SITES}bob-s-garage-c4e2acc3`,
+    blurb: "A downtown auto shop with straight talk and solid repairs. Built from nothing but a Google Maps link: the address, map and services came from the listing.",
+    highlights: ["Designed from a Google Maps link in one build", "Oil changes, brakes, diagnostics, tires and suspension pages", "Quote form and tap-to-call on every screen", "Map and directions to Court Street", "Light and dark mode"],
+    look: "Workshop-honest: dark steel tones, bold type and warm accent highlights.",
+    tradeSlug: "auto-repair",
+  },
+  {
     id: "pollux",
     name: "Pollux Air Conditioning",
     trade: "HVAC",

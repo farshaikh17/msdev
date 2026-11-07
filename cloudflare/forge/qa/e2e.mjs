@@ -149,6 +149,15 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
     const submit = op.locator("button[type=submit]:has-text('Build')").first(); await submit.click(); await op.waitForURL(/\/demos\/[a-z0-9-]+/);
     slug = op.url().match(/\/demos\/([a-z0-9-]+)/)[1]; log("      slug " + slug);
   });
+  await step("owner can choose Studio, and the demo is labelled Studio", async () => {
+    await op.goto(BASE + "/"); ok(await op.isVisible("text=Studio · 3 credits"), "no Studio choice");
+    ok((await op.content()).includes("a Studio build 3"), "credit wording missing");
+    await op.fill("input[name=businessName]", "Dummy Studio Roofing"); await op.fill("input[name=city]", "105 Court St, Cynthiana, KY 41031, United States");
+    await op.click("label.choice:has(input[name=style][value=studio])"); ok(await op.isChecked("input[name=style][value=studio]"), "Studio not selected");
+    await op.locator("button[type=submit]:has-text('Build')").first().click(); await op.waitForURL(/\/demos\/[a-z0-9-]+/);
+    ok(await op.isVisible("h1 .pill:has-text('Studio')"), "no Studio label");
+    const t = await op.content(); ok(t.includes("Cynthiana, KY") && t.includes("105 Court St"), "address not split from city");
+  });
   await step("credit is spent and shown", async () => { await op.goto(BASE + "/"); ok(await op.isVisible("text=5 credits"), "credits changed on a no-AI draft"); });
   await step("the demo site loads, has the heart credit and a working form", async () => {
     const sp = await (await ctx()).newPage(); const r = await sp.goto(`${BASE}/s/${slug}`); ok(r.status() === 200, "site " + r.status());

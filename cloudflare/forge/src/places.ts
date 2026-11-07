@@ -181,3 +181,18 @@ export async function resolveMapsLink(raw: string): Promise<MapsPlace | null> {
   }
   return parseMapsUrl(url);
 }
+
+/**
+ * A street address typed into the City field ("105 Court St, Cynthiana, KY 41031, United States"):
+ * split it into the address and a short city ("Cynthiana, KY"). Anything else comes back unchanged.
+ */
+export function splitStreetCity(city: string, address: string): { city: string; address: string } {
+  const c = city.trim();
+  if (address.trim() || !/^\d+[a-z]?\s+\S/i.test(c) || !c.includes(",")) return { city: c, address };
+  const parts = c.split(",").map((p) => p.trim()).filter(Boolean);
+  if (/^(united states( of america)?|usa|us)$/i.test(parts[parts.length - 1] ?? "")) parts.pop();
+  if (parts.length < 2) return { city: c, address };
+  const state = (parts[parts.length - 1] ?? "").replace(/\s*\d{5}(-\d{4})?$/, "").trim();
+  const town = parts.length >= 3 ? parts[parts.length - 2]! : "";
+  return { city: town && state ? `${town}, ${state}` : town || state, address: parts.join(", ") };
+}

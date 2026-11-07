@@ -302,3 +302,23 @@ describe("Forge worker — details from a website and Google link", () => {
     expect(parseMapsUrl("not a url")).toBeNull();
   });
 });
+
+describe("details people type in the wrong box", () => {
+  it("moves a street address out of the City field", async () => {
+    const { splitStreetCity } = await import("../cloudflare/forge/src/places");
+    expect(splitStreetCity("105 Court St, Cynthiana, KY 41031, United States", "")).toEqual({ city: "Cynthiana, KY", address: "105 Court St, Cynthiana, KY 41031" });
+    expect(splitStreetCity("12 Main Street, Orlando, FL", "")).toEqual({ city: "Orlando, FL", address: "12 Main Street, Orlando, FL" });
+    // Ordinary cities, and an address already given, are left alone.
+    expect(splitStreetCity("Orlando, FL", "")).toEqual({ city: "Orlando, FL", address: "" });
+    expect(splitStreetCity("105 Court St, Cynthiana, KY", "1 Other Rd")).toEqual({ city: "105 Court St, Cynthiana, KY", address: "1 Other Rd" });
+    expect(splitStreetCity("29 Palms", "")).toEqual({ city: "29 Palms", address: "" });
+  });
+
+  it("keeps the trade's own name when we have no preset for it", async () => {
+    const { draftContent } = await import("../src/forge/copy");
+    const { Intake } = await import("../src/forge/schema");
+    expect(draftContent(Intake.parse({ businessName: "Bob's Garage", industry: "auto repair shop" })).industry).toBe("Auto Repair Shop");
+    expect(draftContent(Intake.parse({ businessName: "Acme", industry: "Plumbing" })).industry).toBe("Plumbing");
+    expect(draftContent(Intake.parse({ businessName: "Acme" })).industry).toBe("Home Services");
+  });
+});

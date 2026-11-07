@@ -2,7 +2,7 @@
  * The JSON API (/api/v1): an account's own tools can build demos and read their status with an API
  * key (Authorization: Bearer fk_live_…). Every call works only on the key's own account.
  */
-import { Invalid, NoCredits, createDemo, rawFields, startMessage } from "./demos";
+import { Invalid, NoCredits, createDemo, noCreditsText, rawFields, startMessage } from "./demos";
 import { getDemo, getKit, listDemos, listLeads, recordAttempt, throttled, type Stored } from "./db";
 import { pagesOf } from "./designer";
 import type { Env } from "./env";
@@ -43,7 +43,7 @@ export async function handleApi(req: Request, env: Env, path: string, sitesBase:
       if (r.start === "busy") return json({ slug: r.slug, status: "template", site_url: site(r.slug), warning: startMessage(r.start).err, credits_left: after.credits }, 429);
       return json({ slug: r.slug, status: r.start === "started" ? "building" : "template", site_url: site(r.slug), credits_left: after.credits, unlimited: after.unlimited }, 201);
     } catch (e) {
-      if (e instanceof NoCredits) return fail(402, "No build credits left on this account.");
+      if (e instanceof NoCredits) return fail(402, noCreditsText(e));
       if (e instanceof Invalid) return fail(422, e.message);
       throw e;
     }

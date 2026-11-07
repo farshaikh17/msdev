@@ -526,8 +526,8 @@ async function ask(
       // Effort sets how much the model thinks before writing; thinking is billed as output.
       output_config: { effort },
       // If the model declines (safety), the API re-runs the request on a suitable fallback model.
-      // Haiku has no server-side fallback.
-      ...(model.startsWith("claude-haiku") ? {} : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }),
+      // Only Opus uses it (the option is proven there); Sonnet and Haiku requests go without it.
+      ...(model.startsWith("claude-opus") ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
       messages: [{ role: "user", content }],
     });
     for await (const ev of stream) {

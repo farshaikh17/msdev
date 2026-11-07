@@ -4,7 +4,7 @@ import type { Intake } from "../../../src/forge/schema";
 import type { Lead, Listed, Stored } from "./db";
 import { SWATCHES } from "./designer";
 import type { Session } from "./auth";
-import { STUDIO_CREDITS, type Usage } from "./tenants";
+import { STUDIO_CREDITS, buildCost, type Usage } from "./tenants";
 import { ic } from "./web-ui";
 
 const THEME_BOOT = `(function(){var d=document.documentElement,t;try{t=localStorage.getItem("forge-theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";d.setAttribute("data-theme",t)})()`;
@@ -217,7 +217,7 @@ export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) =>
     `<main class="main">${flash(ok, err)}
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${stat("Build credits", s.tenant.unlimited ? "Unlimited" : s.tenant.credits)}${stat("Demos", usage.demos)}${stat("Built this month", usage.buildsMonth)}${stat("Form submissions", usage.leads)}</div>
 ${out ? `<div class="flash bad" role="alert">This account has no build credits left. Ask your Forge administrator to add more; sites you've already built keep working.</div>` : ""}
-<div><h1>New demo website</h1><p class="lead">Type in a business (or paste its Google Maps link) and Forge designs a custom website of 15+ pages for it, with working forms and a chat widget in the site's colour. It takes about 7–20 minutes and builds in the background, so you can keep working.${s.tenant.unlimited ? "" : " Each build uses 1 credit; a build that fails is refunded."}${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template and no credit is used.)"}</p></div>
+<div><h1>New demo website</h1><p class="lead">Type in a business (or paste its Google Maps link) and Forge designs a custom website of 15+ pages for it, with working forms and a chat widget in the site's colour. It takes about 7–20 minutes and builds in the background, so you can keep working.${s.tenant.unlimited ? "" : ` A Standard build uses 1 credit and a Studio build ${STUDIO_CREDITS}; a build that fails is refunded.`}${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template and no credit is used.)"}</p></div>
 <form method="post" action="/demos" class="card">${fields()}<div><button class="btn ember" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build demo website</button></div></form>
 <section style="display:grid;gap:14px"><h2>All demos (${demos.length})</h2>${rows}</section></main>`,
     { nav: "demos", session: s },
@@ -244,7 +244,7 @@ export function demoPage(
   return page(
     i.businessName,
     `<main class="main">${flash(ok, err)}
-<div class="row" style="justify-content:space-between"><div><h1>${esc(i.businessName)}</h1>
+<div class="row" style="justify-content:space-between"><div><h1>${esc(i.businessName)}${i.style === "studio" ? ` <span class="pill">Studio</span>` : ""}</h1>
 <p class="lead">${esc(d.content.industry)}${i.city ? ` · ${esc(i.city)}` : ""} · <span class="pill">${d.liveVersion ? `Designed by Claude · ${links.pages.length} pages` : d.html ? "Designed by Claude · 1 page" : "Template"}</span> · updated ${esc(d.updatedAt.slice(0, 16).replace("T", " "))} UTC${
       s.user.role === "admin" && d.buildCost ? ` · built for <b>$${d.buildCost.usd.toFixed(2)}</b> (${d.buildCost.calls} Claude calls)` : ""
     }</p></div>
@@ -255,7 +255,7 @@ ${
             d.buildStage === "pages" ? `Claude is writing the pages… ${progress.done} of ${progress.total} done` : "Claude is designing the look…"
           }</b><br><span class="note">Usually 7–20 minutes in all. This page refreshes itself.${d.liveVersion || d.html ? " The current version stays live until the new one is complete." : " Until then the link shows a quick template version."}</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
         : d.buildStatus === "failed"
-          ? `<div class="status bad" role="alert"><div><b>The design build failed.</b> ${esc(d.buildError)}<br>The link still works${d.liveVersion || d.html ? " with the previous design" : " with the quick template version"}.${s.tenant.unlimited ? "" : " Your credit was refunded; trying again uses 1 credit."} Trying again keeps the pages already written.</div><form method="post" action="/demos/${esc(d.slug)}/rebuild"><button class="btn" type="submit"${out ? " disabled" : ""}>Try again</button></form></div>`
+          ? `<div class="status bad" role="alert"><div><b>The design build failed.</b> ${esc(d.buildError)}<br>The link still works${d.liveVersion || d.html ? " with the previous design" : " with the quick template version"}.${s.tenant.unlimited ? "" : ` Your credits were refunded; trying again uses ${buildCost(d.intake)} credit${buildCost(d.intake) === 1 ? "" : "s"}.`} Trying again keeps the pages already written.</div><form method="post" action="/demos/${esc(d.slug)}/rebuild"><button class="btn" type="submit"${out ? " disabled" : ""}>Try again</button></form></div>`
           : ""
     }
 <section class="card"><h2>Share it</h2><div class="share">
@@ -280,7 +280,7 @@ ${row("Sheet row (date · business · trade · city · phone · link)", sheet.re
         : `<p class="note" style="margin:0">Anything sent through the site's forms shows up here.</p>`
     }</section>
 <iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(i.businessName)}"></iframe>
-<form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Edit &amp; redesign</h2><p class="note">Change the details (or just press the button for a fresh design). Claude rebuilds it in the background; the links stay the same.${s.tenant.unlimited ? "" : " A redesign uses 1 credit."}</p>${fields(i)}
+<form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Edit &amp; redesign</h2><p class="note">Change the details (or just press the button for a fresh design). Claude rebuilds it in the background; the links stay the same.${s.tenant.unlimited ? "" : ` A redesign uses 1 credit (Studio: ${STUDIO_CREDITS}).`}</p>${fields(i)}
 <div><button class="btn" type="submit" data-busy="Starting…"${busy || out ? " disabled" : ""}>Redesign site</button>${out ? ` <span class="note">No credits left.</span>` : ""}</div></form>
 <form method="post" action="/demos/${esc(d.slug)}/archive"><button class="btn danger" type="submit">Archive demo (its links stop working)</button></form>
 </main>`,

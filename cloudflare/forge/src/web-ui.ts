@@ -351,6 +351,9 @@ export function shell(sh: Shell, body: string): Response {
 
 // ---- Shared pieces ---------------------------------------------------------------------------
 
+/** Portfolio sites by id, in the order given (unknown ids are skipped). */
+const pick = (...ids: string[]) => ids.map((id) => WORK.find((w) => w.id === id)).filter((w): w is Work => !!w);
+
 const host = (u: string) => u.replace(/^https?:\/\//, "").replace(/\/$/, "");
 
 const ctaBand = (title = "See your business on a website like these.", sub = "Tell us the business. We'll build a free preview and send you the link. No card, no commitment.") =>
@@ -393,7 +396,7 @@ export function homePage(plans: Plan[], showcase: Showcase[]): string {
 <p class="lead">Forge builds a complete, multi-page website for any local business from just its name: real pages, photos, working forms and a map. See yours before you pay a cent.</p>
 <div class="cta-row"><a class="btn hot lg" href="/preview">Get my free preview ${ic("arrow")}</a><a class="btn ghost lg" href="/work">See our work</a></div>
 <div class="facts"><span>${ic("layers")}15+ pages per site</span><span>${ic("bolt")}Ready in minutes</span><span>${ic("moon")}Light &amp; dark mode</span><span>${ic("inbox")}Forms that reach you</span></div></div>
-<div class="stage rv">${laptop(ai, { rotate: true, eager: true })}${phone([WORK[1]!, WORK[2]!, WORK[0]!], true)}
+<div class="stage rv">${laptop(ai, { rotate: true, eager: true })}${phone(pick("sterling", "brightpath", "bobs", "pollux"), true)}
 <div class="float f1"><span class="ico">${ic("spark")}</span><div><b>Designed from a name</b><small>"Pollux Air Conditioning, Miami"</small></div></div>
 <div class="float f2"><span class="ico">${ic("inbox")}</span><div><b>New quote request</b><small>Sent to your inbox and CRM</small></div></div></div></div></section>
 
@@ -409,14 +412,14 @@ export function homePage(plans: Plan[], showcase: Showcase[]): string {
 <div class="result" data-shot>${laptop(ai)}</div></div></div></section>
 
 <section class="alt"><div class="wrap"><div class="head"><div class="rv"><span class="eyebrow">Our work</span><h2 style="margin-top:14px;max-width:16ch">Sites our clients are proud to send</h2><p class="lead">Hover a site to scroll the whole page. Every one is live.</p></div><a class="btn ghost rv" href="/work">All work ${ic("arrow")}</a></div>
-<div class="works">${[WORK[0]!, WORK[3]!, WORK[1]!, WORK[6]!, WORK[2]!, WORK[8]!].map(workCard).join("")}${showcase.slice(0, 3).map(showcaseCard).join("")}</div></div></section>
+<div class="works">${pick("pollux", "proair", "bobs", "arc", "sterling", "homeshield").map(workCard).join("")}${showcase.slice(0, 3).map(showcaseCard).join("")}</div></div></section>
 
 <section class="band" style="overflow:hidden"><div class="wrap split"><div class="rv"><span class="eyebrow">New · Forge Studio</span><h2 style="margin-top:14px;max-width:14ch">Want a site people <em class="x">remember?</em></h2><p class="lead" style="margin:18px 0 28px">Our creative tier: art-directed, award-style sites with kinetic type, living WebGL colour, smooth scrolling and page transitions. Still built in an afternoon.</p><div class="cta-row" style="justify-content:flex-start"><a class="btn hot" href="/studio">Explore Studio ${ic("arrow")}</a><a class="btn ghost" style="color:#fff;border-color:rgba(255,255,255,.35)" href="/studio/concept">See a concept site</a></div></div>
 <a class="rv" href="/studio/concept" style="display:block;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.12);box-shadow:0 40px 100px -30px #000"><img src="/studio/concept.webp" alt="A Forge Studio concept site" width="1280" height="800" loading="lazy"></a></div></section>
 
 <section><div class="wrap"><div class="head"><div class="rv"><span class="eyebrow">What you get</span><h2 style="margin-top:14px;max-width:18ch">Everything a local business site needs. Nothing it doesn't.</h2></div></div>
 <div class="bento">
-<div class="tile big rv"><span class="ico">${ic("phone")}</span><h3>Made for the phone in their pocket</h3><p>Most customers find a local business on their phone. Every Forge site is designed phone-first: a one-line header, a tap-to-call button and a quote form that's always one thumb away.</p><div class="phones">${[WORK[0]!, WORK[1]!, WORK[2]!].map((w) => `<img src="${img(w.id, "-phone")}" alt="${esc(w.name)} on a phone" loading="lazy" width="390" height="844">`).join("")}</div></div>
+<div class="tile big rv"><span class="ico">${ic("phone")}</span><h3>Made for the phone in their pocket</h3><p>Most customers find a local business on their phone. Every Forge site is designed phone-first: a one-line header, a tap-to-call button and a quote form that's always one thumb away.</p><div class="phones">${pick("pollux", "sterling", "bobs").map((w) => `<img src="${img(w.id, "-phone")}" alt="${esc(w.name)} on a phone" loading="lazy" width="390" height="844">`).join("")}</div></div>
 <div class="tile rv"><span class="ico">${ic("layers")}</span><h3>Every page they need</h3><p>15 or more real pages: home, services with a page each, about, reviews, gallery, areas, FAQs, quote and contact, plus the legal pages.</p></div>
 <div class="tile rv"><span class="ico">${ic("palette")}</span><h3>A design that fits the trade</h3><p>Colours, type and layout chosen for the business, not stamped from a template.</p></div>
 <div class="tile q rv"><span class="ico">${ic("image")}</span><h3>Photos and hero video</h3><p>Fresh photos for every site and a hero video that suits the trade.</p></div>
@@ -508,7 +511,7 @@ const STEPS_FULL = [
 export function howPage(): string {
   return `<div class="pagehead"><div class="wrap"><span class="eyebrow">How it works</span><h1>From a business name to a <em class="x">finished website</em></h1><p class="lead">Forge takes the slow, expensive part of building a website, the first full draft, and makes it take minutes.</p></div></div>
 <section class="tight"><div class="wrap"><div class="steps">${STEPS_FULL.map((s, i) => `<div class="step rv"><b>STEP ${i + 1}</b><h3>${esc(s.t)}</h3><p>${esc(s.d)}</p></div>`).join("")}</div></div></section>
-<section class="alt"><div class="wrap split"><div class="rv"><span class="eyebrow">Inside every site</span><h2 style="margin-top:14px">Built like a real agency would build it</h2><ul class="ticks" style="margin-top:24px">${INCLUDED.map((i) => `<li>${ic("check")}${esc(i)}</li>`).join("")}</ul></div><div class="stage rv" style="margin:0">${laptop([WORK[2]!])}${phone([WORK[2]!])}</div></div></section>
+<section class="alt"><div class="wrap split"><div class="rv"><span class="eyebrow">Inside every site</span><h2 style="margin-top:14px">Built like a real agency would build it</h2><ul class="ticks" style="margin-top:24px">${INCLUDED.map((i) => `<li>${ic("check")}${esc(i)}</li>`).join("")}</ul></div><div class="stage rv" style="margin:0">${laptop(pick("brightpath"))}${phone(pick("brightpath"))}</div></div></section>
 <section><div class="wrap"><div class="cards">
 <div class="card rv"><span class="ico">${ic("palette")}</span><h3>A design system per site</h3><p>Colours, type, spacing and components chosen for the business and used on every page, so it feels like one brand.</p></div>
 <div class="card rv"><span class="ico">${ic("pin")}</span><h3>Real local details</h3><p>Name, address, hours and map come from the business's own listing or website when they're public.</p></div>
@@ -532,7 +535,7 @@ export function pricingPage(plans: Plan[]): string {
 export function resellersPage(): string {
   return `<section class="hero" style="padding-bottom:70px"><div class="wrap"><div class="hero-copy"><span class="pill"><i>Partners</i> For agencies and freelancers</span><h1>Sell premium websites <em class="x">under your own name</em></h1><p class="lead">Show every prospect their finished website before they pay. Forge does the building in minutes; you keep the brand, the client and the margin.</p>
 <div class="cta-row"><a class="btn hot lg" href="/resellers/apply">Become a partner ${ic("arrow")}</a><a class="btn ghost lg" href="/pricing#packs">See the packs</a></div></div>
-<div class="stage rv">${laptop([WORK[0]!, WORK[1]!, WORK[2]!], { rotate: true })}</div></div></section>
+<div class="stage rv">${laptop(pick("pollux", "sterling", "bobs", "brightpath"), { rotate: true })}</div></div></section>
 <section class="alt"><div class="wrap"><div class="center rv" style="margin-bottom:44px"><span class="eyebrow">Built for resellers</span><h2 style="margin-top:14px">Everything you need to resell</h2></div><div class="bento">
 <div class="tile rv"><span class="ico">${ic("tag")}</span><h3>White-label</h3><p>The credit line on each site carries your agency's name and link, or nothing at all.</p></div>
 <div class="tile rv"><span class="ico">${ic("users")}</span><h3>Your team</h3><p>Invite as many people as you like. Owners run the account; members build.</p></div>
@@ -607,7 +610,7 @@ export function formPage(s: FormState): string {
       : "Questions, bigger volumes or something custom? Send us a note and a real person will reply.";
   const trade = s.values.trade ?? "";
   const side = sample
-    ? `<div class="rv"><div class="stage" style="margin:0">${laptop([WORK[0]!, WORK[1]!, WORK[2]!], { rotate: true })}</div><ul class="ticks" style="margin-top:34px"><li>${ic("check")}A complete site, not a mock-up</li><li>${ic("check")}Usually ready the same day</li><li>${ic("check")}No card, no commitment</li></ul></div>`
+    ? `<div class="rv"><div class="stage" style="margin:0">${laptop(pick("pollux", "bobs", "sterling"), { rotate: true })}</div><ul class="ticks" style="margin-top:34px"><li>${ic("check")}A complete site, not a mock-up</li><li>${ic("check")}Usually ready the same day</li><li>${ic("check")}No card, no commitment</li></ul></div>`
     : reseller
       ? `<div class="rv"><ul class="ticks"><li>${ic("check")}Your brand on every site</li><li>${ic("check")}Credit packs that never expire</li><li>${ic("check")}API keys and webhooks</li><li>${ic("check")}Failed builds refunded</li></ul><p class="small" style="margin-top:20px">Prefer to talk first? <a href="${CALL_URL}" target="_blank" rel="noopener">Book a call</a>.</p></div>`
       : `<div class="rv"><p class="lead">Prefer to talk? <a href="${CALL_URL}" target="_blank" rel="noopener">Book a 20-minute call</a> with the Mianro team.</p></div>`;

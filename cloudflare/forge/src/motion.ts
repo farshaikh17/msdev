@@ -49,9 +49,10 @@ html.m-on .m-cursor,html.m-on .m-ring{opacity:1}
 [data-grain]::after{content:"";position:absolute;inset:-50%;z-index:3;pointer-events:none;opacity:.07;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");animation:m-grain 1s steps(6) infinite}
 @keyframes m-grain{0%{transform:translate(0,0)}20%{transform:translate(-8%,4%)}40%{transform:translate(6%,-6%)}60%{transform:translate(-4%,8%)}80%{transform:translate(8%,2%)}100%{transform:translate(0,0)}}
 [data-marquee]{overflow:hidden;white-space:nowrap}[data-marquee]>*{display:inline-flex}
-[data-horizontal-track]{display:flex}
-@media (max-width:899px){[data-horizontal]{overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}[data-horizontal-track]>*{scroll-snap-align:start;flex:none}}
-[data-follow]{pointer-events:none}
+[data-horizontal]{overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;max-width:100%}[data-horizontal-track]{display:flex}[data-horizontal-track]>*{scroll-snap-align:start;flex:none}
+[data-horizontal].m-pinned{overflow:hidden;scroll-snap-type:none}
+[data-follow]{pointer-events:none;display:none}html.m-on.m-fine [data-follow]{display:block}
+html.m-wait [data-split],html.m-wait [data-reveal]{visibility:hidden}
 html.lenis,html.lenis body{height:auto}.lenis.lenis-smooth{scroll-behavior:auto!important}.lenis.lenis-stopped{overflow:hidden}
 @media (prefers-reduced-motion:reduce){[data-grain]::after{animation:none}}
 `;
@@ -67,7 +68,11 @@ function num(v,f){v=parseFloat(v);return isNaN(v)?f:v}
 // Shaders work even without GSAP.
 all("[data-shader]").forEach(shader);
 if(!G||!ST||reduce){root.classList.add("m-static");all("[data-counter]").forEach(function(el){el.textContent=(el.dataset.prefix||"")+el.dataset.counter+(el.dataset.suffix||"")});return}
-try{
+// Lines are measured with the real fonts: wait for them (briefly), keeping the animated text hidden meanwhile.
+root.classList.add("m-wait");
+var ready=false;function go(){if(ready)return;ready=true;try{setup()}catch(err){console.warn("motion",err);all("[data-split],[data-reveal],[data-stagger]>*").forEach(function(el){el.style.opacity="";el.style.transform="";el.style.clipPath=""})}root.classList.remove("m-wait")}
+if(d.fonts&&d.fonts.ready){d.fonts.ready.then(go,go);setTimeout(go,1500)}else go();
+function setup(){
 G.registerPlugin(ST);if(SPLIT)G.registerPlugin(SPLIT);
 root.classList.add("m-on");
 var lenis=null;
@@ -80,7 +85,8 @@ all("[data-split]").forEach(function(el){
   var s=new SPLIT(el,{type:type==="lines"?"lines":type==="words"?"lines,words":"lines,words,chars",linesClass:"m-line",mask:"lines",autoSplit:false});
   var parts=type==="chars"?s.chars:type==="words"?s.words:s.lines;
   G.set(parts,{yPercent:110});
-  var tw={yPercent:0,duration:type==="chars"?1:1.1,ease:"expo.out",stagger:type==="chars"?.025:type==="words"?.04:.1};
+  // Once revealed, put the plain text back so it re-wraps naturally on resize or rotation.
+  var tw={yPercent:0,duration:type==="chars"?1:1.1,ease:"expo.out",stagger:type==="chars"?.025:type==="words"?.04:.1,onComplete:function(){s.revert()}};
   if(first&&first.contains(el))intro.to(parts,tw,.05);else G.to(parts,Object.assign({scrollTrigger:{trigger:el,start:"top 88%"}},tw));
 });
 all("[data-scrub-text]").forEach(function(el){
@@ -119,6 +125,7 @@ var mm=G.matchMedia();
 mm.add("(min-width: 900px)",function(){
   all("[data-horizontal]").forEach(function(sec){
     var track=sec.querySelector("[data-horizontal-track]");if(!track)return;
+    sec.classList.add("m-pinned");
     var dist=function(){return Math.max(0,track.scrollWidth-sec.clientWidth)};
     G.to(track,{x:function(){return -dist()},ease:"none",scrollTrigger:{trigger:sec,start:"top top",end:function(){return "+="+dist()},pin:true,scrub:1,invalidateOnRefresh:true}});
   });
@@ -130,6 +137,7 @@ mm.add("(min-width: 900px)",function(){
       ST.create({trigger:card,start:"top 12%",endTrigger:wrap,end:"bottom bottom",pin:true,pinSpacing:false});
     });
   });
+  return function(){all("[data-horizontal]").forEach(function(sec){sec.classList.remove("m-pinned")})};
 });
 // --- counters
 all("[data-counter]").forEach(function(el){
@@ -139,6 +147,7 @@ all("[data-counter]").forEach(function(el){
 });
 // --- pointer effects (desktop only)
 if(fine){
+  root.classList.add("m-fine");
   var dot=d.createElement("div");dot.className="m-cursor";dot.innerHTML="<span></span>";var ring=d.createElement("div");ring.className="m-ring";
   d.body.appendChild(ring);d.body.appendChild(dot);
   var dx=G.quickTo(dot,"x",{duration:.12}),dy=G.quickTo(dot,"y",{duration:.12}),rx=G.quickTo(ring,"x",{duration:.5,ease:"power3"}),ry=G.quickTo(ring,"y",{duration:.5,ease:"power3"});
@@ -201,7 +210,7 @@ d.addEventListener("click",function(e){
 });
 W.addEventListener("pageshow",function(e){if(e.persisted)G.set(cur,{yPercent:100})});
 W.addEventListener("load",function(){ST.refresh()});
-}catch(err){console.warn("motion",err);all("[data-split],[data-reveal],[data-stagger]>*").forEach(function(el){el.style.opacity="";el.style.transform="";el.style.clipPath=""})}
+}
 
 function shader(box){
   var colors=(box.dataset.colors||"#ff5a36,#2b1a6b,#0b0b10").split(",").map(function(h){h=h.trim().replace("#","");if(h.length===3)h=h.split("").map(function(c){return c+c}).join("");var n=parseInt(h,16);return isNaN(n)?[0,0,0]:[(n>>16&255)/255,(n>>8&255)/255,(n&255)/255]});
