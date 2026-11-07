@@ -193,3 +193,26 @@ creates a team invite and an API key, uses the API, adds credits, changes the fo
 features an example, suspends and reactivates the account, and checks sign-in rate limiting.
 It needs Playwright (already installed here) and takes about two minutes. Screenshots go to
 `cloudflare/forge/qa/shots/`.
+
+## Forge Studio (the creative tier)
+
+Each build is either **Standard** (1 credit) or **Studio** (3 credits), chosen on the build form or
+with `"style": "studio"` in the API. A failed Studio build refunds all 3 credits.
+
+A Studio build:
+- gets an art-direction brief on top of the normal one (pick one concept, such as editorial, kinetic
+  grotesk, cinematic dark or playful, and hold every page to it), with Opus at medium effort for the
+  design system and home page and Sonnet (not Haiku) for the inner pages. Expect roughly three to
+  five times the Claude cost of a Standard site.
+- loads the **motion engine** (`src/motion.ts`) on every page: GSAP 3.15 with ScrollTrigger and
+  SplitText and Lenis smooth scrolling from jsDelivr, plus our runtime. Claude only writes HTML
+  attributes (`data-split`, `data-scrub-text`, `data-reveal`, `data-stagger`, `data-parallax`,
+  `data-marquee`, `data-horizontal`, `data-stack`, `data-counter`, `data-magnetic`,
+  `data-cursor-text`, `data-tilt`, `data-distort`, `data-shader`, `data-grain`, `data-follow`); the
+  runtime adds the custom cursor, preloader and page transitions.
+- fails safe: nothing is hidden by CSS. If the CDN is blocked or the visitor prefers reduced
+  motion, every page shows all its content without animation.
+
+The public site shows the tier at `/studio` (itself built with the engine) and a concept site for a
+made-up roofer at `/studio/concept`. "Get a Studio preview" requests arrive in Admin → Inquiries
+with `tier: studio`.

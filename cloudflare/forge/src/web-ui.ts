@@ -6,6 +6,7 @@
 import { esc } from "../../../src/forge/render";
 import { FAQS, GUIDES, INCLUDED, TRADES, TRADE_GROUPS, type Faq, type Guide, type Plan, type Trade, tradeBySlug } from "./web-content";
 import { KIND_LABEL, WORK, type Work, img } from "./web-work";
+import { MOTION_CSS, motionScripts } from "./motion";
 
 export interface Showcase {
   slug: string;
@@ -26,6 +27,8 @@ export interface Shell {
   noindex?: boolean;
   /** Social preview image (a path on this site). */
   image?: string;
+  /** Load the Studio motion engine (and this page's extra CSS). */
+  motion?: { css: string };
 }
 
 /** Mianro's booking link (from forge.mianrosystems.com). */
@@ -299,6 +302,7 @@ if(fl){fl.addEventListener("click",function(e){var b=e.target.closest("button");
 
 const NAV: [string, string][] = [
   ["/work", "Our work"],
+  ["/studio", "Studio"],
   ["/how-it-works", "How it works"],
   ["/pricing", "Pricing"],
   ["/resellers", "For agencies"],
@@ -313,7 +317,7 @@ function chrome(sh: Shell, body: string): string {
   const og = `${sh.origin}${sh.image ?? img("pollux")}`;
   const ld = (sh.jsonld ?? []).map((j) => `<script type="application/ld+json">${JSON.stringify(j).replace(/</g, "\\u003c")}</script>`).join("");
   const toggle = `<button class="tbtn" type="button" data-theme-toggle aria-label="Switch light or dark mode" title="Light or dark mode">${ic("sun", "i sun")}${ic("moon", "i moon")}</button>`;
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  return `<!doctype html><html lang="en"${sh.motion ? ' style="--m-accent:#e4572e;--m-ink:#0b0907;--m-paper:#f4efe7"' : ""}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <script>${THEME_BOOT}</script>
 <title>${esc(sh.title)}</title><meta name="description" content="${esc(sh.desc)}">
 ${sh.noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" href="${esc(canonical)}">`}
@@ -322,7 +326,7 @@ ${sh.noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical"
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&display=swap">
-<style>${CSS}</style>${ld}</head><body><a class="skip" href="#main">Skip to main content</a>
+<style>${CSS}${sh.motion ? MOTION_CSS + sh.motion.css : ""}</style>${ld}</head><body><a class="skip" href="#main">Skip to main content</a>
 <header class="hd"><div class="wrap hd-in"><a class="logo" href="/" aria-label="Forge home"><span class="mark">${ic("bolt")}</span>Forge<b>by Mianro</b></a>
 <nav class="menu" aria-label="Main">${links}${account}<span style="width:6px"></span>${toggle}<span style="width:6px"></span><a class="btn hot sm" href="/preview">Free preview</a></nav>
 <div class="burger">${toggle}<details><summary aria-label="Menu">${ic("menu")}</summary><nav aria-label="Mobile">${links}${account}<a class="btn hot" style="margin-top:14px;border:0" href="/preview">Get your free preview</a></nav></details></div></div></header>
@@ -334,7 +338,7 @@ ${sh.noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical"
 <div><h4>Partners</h4><a href="/resellers">For agencies</a><a href="/resellers/apply">Become a partner</a><a href="/guides">Guides</a><a href="/login">Sign in</a></div>
 <div><h4>Company</h4><a href="/contact">Contact</a><a href="https://forge.mianrosystems.com" target="_blank" rel="noopener">Forge by Mianro</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/sitemap.xml">Sitemap</a></div></div>
 <div class="ft-bot"><span>© ${new Date().getUTCFullYear()} Mianro Systems. All rights reserved.</span><span>Made with <span class="heart">♥</span> by <a href="https://mianrosystems.com">Mianro Systems</a></span></div></div></footer>
-<script>${SITE_JS}</script>
+<script>${SITE_JS}</script>${sh.motion ? motionScripts() : ""}
 </body></html>`;
 }
 
@@ -406,6 +410,9 @@ export function homePage(plans: Plan[], showcase: Showcase[]): string {
 
 <section class="alt"><div class="wrap"><div class="head"><div class="rv"><span class="eyebrow">Our work</span><h2 style="margin-top:14px;max-width:16ch">Sites our clients are proud to send</h2><p class="lead">Hover a site to scroll the whole page. Every one is live.</p></div><a class="btn ghost rv" href="/work">All work ${ic("arrow")}</a></div>
 <div class="works">${[WORK[0]!, WORK[3]!, WORK[1]!, WORK[6]!, WORK[2]!, WORK[8]!].map(workCard).join("")}${showcase.slice(0, 3).map(showcaseCard).join("")}</div></div></section>
+
+<section class="band" style="overflow:hidden"><div class="wrap split"><div class="rv"><span class="eyebrow">New · Forge Studio</span><h2 style="margin-top:14px;max-width:14ch">Want a site people <em class="x">remember?</em></h2><p class="lead" style="margin:18px 0 28px">Our creative tier: art-directed, award-style sites with kinetic type, living WebGL colour, smooth scrolling and page transitions. Still built in an afternoon.</p><div class="cta-row" style="justify-content:flex-start"><a class="btn hot" href="/studio">Explore Studio ${ic("arrow")}</a><a class="btn ghost" style="color:#fff;border-color:rgba(255,255,255,.35)" href="/studio/concept">See a concept site</a></div></div>
+<a class="rv" href="/studio/concept" style="display:block;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.12);box-shadow:0 40px 100px -30px #000"><img src="/studio/concept.webp" alt="A Forge Studio concept site" width="1280" height="800" loading="lazy"></a></div></section>
 
 <section><div class="wrap"><div class="head"><div class="rv"><span class="eyebrow">What you get</span><h2 style="margin-top:14px;max-width:18ch">Everything a local business site needs. Nothing it doesn't.</h2></div></div>
 <div class="bento">
@@ -591,7 +598,8 @@ const val = (s: FormState, k: string) => esc(s.values[k] ?? "");
 export function formPage(s: FormState): string {
   const reseller = s.kind === "reseller";
   const sample = s.kind === "sample";
-  const title = reseller ? "Become a Forge partner" : sample ? "Get your free website preview" : "Talk to us";
+  const studio = sample && s.values.tier === "studio";
+  const title = reseller ? "Become a Forge partner" : studio ? "Get your free Studio preview" : sample ? "Get your free website preview" : "Talk to us";
   const sub = reseller
     ? "Tell us about your agency. We reply within one business day to set up your account."
     : sample
@@ -605,7 +613,7 @@ export function formPage(s: FormState): string {
       : `<div class="rv"><p class="lead">Prefer to talk? <a href="${CALL_URL}" target="_blank" rel="noopener">Book a 20-minute call</a> with the Mianro team.</p></div>`;
   return `<div class="pagehead"><div class="wrap"><span class="eyebrow">${reseller ? "Partners" : sample ? "Free preview" : "Contact"}</span><h1>${esc(title)}</h1><p class="lead">${esc(sub)}</p></div></div>
 <section class="tight" style="padding-top:20px"><div class="wrap formgrid"><form class="f" method="post" action="${reseller ? "/resellers/apply" : "/contact"}">${s.error ? `<div class="err" role="alert">${esc(s.error)}</div>` : ""}
-<input type="hidden" name="kind" value="${s.kind}"><div class="hp" aria-hidden="true"><label>Leave this empty<input name="company_url" tabindex="-1" autocomplete="off"></label></div>
+<input type="hidden" name="kind" value="${s.kind}">${studio ? '<input type="hidden" name="tier" value="studio">' : ""}<div class="hp" aria-hidden="true"><label>Leave this empty<input name="company_url" tabindex="-1" autocomplete="off"></label></div>
 <div class="two"><label>Your name<input name="name" required maxlength="80" value="${val(s, "name")}" autocomplete="name"></label><label>Email<input name="email" type="email" required maxlength="120" value="${val(s, "email")}" autocomplete="email"></label></div>
 <div class="two"><label>${reseller ? "Agency or company" : sample ? "Business name (optional)" : "Company (optional)"}<input name="company" maxlength="100" value="${val(s, "company")}" ${reseller ? "required" : ""} autocomplete="organization"></label><label>Phone (optional)<input name="phone" type="tel" maxlength="40" value="${val(s, "phone")}" autocomplete="tel"></label></div>
 <label>${sample ? "Its website or Google Maps link" : "Your website (optional)"}<input name="website" maxlength="200" value="${val(s, "website")}" placeholder="${sample ? "e.g. joesplumbing.com or a maps.app.goo.gl link" : "https://"}"></label>

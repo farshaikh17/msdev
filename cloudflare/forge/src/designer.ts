@@ -9,12 +9,16 @@ import { splitList, parseReviews } from "../../../src/forge/copy";
 import { GENERIC, presetFor } from "../../../src/forge/presets";
 import type { Intake } from "../../../src/forge/schema";
 import type { Env } from "./env";
+import { MOTION_API } from "./motion";
 import type { SiteFacts } from "./scrape";
 
 /** Designs the look and writes the home page. */
 export const MODEL = "claude-opus-5-5";
 /** Writes the other pages from the design kit: about 40x cheaper per token than Opus. */
 export const PAGE_MODEL = "claude-haiku-5-5";
+/** Studio sites write their inner pages on Sonnet: more design judgement than Haiku, a fraction of Opus. */
+export const STUDIO_PAGE_MODEL = "claude-sonnet-5-5";
+export type Style = "standard" | "studio";
 
 /** US$ per million tokens (Anthropic list prices; cache writes are 1.25x input, reads 0.1x on Haiku). */
 const PRICES: Record<string, { input: number; output: number; cacheWrite: number; cacheRead: number }> = {
@@ -291,9 +295,37 @@ Our system assembles each page as: <!doctype html><html data-theme="light|dark">
 ## Output format
 Reply with the parts you are asked for, each starting with a line "@@@ NAME" (exactly that, on its own line) followed by its content. Nothing before the first part, no markdown, no code fences, no commentary.`;
 
+const STUDIO = `## Studio edition (this site is a Studio build)
+This is our top tier. It must feel like an Awwwards "Site of the Day" made for a local business: art-directed, cinematic, bold and memorable, while still working hard as a business site (calls, quotes, services, trust). The sales rep should hear "wow" in the first five seconds.
+
+Art direction first. Choose ONE strong concept that suits this business and commit to it on every page:
+- Editorial: an oversized serif display (Instrument Serif, Fraunces, Cormorant Garamond, Playfair Display), asymmetric 12-column grids, generous whitespace, small captions, numbered sections.
+- Kinetic grotesk: giant condensed uppercase (Big Shoulders Display, Anton, Bebas Neue, Archivo Black, Six Caps) at 12–20vw with tight leading, hard colour blocks and marquees.
+- Cinematic dark: a near-black canvas, full-bleed imagery with grain, a glowing accent, slow reveals, thin type for details.
+- Bright and playful: bold colour fields, rounded shapes, chunky display type (Unbounded, Syne, Dela Gothic One, Bricolage Grotesque).
+Pair the display face with a clean text face (Hanken Grotesk, Inter Tight, Manrope, Figtree, Space Grotesk, DM Sans).
+
+Signature moves: use most of these on the home page and several on every inner page:
+- The hero: display type at about clamp(3.2rem, min(11vw, 16vh), 13rem) with data-split="chars" (keep the headline short: 2–4 lines on desktop; the headline, its paragraph and the CTA must all fit in the first screen at 1440×900 and at 390×844, clear of the header), over the moving background, tinted by a living shader (data-shader) in the brand colours, with a large round magnetic CTA (data-magnetic) and the phone close by.
+- Numbered section labels (01 — Services) and huge section headings with data-split="lines"; a manifesto statement with data-scrub-text.
+- At least one marquee (services, towns or a promise) and one big interactive moment: a pinned horizontal gallery (data-horizontal) or stacked service cards (data-stack).
+- A services index as big full-width rows (number, name, arrow) that reveal a floating image preview following the pointer (data-follow) and lead to each service page.
+- Images in rounded or arched masks with data-parallax; data-cursor-text on every card and gallery item; data-tilt on feature cards; data-distort on a hero or gallery image.
+- Real numbers you were given counting up (data-counter); never invent numbers.
+- An oversized footer: the business name as a wordmark at about 15–20vw over a data-shader background, then the usual footer details.
+- Header: minimal and floating (mix-blend-mode: difference over the hero is welcome). The menu may be a full-screen overlay with huge staggered links on every screen size, opened by a "Menu" button; the header row must still show the phone link and the quote button on desktop.
+Keep it usable: the 360px phone layout must be as considered as desktop (type sizes that fit, no sideways scroll), one <h1> per page, real contrast, keyboard focus, and both light and dark modes designed (the dark one can be the hero of the concept). Keep CSS efficient: tokens, a few reusable components, no giant inline SVGs.
+
+${MOTION_API}`;
+
+export const systemFor = (style: Style) =>
+  style === "studio"
+    ? SYSTEM.replace("Keep motion restrained: no custom cursors, WebGL or heavy effects.", "Motion comes from our Studio motion engine (below): use its attributes generously and tastefully.").replace("## Copy rules", `${STUDIO}\n\n## Copy rules`)
+    : SYSTEM;
+
 const sitemapText = (pages: PageSpec[]) => pages.map((p) => `${p.path} — ${p.name}`).join("\n");
 
-function kitTask(pages: PageSpec[]): string {
+function kitTask(pages: PageSpec[], style: Style = "standard"): string {
   const services = pages.filter((p) => p.path.startsWith("/services/"));
   return `Design this business's website: its design system, header and footer. The pages are written next, one at a time, from what you make here.
 
@@ -309,16 +341,16 @@ the primary colour as #rrggbb
 @@@ FONTS
 the Google Fonts <link> tags (preconnects + one stylesheet)
 @@@ CSS
-the whole site's stylesheet (no <style> tag): tokens for both modes, base, header (with a Services dropdown that works on hover, keyboard focus and tap), footer, buttons, eyebrows, and every component the pages will use — home hero (with the motion layer and overlay described above), page hero with breadcrumb, marquee ticker, service cards, feature/why-us cards, process timeline, before/after and gallery tiles (including the labelled photo-space tile), map embed frame with place list, review cards, area cards, checklists, contact cards, forms (with .form-thanks, .form-error and the privacy note), FAQ accordion, CTA band, and legal pages (.legal: a readable article up to 760px wide with h1, h2, p, ul and a .legal-note callout). Under about 45 KB.
+the whole site's stylesheet (no <style> tag): tokens for both modes, base, header (with a Services dropdown that works on hover, keyboard focus and tap), footer, buttons, eyebrows, and every component the pages will use — home hero (with the motion layer and overlay described above), page hero with breadcrumb, marquee ticker, service cards, feature/why-us cards, process timeline, before/after and gallery tiles (including the labelled photo-space tile), map embed frame with place list, review cards, area cards, checklists, contact cards, forms (with .form-thanks, .form-error and the privacy note), FAQ accordion, CTA band, and legal pages (.legal: a readable article up to 760px wide with h1, h2, p, ul and a .legal-note callout).${style === "studio" ? " Also the Studio components: display type scale, numbered section labels, marquee rows, the services index with its floating preview, horizontal gallery panels, stacked cards, the full-screen menu overlay and the footer wordmark. Under about 60 KB." : " Under about 45 KB."}
 @@@ HEADER
 the <header> element: logo/name linking to /, the main nav (Services as a dropdown listing /services and ${services.map((s) => s.path).join(", ")}; About Us; Our Work; Reviews; Service Areas; Contact), a phone link, a "Get a Quote" button to /quote, the theme toggle, and the mobile menu (which lists every page above except the legal ones).
 @@@ FOOTER
 the <footer> element: logo/name + one-line description, columns for Pages, Services (each service page) and Contact (phone, area, hours if known), links to /privacy and /terms, the copyright line, and exactly this marker on its own where the credit line goes: ${CREDIT_MARKER}
 Our system replaces the marker with the credit "Made with ♥ by Mianro Systems" (red heart, "Mianro Systems" linked to mianrosystems.com); don't write the credit yourself. Also the phone-only sticky Call button (bottom-left), if there is a phone number.
 @@@ SCRIPT
-one small script (no <script> tag) shared by every page: theme toggle, mobile menu, Services dropdown on tap, ticker/reveal niceties. No form submit handling. It must not fail on pages without some elements.
+one small script (no <script> tag) shared by every page: theme toggle, mobile menu, Services dropdown on tap${style === "studio" ? " (the motion engine does every animation: don't write reveal, scroll or cursor code)" : ", ticker/reveal niceties"}. No form submit handling. It must not fail on pages without some elements.
 @@@ COMPONENTS
-a short reference for the page writers: each component's class names and markup pattern (a line or two each, no full examples).`;
+a short reference for the page writers: each component's class names and markup pattern (a line or two each, no full examples).${style === "studio" ? " Start with the art-direction concept in two sentences, and say which motion attributes each component uses." : ""}`;
 }
 
 const PAGE_TASK = `Next you'll be asked to write one page of this website, using the design system above: its CSS classes, components and tokens. Add new CSS only for components the stylesheet doesn't have yet. Reply with these parts, in this order:
@@ -445,6 +477,8 @@ export interface Kit {
   brief: string;
   /** The site's pages (absent on early five-page builds: see LEGACY_PAGES). */
   pages?: PageSpec[];
+  /** "studio": the creative tier, with the motion engine on every page. */
+  style?: Style;
 }
 export interface PageDraft {
   title: string;
@@ -537,9 +571,11 @@ const need = (parts: Record<string, string>, names: string[]) => {
 };
 
 /** Stage 1: the design system (fonts, CSS, header, footer, script) for the given pages. */
-export async function designKit(env: Env, brief: string, pages: PageSpec[]): Promise<{ kit: Kit; usage: unknown }> {
+export async function designKit(env: Env, brief: string, pages: PageSpec[], style: Style = "standard"): Promise<{ kit: Kit; usage: unknown }> {
   // Low effort: the brief already makes the design decisions explicit, and thinking is the costliest part.
-  const { text, usage, cut } = await ask(env, `${kitTask(pages)}\n\n## The business\n${brief}`, 64000, env.CLAUDE_MODEL || MODEL, effortOf(env, "low"));
+  // A Studio site thinks harder about its art direction: that is where the budget goes.
+  const studio = style === "studio";
+  const { text, usage, cut } = await ask(env, `${kitTask(pages, style)}\n\n## The business\n${brief}`, 64000, env.CLAUDE_MODEL || MODEL, studio ? "medium" : effortOf(env, "low"), systemFor(style));
   if (cut) throw new Error("The site's design came back incomplete (too long). Try again.");
   const p = parseParts(text);
   need(p, ["CSS", "HEADER", "FOOTER"]);
@@ -558,6 +594,7 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[]): Pro
       components: p.COMPONENTS ?? "",
       brief,
       pages,
+      ...(studio ? { style: "studio" as const } : {}),
     },
     usage,
   };
@@ -593,7 +630,8 @@ ${PAGE_TASK}`;
 ${page.brief}`;
   // The home page is the showcase, so it gets the design model; the rest follow the kit on the cheaper one.
   const home = page.path === "/";
-  const model = home ? env.CLAUDE_MODEL || MODEL : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
+  const studio = kit.style === "studio";
+  const model = home ? env.CLAUDE_MODEL || MODEL : studio ? STUDIO_PAGE_MODEL : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
   const { text, usage, cut } = await ask(
     env,
     [
@@ -603,9 +641,10 @@ ${page.brief}`;
     ],
     // A page is 3–6k tokens plus thinking. A tighter cap on the cheaper model also stops a reply
     // that has started repeating itself sooner.
-    home ? 40000 : 24000,
+    studio ? (home ? 56000 : 32000) : home ? 40000 : 24000,
     model,
-    home ? effortOf(env, "low") : "medium",
+    studio ? "medium" : home ? effortOf(env, "low") : "medium",
+    systemFor(studio ? "studio" : "standard"),
   );
   const p = parseParts(text);
   // A reply that ran on after finishing its <main> (e.g. repeating itself) is still a whole page.
@@ -613,5 +652,5 @@ ${page.brief}`;
   if (cut && end < 0) throw new Error(`The ${page.name} page came back incomplete (too long).`);
   if (end >= 0) p.MAIN = p.MAIN.slice(0, end + "</main>".length);
   need(p, ["MAIN"]);
-  return { page: { title: p.TITLE ?? page.name, description: p.DESCRIPTION ?? "", css: tidyCss((p.CSS ?? "").replace(/<\/?style[^>]*>/gi, "")), body: p.MAIN }, usage };
+  return { page: { title: p.TITLE ?? page.name, description: p.DESCRIPTION ?? "", css: tidyCss((p.CSS ?? "").replace(/<\/?style[^>]*>/gi, ""), studio ? 20_000 : 12_000), body: p.MAIN }, usage };
 }

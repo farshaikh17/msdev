@@ -274,3 +274,36 @@ describe("the redesigned site", () => {
     expect(await html(await call(h, "/thanks?k=sample"))).toContain("Your preview is on its way");
   });
 });
+
+describe("Forge Studio on the public site", () => {
+  it("serves /studio with the motion engine, and the concept site as its own page", async () => {
+    const studio = await html(await call(h, "/studio"));
+    expect(studio).toContain("Websites people");
+    expect(studio).toContain("gsap@3.15.0");
+    expect(studio).toContain("data-shader");
+    const concept = await call(h, "/studio/concept");
+    expect(concept.status).toBe(200);
+    expect(concept.headers.get("x-robots-tag")).toBe("noindex");
+    const body = await concept.text();
+    expect(body).toContain("Northlight");
+    expect(body).toContain("not a real business");
+    // Ordinary pages don't load it.
+    expect(await html(await call(h, "/pricing"))).not.toContain("gsap@");
+  });
+
+  it("asks for a Studio preview and records the tier on the inquiry", async () => {
+    const form = await html(await call(h, "/preview?tier=studio"));
+    expect(form).toContain("Get your free Studio preview");
+    expect(form).toContain('name="tier" value="studio"');
+    await call(h, "/contact", { form: { kind: "sample", tier: "studio", name: "Owner", email: "o@biz.test", message: "Joe's Roofing" } });
+    const row = h.db.prepare("SELECT extra FROM inquiries").get() as { extra: string };
+    expect(JSON.parse(row.extra)).toMatchObject({ tier: "studio" });
+  });
+
+  it("offers Standard and Studio when building, with the Studio price", async () => {
+    const admin = await setupAdmin(h);
+    const page = await html(await call(h, "/", { cookie: admin }));
+    expect(page).toContain('name="style" value="studio"');
+    expect(page).toContain("Studio · 3 credits");
+  });
+});

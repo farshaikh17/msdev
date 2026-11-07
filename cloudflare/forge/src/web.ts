@@ -31,6 +31,7 @@ import {
   workIndex,
 } from "./web-ui";
 import { WORK, workById } from "./web-work";
+import { STUDIO_CSS, studioConcept, studioPage } from "./web-studio";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const FORM_TRIES = 5;
@@ -158,7 +159,7 @@ export async function setInquiryStatus(env: Env, id: number, status: string): Pr
 
 async function saveInquiry(env: Env, kind: FormKind, v: Record<string, string>): Promise<void> {
   const extra: Record<string, string> = {};
-  for (const k of ["volume", "plan", "trades", "trade"]) if (v[k]) extra[k] = v[k];
+  for (const k of ["volume", "plan", "trades", "trade", "tier"]) if (v[k]) extra[k] = v[k];
   await env.DB.prepare("INSERT INTO inquiries (kind, name, email, phone, company, website, message, extra, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
     .bind(kind, v.name, v.email, v.phone ?? "", v.company ?? "", v.website ?? "", v.message ?? "", JSON.stringify(extra), new Date().toISOString())
     .run();
@@ -182,6 +183,7 @@ async function takeForm(req: Request, env: Env, forcedKind?: FormKind): Promise<
     plan: clean(f, "plan", 40),
     trades: clean(f, "trades", 160),
     trade: clean(f, "trade", 40),
+    tier: clean(f, "tier", 10) === "studio" ? "studio" : "",
   };
   const again = (error: string, status = 400) => shell({ title: "Forge", desc: "", path: kind === "reseller" ? "/resellers/apply" : "/contact", origin, signedIn: false, noindex: true, status }, formPage({ kind, values: v, error }));
   // A hidden field only bots fill in: pretend it worked, store nothing.
@@ -199,7 +201,7 @@ async function takeForm(req: Request, env: Env, forcedKind?: FormKind): Promise<
 
 // ---- Routes ----------------------------------------------------------------------------------
 
-const SITEMAP_PATHS = ["/", "/work", "/preview", "/how-it-works", "/pricing", "/resellers", "/resellers/apply", "/trades", "/guides", "/faq", "/contact", "/terms", "/privacy"];
+const SITEMAP_PATHS = ["/", "/work", "/studio", "/studio/concept", "/preview", "/how-it-works", "/pricing", "/resellers", "/resellers/apply", "/trades", "/guides", "/faq", "/contact", "/terms", "/privacy"];
 
 /** The public website. Returns null when the path is not part of it (so the app handles it). */
 export async function handleWeb(req: Request, env: Env, path: string, signedIn: boolean): Promise<Response | null> {
@@ -207,7 +209,7 @@ export async function handleWeb(req: Request, env: Env, path: string, signedIn: 
   const origin = url.origin;
   const get = req.method === "GET" || req.method === "HEAD";
   const post = req.method === "POST";
-  const page = (title: string, desc: string, body: string, extra: { jsonld?: unknown[]; status?: number; noindex?: boolean; image?: string } = {}) =>
+  const page = (title: string, desc: string, body: string, extra: { jsonld?: unknown[]; status?: number; noindex?: boolean; image?: string; motion?: { css: string } } = {}) =>
     shell({ title, desc, path, origin, signedIn, ...extra }, body);
 
   if (post && path === "/contact") return takeForm(req, env);
@@ -252,7 +254,12 @@ export async function handleWeb(req: Request, env: Env, path: string, signedIn: 
   }
   if (path === "/preview") {
     const trade = url.searchParams.get("trade") ?? "";
-    return page("Get your free website preview · Forge", "Tell us your business and we'll build a complete preview of its new website, free.", formPage({ kind: "sample", values: { trade: tradeBySlug(trade) ? trade : "" } }));
+    const tier = url.searchParams.get("tier") === "studio" ? "studio" : "";
+    return page(tier ? "Get your free Studio preview · Forge" : "Get your free website preview · Forge", "Tell us your business and we'll build a complete preview of its new website, free.", formPage({ kind: "sample", values: { trade: tradeBySlug(trade) ? trade : "", tier } }));
+  }
+  if (path === "/studio") return page("Forge Studio | award-style websites", "Forge Studio: art-directed, award-style websites with kinetic type, WebGL colour, smooth scrolling and page transitions, designed in an afternoon.", studioPage(), { motion: { css: STUDIO_CSS }, image: "/studio/concept.webp" });
+  if (path === "/studio/concept") {
+    return new Response(studioConcept(), { headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "x-content-type-options": "nosniff", "cache-control": "public, max-age=300" } });
   }
   if (path === "/trades") return page("Websites for every local trade", "Forge designs tailored websites for plumbers, electricians, dentists, restaurants and more.", tradesIndex(url.searchParams.get("q") ?? ""));
   m = path.match(/^\/trades\/([a-z0-9-]+)$/);

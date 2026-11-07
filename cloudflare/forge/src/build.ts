@@ -24,7 +24,7 @@ import { previewImages } from "./images";
 import { privacyPage, termsPage } from "./legal";
 import { mergeIntake } from "./places";
 import { readWebsite } from "./scrape";
-import { chargeBuild, getTenant, type Tenant } from "./tenants";
+import { buildCost, chargeBuild, getTenant, type Tenant } from "./tenants";
 import { deliver } from "./webhook";
 
 /** How often a job retries when Claude is busy (rate limit, overload) before the build fails. */
@@ -47,9 +47,10 @@ export type StartResult = "started" | "ai-off" | "no-credits" | "busy";
 export async function startBuild(env: Env, tenant: Tenant, userId: number | null, slug: string, resume: string | null = null): Promise<StartResult> {
   if (!env.ANTHROPIC_API_KEY) return "ai-off";
   if (!tenant.unlimited && (await buildingCount(env, tenant.id)) >= MAX_PARALLEL_BUILDS) return "busy";
+  const cost = buildCost((await getDemo(env, slug))?.intake ?? {});
   const kit = resume ? await getKit(env, slug, resume) : null;
   if (resume && kit) {
-    if (!(await chargeBuild(env, tenant, slug, resume, userId))) return "no-credits";
+    if (!(await chargeBuild(env, tenant, slug, resume, userId, cost))) return "no-credits";
     const done = await pagesDone(env, slug, resume);
     await markBuilding(env, slug, resume, "pages");
     const missing = pagesOf(kit).filter((p) => !done.includes(p.path));
@@ -65,7 +66,7 @@ export async function startBuild(env: Env, tenant: Tenant, userId: number | null
     return "started";
   }
   const version = newVersion();
-  if (!(await chargeBuild(env, tenant, slug, version, userId))) return "no-credits";
+  if (!(await chargeBuild(env, tenant, slug, version, userId, cost))) return "no-credits";
   await markBuilding(env, slug, version, "kit");
   try {
     await env.BUILDS.send({ slug, version, stage: "kit" });
@@ -112,7 +113,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       const imgBase = `${env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : ""}/${slug}/_img/${version}/`;
       const previews = images.map((img) => ({ url: imgBase + img.name, description: img.description }));
       const pages = sitemapFor(intake, plan?.services);
-      const { kit, usage } = await designKit(env, factsBlock(intake, site, slug, plan, previews), pages);
+      const { kit, usage } = await designKit(env, factsBlock(intake, site, slug, plan, previews), pages, intake.style);
       // The planning call is counted with the design.
       const u = usage as Record<string, unknown>;
       await saveKit(env, slug, version, kit, { ...u, cost_usd: (Number(u.cost_usd) || 0) + (plan?.cost ?? 0) });

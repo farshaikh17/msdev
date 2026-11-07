@@ -368,26 +368,32 @@ async function ledger(env: Env, tenantId: number, delta: number, reason: string,
  * that fails can be refunded exactly once). Accounts that build for free just pass through.
  * False means there was no credit to take.
  */
-export async function chargeBuild(env: Env, tenant: Tenant, slug: string, version: string, userId: number | null): Promise<boolean> {
+/** Credits a build takes: a Studio site costs more (it uses the larger models for longer). */
+export const STUDIO_CREDITS = 3;
+export const buildCost = (i: { style?: string }) => (i.style === "studio" ? STUDIO_CREDITS : 1);
+
+export async function chargeBuild(env: Env, tenant: Tenant, slug: string, version: string, userId: number | null, cost = 1): Promise<boolean> {
   if (tenant.unlimited) return true;
   // Picking a stalled build up again (same version) was already paid for.
   const paid = await env.DB.prepare("SELECT 1 x FROM demos WHERE slug = ? AND charged_version = ?").bind(slug, version).first();
   if (paid) return true;
-  const r = await env.DB.prepare("UPDATE tenants SET credits = credits - 1 WHERE id = ? AND credits >= 1").bind(tenant.id).run();
+  const r = await env.DB.prepare("UPDATE tenants SET credits = credits - ?1 WHERE id = ?2 AND credits >= ?1").bind(cost, tenant.id).run();
   if (r.meta.changes !== 1) return false;
-  await env.DB.prepare("UPDATE demos SET charged_version = ? WHERE slug = ?").bind(version, slug).run();
-  await ledger(env, tenant.id, -1, "Site build", slug, userId);
+  await env.DB.prepare("UPDATE demos SET charged_version = ?, charged_credits = ? WHERE slug = ?").bind(version, cost, slug).run();
+  await ledger(env, tenant.id, -cost, cost > 1 ? "Studio site build" : "Site build", slug, userId);
   return true;
 }
 
 /** Give the credit back for a build that didn't finish. Safe to call more than once. */
 export async function refundBuild(env: Env, slug: string, version: string): Promise<void> {
+  const was = await env.DB.prepare("SELECT charged_credits n FROM demos WHERE slug = ? AND charged_version = ?").bind(slug, version).first<{ n: number }>();
+  const back = Math.max(1, was?.n ?? 1);
   const r = await env.DB.prepare("UPDATE demos SET charged_version = NULL WHERE slug = ? AND charged_version = ?").bind(slug, version).run();
   if (r.meta.changes !== 1) return;
   const d = await env.DB.prepare("SELECT tenant_id FROM demos WHERE slug = ?").bind(slug).first<{ tenant_id: number }>();
   if (!d) return;
-  await env.DB.prepare("UPDATE tenants SET credits = credits + 1 WHERE id = ? AND unlimited = 0").bind(d.tenant_id).run();
-  await ledger(env, d.tenant_id, 1, "Refund: the build didn't finish", slug, null);
+  await env.DB.prepare("UPDATE tenants SET credits = credits + ? WHERE id = ? AND unlimited = 0").bind(back, d.tenant_id).run();
+  await ledger(env, d.tenant_id, back, "Refund: the build didn't finish", slug, null);
 }
 
 /** Add (or take away, with a negative number) credits; the balance never goes below zero. */

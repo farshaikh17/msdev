@@ -9,7 +9,7 @@ import { getDemo, makeSlug, saveDemo, type Stored } from "./db";
 import type { Env } from "./env";
 import { resolveMapsLink, type MapsPlace } from "./places";
 import { widgetId } from "./site";
-import type { Tenant } from "./tenants";
+import { buildCost, type Tenant } from "./tenants";
 
 /** A problem the person can fix (shown to them as it is). */
 export class Invalid extends Error {}
@@ -18,6 +18,7 @@ export class NoCredits extends Error {}
 
 export const INTAKE_FIELDS = [
   "businessName",
+  "style",
   "googleUrl",
   "industry",
   "city",
@@ -83,6 +84,7 @@ export async function prepareIntake(raw: Record<string, string>): Promise<Intake
     heroImageUrl: g("heroImageUrl"),
     primaryColor: color,
     mode: g("mode") || "auto",
+    style: g("style") === "studio" ? "studio" : "standard",
     websiteUrl: g("websiteUrl"),
     photoUrls: g("photoUrls"),
     chatWidget: g("chatWidget"),
@@ -95,7 +97,7 @@ export async function prepareIntake(raw: Record<string, string>): Promise<Intake
   return parsed.data;
 }
 
-const canBuild = (t: Tenant) => t.unlimited || t.credits >= 1;
+const canBuild = (t: Tenant, cost = 1) => t.unlimited || t.credits >= cost;
 
 /**
  * Create a demo: a quick template site that works at once, then Claude's full design queued
@@ -103,7 +105,7 @@ const canBuild = (t: Tenant) => t.unlimited || t.credits >= 1;
  */
 export async function createDemo(env: Env, tenant: Tenant, userId: number | null, raw: Record<string, string>): Promise<{ slug: string; start: StartResult }> {
   const intake = await prepareIntake(raw);
-  if (!canBuild(tenant) && env.ANTHROPIC_API_KEY) throw new NoCredits();
+  if (!canBuild(tenant, buildCost(intake)) && env.ANTHROPIC_API_KEY) throw new NoCredits();
   const now = new Date().toISOString();
   const demo: Demo = { slug: makeSlug(intake.businessName), intake, content: draftContent(intake), writtenBy: "draft", createdAt: now, updatedAt: now };
   await saveDemo(env, demo, tenant.id);
@@ -117,8 +119,8 @@ export async function redesignDemo(env: Env, tenant: Tenant, userId: number | nu
     const intake = await prepareIntake(raw);
     await saveDemo(env, { ...demo, intake, content: draftContent(intake), writtenBy: "draft", updatedAt: new Date().toISOString() }, tenant.id);
   }
-  if (!canBuild(tenant) && env.ANTHROPIC_API_KEY) throw new NoCredits();
   const fresh = await getDemo(env, demo.slug, { tenantId: tenant.id });
+  if (!canBuild(tenant, buildCost((fresh ?? demo).intake)) && env.ANTHROPIC_API_KEY) throw new NoCredits();
   return startBuild(env, tenant, userId, demo.slug, !raw && fresh?.buildStatus === "failed" ? fresh.buildVersion : null);
 }
 

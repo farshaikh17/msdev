@@ -6,8 +6,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../cloudflare/forge/src/index";
-import { designKit, designSitePage, planSite, Fatal, TryLater } from "../cloudflare/forge/src/designer";
-import { getDemo, getKit, pagesDone } from "../cloudflare/forge/src/db";
+import { designKit, designSitePage, planSite, systemFor, Fatal, TryLater } from "../cloudflare/forge/src/designer";
+import { MOTION_LIBS } from "../cloudflare/forge/src/motion";
+import { getDemo, getKit, getPage, pagesDone } from "../cloudflare/forge/src/db";
+import { assemble } from "../cloudflare/forge/src/site";
 import type { BuildJob, Env, VideoJob } from "../cloudflare/forge/src/env";
 import { readWebsite } from "../cloudflare/forge/src/scrape";
 import { getTenant, listLedger, listTenants } from "../cloudflare/forge/src/tenants";
@@ -58,8 +60,8 @@ async function drain(h: Harness, max = 200): Promise<{ retries: number[] }> {
   return { retries };
 }
 
-const goodKit = (_env: Env, brief: string, pages: unknown) => ({
-  kit: { theme: "dark" as const, accent: "#aa3333", fonts: "", css: "", header: '<header><a href="/">Home</a></header>', footer: "<footer><!--mianro-credit--></footer>", script: "", components: "", brief, pages: pages as never },
+const goodKit = (_env: Env, brief: string, pages: unknown, style?: string) => ({
+  kit: { theme: "dark" as const, accent: "#aa3333", fonts: "", css: "", header: '<header><a href="/">Home</a></header>', footer: "<footer><!--mianro-credit--></footer>", script: "", components: "", brief, pages: pages as never, ...(style === "studio" ? { style: "studio" as const } : {}) },
   usage: { cost_usd: 0.4, model: "stub" },
 });
 const goodPage = (_env: Env, _kit: unknown, spec: { name: string }) => ({
@@ -71,7 +73,7 @@ let h: Harness;
 beforeEach(() => {
   h = makeHarness();
   vi.mocked(planSite).mockResolvedValue({ services: ["Haircuts", "Beard Trims", "Hot Shaves", "Kids Cuts"], imagePrompts: ["a barber", "a shop"], cost: 0.002 });
-  vi.mocked(designKit).mockImplementation(async (env, brief, pages) => goodKit(env, brief, pages));
+  vi.mocked(designKit).mockImplementation(async (env, brief, pages, style) => goodKit(env, brief, pages, style));
   vi.mocked(designSitePage).mockImplementation(async (env, kit, spec) => goodPage(env, kit, spec));
   vi.mocked(readWebsite).mockResolvedValue(null);
 });
@@ -288,5 +290,72 @@ describe("notifications and Mianro's own builds", () => {
     await drain(h);
     expect(await html(await call(h, `/demos/${mine}`, { cookie: b.cookie }))).not.toMatch(/built for <b>/);
     expect(cookieOf(new Response())).toBe("");
+  });
+});
+
+describe("Studio builds", () => {
+  const studio = (cookie: string, name: string) => call(h, "/demos", { cookie, form: { businessName: name, city: "Orlando, FL", style: "studio" } });
+  /** The page as visitors get it (the same assembly the sites Worker does, minus Cloudflare's HTML rewriter). */
+  const site = async (slug: string, path = "") => {
+    const demo = (await getDemo(h.env, slug))!;
+    const kit = (await getKit(h.env, slug, demo.liveVersion!))!;
+    const page = (await getPage(h.env, slug, demo.liveVersion!, path || "/"))!;
+    return assemble(kit, page, slug);
+  };
+
+  it("takes three credits, designs with the Studio brief and puts the motion engine on every page", async () => {
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 5);
+    const slug = slugOf(await studio(b.cookie, "Studio Barbers"));
+    expect((await getTenant(h.env, b.id))!.credits).toBe(2);
+    expect((await listLedger(h.env, b.id))[0]).toMatchObject({ delta: -3, reason: "Studio site build" });
+    await drain(h);
+    expect(vi.mocked(designKit).mock.calls[0][3]).toBe("studio");
+    const demo = (await getDemo(h.env, slug))!;
+    expect(demo.buildStatus).toBe("ready");
+    for (const path of ["", "/about"]) {
+      const page = await site(slug, path);
+      for (const lib of MOTION_LIBS) expect(page).toContain(lib);
+      expect(page).toContain("--m-accent:#aa3333");
+      expect(page).toContain("m-curtain");
+    }
+  });
+
+  it("standard sites stay light: no motion engine", async () => {
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 5);
+    const slug = slugOf(await build(h, b.cookie, "Plain Barbers"));
+    await drain(h);
+    expect((await getTenant(h.env, b.id))!.credits).toBe(4);
+    expect(await site(slug)).not.toContain(MOTION_LIBS[0]);
+  });
+
+  it("gives all three credits back when a Studio build fails", async () => {
+    vi.mocked(designKit).mockRejectedValue(new Fatal("The Claude API account is out of credit."));
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 3);
+    await studio(b.cookie, "Studio Barbers");
+    expect((await getTenant(h.env, b.id))!.credits).toBe(0);
+    await drain(h);
+    expect((await getTenant(h.env, b.id))!.credits).toBe(3);
+    expect((await listLedger(h.env, b.id))[0]).toMatchObject({ delta: 3 });
+  });
+
+  it("won't start a Studio build without enough credits, but a standard one still works", async () => {
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 2);
+    const r = await studio(b.cookie, "Studio Barbers");
+    expect(loc(r)).toContain("No build credits left");
+    expect((await getTenant(h.env, b.id))!.credits).toBe(2);
+    expect(loc(await build(h, b.cookie, "Plain Barbers"))).toMatch(/\/demos\//);
+  });
+
+  it("the Studio brief swaps restraint for the motion engine; the standard one doesn't", () => {
+    const s = systemFor("studio");
+    expect(s).toContain("Studio edition");
+    expect(s).toContain("data-split");
+    expect(s).not.toContain("no custom cursors, WebGL or heavy effects");
+    expect(systemFor("standard")).toContain("no custom cursors, WebGL or heavy effects");
+    expect(systemFor("standard")).not.toContain("Studio edition");
   });
 });
