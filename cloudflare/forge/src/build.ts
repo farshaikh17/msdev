@@ -8,13 +8,17 @@ import {
   buildingCount,
   getDemo,
   getKit,
+  getPage,
   goLive,
   markBuilding,
+  markQueueFailed,
+  nextQueued,
   pagesDone,
   saveFailed,
   saveImage,
   saveKit,
   savePage,
+  setChangeNote,
   touchBuild,
   updateIntake,
 } from "./db";
@@ -24,8 +28,9 @@ import { previewImages } from "./images";
 import { privacyPage, termsPage } from "./legal";
 import { mergeIntake } from "./places";
 import { readWebsite } from "./scrape";
-import { buildCost, chargeBuild, getTenant, type Tenant } from "./tenants";
+import { buildCost, chargeBuild, getTenant, recordBuildCost, type Tenant } from "./tenants";
 import { deliver } from "./webhook";
+import { reviewSite } from "./review";
 
 /** How often a job retries when Claude is busy (rate limit, overload) before the build fails. */
 const BUSY_TRIES = 4;
@@ -80,11 +85,33 @@ export async function startBuild(env: Env, tenant: Tenant, userId: number | null
 async function finishBuild(env: Env, slug: string, version: string): Promise<void> {
   await goLive(env, slug, version);
   await notify(env, slug, "demo.ready");
+  // Look at the live site in a real browser and fix the home page if it isn't good enough.
+  await env.BUILDS.send({ slug, version, stage: "review" }).catch((e) => console.log("review not queued", errText(e)));
+  await startQueued(env, slug);
 }
 
 /** A build that can't finish: record it (refunding the credit) and tell the account's webhook. */
 async function failBuild(env: Env, slug: string, version: string, error: string): Promise<void> {
   if (await saveFailed(env, slug, version, error)) await notify(env, slug, "demo.failed");
+  await startQueued(env, slug);
+}
+
+/**
+ * A build slot came free for the account that owns `slug` (or, with a tenant id, for that account):
+ * start the oldest demo waiting in its queue. Bulk builds queue what the 3-at-a-time limit can't start.
+ */
+export async function startQueued(env: Env, slugOrTenant: string | number): Promise<void> {
+  const tenantId = typeof slugOrTenant === "number" ? slugOrTenant : (await getDemo(env, slugOrTenant))?.tenantId;
+  if (!tenantId) return;
+  const tenant = await getTenant(env, tenantId);
+  if (!tenant || tenant.status !== "active") return;
+  for (let n = 0; n < MAX_PARALLEL_BUILDS; n++) {
+    const next = await nextQueued(env, tenantId);
+    if (!next) return;
+    const r = await startBuild(env, tenant, null, next);
+    if (r === "busy" || r === "ai-off") return;
+    if (r === "no-credits") await markQueueFailed(env, next, "No credits were left when this build's turn came. Add credits and press Try again.");
+  }
 }
 
 async function notify(env: Env, slug: string, event: "demo.ready" | "demo.failed"): Promise<void> {
@@ -96,6 +123,15 @@ async function notify(env: Env, slug: string, event: "demo.ready" | "demo.failed
 /** Queue consumer. Returns how many seconds to wait before running the job again, or "done". */
 export async function build(env: Env, job: BuildJob, attempts: number): Promise<"done" | number> {
   const demo = await getDemo(env, job.slug);
+  // Jobs on the live site (not a build in progress).
+  if (job.stage === "review") {
+    if (demo && demo.liveVersion === job.version) await reviewSite(env, job.slug, job.version);
+    return "done";
+  }
+  if (job.stage === "change") {
+    if (demo && demo.liveVersion === job.version) await applyChange(env, job.slug, job.version, job.path, job.instruction, attempts);
+    return "done";
+  }
   // Ignore jobs from a build that has since been replaced, finished or failed.
   if (!demo || demo.buildStatus !== "building" || demo.buildVersion !== job.version) return "done";
   const { slug, version } = job;
@@ -160,3 +196,22 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
   }
 }
 
+/** A change request on one page of the live site: the page is written again with the instruction, on the cheaper model. */
+async function applyChange(env: Env, slug: string, version: string, path: string, instruction: string, attempts: number): Promise<void> {
+  const note = (status: "working" | "done" | "failed", error = "") => setChangeNote(env, slug, { path, instruction, status, error, at: new Date().toISOString() });
+  try {
+    const kit = await getKit(env, slug, version);
+    const spec = kit ? pagesOf(kit).find((p) => p.path === path) : null;
+    const current = await getPage(env, slug, version, path);
+    if (!kit || !spec || !current) return void (await note("failed", "That page isn't part of the live site."));
+    const { page, usage } = await designSitePage(env, kit, spec, { instruction, current });
+    await savePage(env, slug, version, path, page, usage);
+    const demo = await getDemo(env, slug);
+    const u = usage as { cost_usd?: number };
+    if (demo) await recordBuildCost(env, demo.tenantId, slug, `${version}:change:${Date.now()}`, Number(u.cost_usd) || 0, 1, "change");
+    await note("done");
+  } catch (e) {
+    if (e instanceof TryLater && attempts < BUSY_TRIES) throw e;
+    await note("failed", errText(e));
+  }
+}

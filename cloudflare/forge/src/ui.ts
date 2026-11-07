@@ -1,7 +1,8 @@
 /** The Forge Demo screens: sign-in, set-up, invites, the dashboard and a demo. Plain HTML, no framework. */
 import { esc } from "../../../src/forge/render";
 import type { Intake } from "../../../src/forge/schema";
-import type { Lead, Listed, Stored } from "./db";
+import type { ChangeNote, Lead, Listed, Stored, ViewStat } from "./db";
+import type { Review } from "./review";
 import { SWATCHES } from "./designer";
 import type { Session } from "./auth";
 import { STUDIO_CREDITS, buildCost, type Usage } from "./tenants";
@@ -205,10 +206,10 @@ const stat = (label: string, value: string | number) => `<div class="card" style
 export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string): Response {
   const out = !s.tenant.unlimited && s.tenant.credits < 1;
   const rows = demos.length
-    ? `<div class="table"><table><thead><tr><th>Business</th><th>Trade</th><th>City</th><th>Made</th><th></th></tr></thead><tbody>${demos
+    ? `<div class="table"><table><thead><tr><th>Business</th><th>Trade</th><th>City</th><th>Views (7 days)</th><th>Made</th><th></th></tr></thead><tbody>${demos
         .map(
           (d) =>
-            `<tr><td><a href="/demos/${esc(d.slug)}">${esc(d.businessName)}</a> ${d.buildStatus === "building" ? `<span class="tag">Building…</span>` : d.buildStatus === "failed" ? `<span class="tag bad">Build failed</span>` : ""}</td><td>${esc(d.industry)}</td><td>${esc(d.city)}</td><td class="note">${esc(d.createdAt.slice(0, 10))}</td><td><a href="${esc(siteUrl(d.slug))}" target="_blank" rel="noreferrer">Open ↗</a> &nbsp;<button class="btn ghost" data-copy="${esc(siteUrl(d.slug))}">Copy</button></td></tr>`,
+            `<tr><td><a href="/demos/${esc(d.slug)}">${esc(d.businessName)}</a> ${d.buildStatus === "building" ? `<span class="tag">Building…</span>` : d.buildStatus === "queued" ? `<span class="tag">Queued</span>` : d.buildStatus === "failed" ? `<span class="tag bad">Build failed</span>` : ""}</td><td>${esc(d.industry)}</td><td>${esc(d.city)}</td><td>${d.views ? `<b>${d.views.week}</b>${d.views.today ? ` <span class="tag ok">${d.views.today} today</span>` : ""}` : `<span class="note">none yet</span>`}</td><td class="note">${esc(d.createdAt.slice(0, 10))}</td><td><a href="${esc(siteUrl(d.slug))}" target="_blank" rel="noreferrer">Open ↗</a> &nbsp;<button class="btn ghost" data-copy="${esc(siteUrl(d.slug))}">Copy</button></td></tr>`,
         )
         .join("")}</tbody></table></div>`
     : `<div class="card empty">No demos yet. Build the first one above.</div>`;
@@ -219,19 +220,94 @@ export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) =>
 ${out ? `<div class="flash bad" role="alert">This account has no build credits left. Ask your Forge administrator to add more; sites you've already built keep working.</div>` : ""}
 <div><h1>New demo website</h1><p class="lead">Type in a business (or paste its Google Maps link) and Forge designs a custom website of 15+ pages for it, with working forms and a chat widget in the site's colour. It takes about 7–20 minutes and builds in the background, so you can keep working.${s.tenant.unlimited ? "" : ` A Standard build uses 1 credit and a Studio build ${STUDIO_CREDITS}; a build that fails is refunded.`}${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template and no credit is used.)"}</p></div>
 <form method="post" action="/demos" class="card">${fields()}<div><button class="btn ember" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build demo website</button></div></form>
+<details class="card"><summary>Build several at once</summary><form method="post" action="/demos/bulk" style="display:grid;gap:14px">
+<label for="bulk">One business per line: a name, <b>name | city</b>, or a Google Maps link (up to 25)<textarea id="bulk" name="bulk" rows="6" placeholder="Joe's Plumbing | Tampa, FL&#10;https://maps.app.goo.gl/…&#10;Bright Smile Dental | Austin, TX"></textarea></label>
+<div class="look-row"><label class="choice"><input type="radio" name="style" value="standard" checked><span>Standard · 1 credit each</span></label><label class="choice"><input type="radio" name="style" value="studio"><span>Studio · ${STUDIO_CREDITS} credits each</span></label></div>
+<p class="note" style="margin:0">Three builds run at a time; the rest wait in a queue and start by themselves. Credits for the whole batch are checked before anything starts.</p>
+<div><button class="btn" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build them all</button></div></form></details>
 <section style="display:grid;gap:14px"><h2>All demos (${demos.length})</h2>${rows}</section></main>`,
     { nav: "demos", session: s },
   );
 }
 
+export interface DemoExtra {
+  review?: Review | null;
+  views?: ViewStat;
+  /** The before/after page link, once the review has run. */
+  pitch?: string;
+  /** Inline SVG QR code for the site link. */
+  qr?: string;
+}
+
+const checkList = (checks: { label: string; ok: boolean; detail?: string }[]) =>
+  `<ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">${checks
+    .map((c) => `<li style="display:flex;gap:8px;align-items:flex-start;font-size:.9rem"><span class="tag ${c.ok ? "ok" : "bad"}" style="flex:none">${c.ok ? "✓" : "✕"}</span><span>${esc(c.label)}${c.detail && !c.ok ? ` <span class="note">· ${esc(c.detail)}</span>` : ""}</span></li>`)
+    .join("")}</ul>`;
+
+function qualityCard(d: Stored, r: Review | null | undefined, links: { site: string }, pitch: string): string {
+  if (!d.liveVersion) return "";
+  const again = `<form method="post" action="/demos/${esc(d.slug)}/review"><button class="btn ghost" type="submit" data-busy="Queued…">Run the quality check${r ? " again" : " now"}</button></form>`;
+  if (!r) return `<section class="card"><h2>Quality check</h2><p class="note" style="margin:0">The automatic review runs a few minutes after the design goes live: screenshots on desktop and phone, checks, and Claude's critique. It fixes the home page itself when something's off.</p>${again}</section>`;
+  if (r.skipped && !r.score) return `<section class="card"><h2>Quality check</h2><p class="note" style="margin:0">Not run for this version (${esc(r.skipped)}).</p>${again}</section>`;
+  const img = (n: string) => `${links.site}/_img/${d.liveVersion}/${n}`;
+  const passed = r.checks?.filter((c) => c.ok).length ?? 0;
+  return `<section class="card"><div class="row" style="justify-content:space-between"><h2>Quality check: <span style="color:var(--steel)">${r.score}/10</span> design · ${passed} of ${r.checks?.length ?? 0} checks</h2>${pitch ? `<a class="btn ghost" href="${esc(pitch)}" target="_blank" rel="noreferrer">Before &amp; after page ↗</a>` : ""}</div>
+${r.verdict ? `<p style="margin:0"><i>${esc(r.verdict)}</i></p>` : ""}
+${r.fixed ? `<div class="flash ok" role="status">✓ The home page was written again to fix what the review found.</div>` : r.fixError ? `<div class="flash bad">The automatic fix didn't finish: ${esc(r.fixError)}</div>` : ""}
+${r.shots?.includes("shot-desktop.jpg") ? `<div class="row" style="align-items:flex-start"><img src="${esc(img("shot-desktop.jpg"))}" alt="Desktop screenshot" style="width:min(100%,420px);border-radius:10px;border:1px solid var(--line)"><img src="${esc(img("shot-phone.jpg"))}" alt="Phone screenshot" style="width:110px;border-radius:10px;border:1px solid var(--line)"></div>` : ""}
+${r.checks ? checkList(r.checks) : ""}
+${r.issues?.length ? `<details><summary>${r.issues.length} note${r.issues.length === 1 ? "" : "s"} from the critique</summary><ul style="margin:0;padding-left:18px;display:grid;gap:6px">${r.issues.map((i) => `<li><b>${esc(i.what)}</b> <span class="note">(${esc(i.severity)})</span><br><span class="note">${esc(i.fix)}</span></li>`).join("")}</ul></details>` : ""}
+${r.old ? `<p class="note" style="margin:0">Their current website scored <b>${r.old.score}/10</b> on the same checks${r.old.loaded ? "" : " (it didn't load)"}.</p>` : ""}
+${r.strengths?.length ? `<p class="note" style="margin:0">Strengths: ${esc(r.strengths.join(" · "))}</p>` : ""}${again}</section>`;
+}
+
+function viewsCard(v: ViewStat | undefined): string {
+  if (!v) return `<section class="card"><h2>Who's looked</h2><p class="note" style="margin:0">No views yet. Views are counted when a real person opens the site (not link previews or bots), and your webhook hears about the first view each day.</p></section>`;
+  return `<section class="card"><h2>Who's looked</h2><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">${stat("Today", v.today)}${stat("Last 7 days", v.week)}${stat("Visitors (7 days)", v.visitorsWeek)}${stat("Last 30 days", v.month)}</div>
+<p class="note" style="margin:0">Last opened ${v.lastAt ? esc(v.lastAt.slice(0, 16).replace("T", " ")) + " UTC" : "never"}.</p>
+${v.days.length ? `<div class="table"><table><thead><tr><th>Day</th><th>Views</th><th>Visitors</th></tr></thead><tbody>${v.days.map((x) => `<tr><td>${esc(x.day)}</td><td>${x.views}</td><td>${x.visitors}</td></tr>`).join("")}</tbody></table></div>` : ""}</section>`;
+}
+
+function outreachCard(d: Stored, links: { site: string }, qr: string, aiOn: boolean): string {
+  const o = d.outreach;
+  const copy = (title: string, body: string) => `<div class="share-row"><div><b>${esc(title)}</b><span>${esc(body)}</span></div><button class="btn ghost" data-copy="${esc(body)}">Copy</button></div>`;
+  return `<section class="card"><h2>Outreach kit</h2><div class="row" style="align-items:flex-start;gap:22px"><div style="flex:none;display:grid;gap:6px;justify-items:center"><div style="width:132px;height:132px;background:#fff;border-radius:10px;padding:6px;border:1px solid var(--line)">${qr}</div><a class="note" download="qr-${esc(d.slug)}.svg" href="data:image/svg+xml;charset=utf-8,${encodeURIComponent(qr)}">Download QR</a></div>
+<div style="flex:1;min-width:240px;display:grid;gap:10px">${
+    o
+      ? `<div class="share">${copy(`Email · ${o.subject}`, o.email)}${copy("Text message", o.sms)}${copy("Call script (30 seconds)", o.call)}</div><form method="post" action="/demos/${esc(d.slug)}/outreach"><button class="btn ghost" type="submit" data-busy="Writing…">Write it again</button></form>`
+      : `<p class="note" style="margin:0">A short email, a text and a 30-second call script written for ${esc(d.intake.businessName)}, with the link in each. Costs a fraction of a cent.</p><form method="post" action="/demos/${esc(d.slug)}/outreach"><button class="btn" type="submit" data-busy="Writing…"${aiOn ? "" : " disabled"}>Write the outreach</button></form>`
+  }<p class="note" style="margin:0">QR code opens ${esc(links.site)}</p></div></div></section>`;
+}
+
+function changeCard(d: Stored, pages: { name: string; path: string }[], aiOn: boolean): string {
+  if (!d.liveVersion || !pages.length) return "";
+  const n: ChangeNote | null = d.changeNote;
+  const working = n?.status === "working" && Date.now() - Date.parse(n.at) < 10 * 60_000;
+  const status = !n
+    ? ""
+    : working
+      ? `<div class="status" role="status"><span class="spin"></span><div><b>Applying: "${esc(n.instruction)}"</b> on ${esc(n.path)}<br><span class="note">Usually 1–3 minutes. This page refreshes itself.</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
+      : n.status === "done"
+        ? `<div class="flash ok">✓ Done on ${esc(n.path)}: "${esc(n.instruction)}" (${esc(n.at.slice(0, 16).replace("T", " "))} UTC). Pages update within 30 seconds.</div>`
+        : n.status === "failed"
+          ? `<div class="flash bad">The change on ${esc(n.path)} didn't apply: ${esc(n.error || "unknown error")}</div>`
+          : "";
+  return `<section class="card"><h2>Request a change</h2>${status}
+<form method="post" action="/demos/${esc(d.slug)}/change" style="display:grid;gap:12px"><div class="grid"><label>Page<select name="path">${pages.map((p) => `<option value="${esc(p.path)}">${esc(p.name)}</option>`).join("")}</select></label>
+<label class="full">What should change?<textarea name="instruction" rows="2" maxlength="600" placeholder="e.g. Make the hero darker and add a financing section before the reviews" required></textarea></label></div>
+<div><button class="btn" type="submit" data-busy="Sending…"${working || !aiOn ? " disabled" : ""}>Apply the change</button> <span class="note">Only that page is rewritten; a few cents, no credit.</span></div></form>
+<form method="post" action="/demos/${esc(d.slug)}/replace" style="display:grid;gap:12px"><p class="note" style="margin:0"><b>Quick text fix</b> (no AI): replace an exact phrase everywhere on the site.</p><div class="grid"><label>Find<input name="find" maxlength="200" required placeholder="e.g. (555) 123-4567"></label><label>Replace with<input name="replace" maxlength="200" placeholder="e.g. (305) 555-0100"></label></div><div><button class="btn ghost" type="submit">Replace everywhere</button></div></form></section>`;
+}
+
 export function demoPage(
   s: Session,
   d: Stored,
-  links: { site: string; ghl: string; pages: { name: string; url: string }[] },
+  links: { site: string; ghl: string; pages: { name: string; path?: string; url: string }[] },
   progress: { done: number; total: number },
   leads: Lead[],
   ok?: string,
   err?: string,
+  extra: DemoExtra = {},
 ): Response {
   const i = d.intake;
   const link = links.ghl || links.site;
@@ -254,6 +330,8 @@ ${
         ? `<div class="status" role="status"><span class="spin"></span><div><b>${
             d.buildStage === "pages" ? `Claude is writing the pages… ${progress.done} of ${progress.total} done` : "Claude is designing the look…"
           }</b><br><span class="note">Usually 7–20 minutes in all. This page refreshes itself.${d.liveVersion || d.html ? " The current version stays live until the new one is complete." : " Until then the link shows a quick template version."}</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
+        : d.buildStatus === "queued"
+          ? `<div class="status" role="status"><span class="spin"></span><div><b>Waiting for a free build slot.</b><br><span class="note">Three builds run at a time; this one starts by itself when one finishes. This page refreshes itself.</span></div></div><script>setTimeout(()=>location.reload(),20000)</script>`
         : d.buildStatus === "failed"
           ? `<div class="status bad" role="alert"><div><b>The design build failed.</b> ${esc(d.buildError)}<br>The link still works${d.liveVersion || d.html ? " with the previous design" : " with the quick template version"}.${s.tenant.unlimited ? "" : ` Your credits were refunded; trying again uses ${buildCost(d.intake)} credit${buildCost(d.intake) === 1 ? "" : "s"}.`} Trying again keeps the pages already written.</div><form method="post" action="/demos/${esc(d.slug)}/rebuild"><button class="btn" type="submit"${out ? " disabled" : ""}>Try again</button></form></div>`
           : ""
@@ -279,6 +357,10 @@ ${row("Sheet row (date · business · trade · city · phone · link)", sheet.re
             .join("")}</div>`
         : `<p class="note" style="margin:0">Anything sent through the site's forms shows up here.</p>`
     }</section>
+${qualityCard(d, extra.review, links, extra.pitch ?? "")}
+${viewsCard(extra.views)}
+${outreachCard(d, links, extra.qr ?? "", true)}
+${changeCard(d, links.pages.filter((p): p is { name: string; path: string; url: string } => !!p.path), true)}
 <iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(i.businessName)}"></iframe>
 <form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Edit &amp; redesign</h2><p class="note">Change the details (or just press the button for a fresh design). Claude rebuilds it in the background; the links stay the same.${s.tenant.unlimited ? "" : ` A redesign uses 1 credit (Studio: ${STUDIO_CREDITS}).`}</p>${fields(i)}
 <div><button class="btn" type="submit" data-busy="Starting…"${busy || out ? " disabled" : ""}>Redesign site</button>${out ? ` <span class="note">No credits left.</span>` : ""}</div></form>

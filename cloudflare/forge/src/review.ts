@@ -1,0 +1,330 @@
+/**
+ * The automatic review that runs after a site goes live: open it in a real browser (Cloudflare
+ * Browser Run), screenshot it on desktop and phone, run deterministic checks (sideways scrolling,
+ * one h1, alt text, broken links and images, console errors), have Claude critique the screenshots,
+ * and, when the score is low or a check fails, write the home page again with the notes. The same
+ * session captures the business's current website for the before/after pitch page, and a social
+ * preview image for the site's links.
+ *
+ * Budget: Browser Run time is counted per calendar month in the settings table and capped at
+ * BROWSER_BUDGET_SECONDS (half of what the Workers Paid plan includes), so this can never cost
+ * extra. Past the cap, sites still go live; they just aren't reviewed.
+ */
+import Anthropic from "@anthropic-ai/sdk";
+import { getDemo, getKit, getPage, getSetting, saveImage, savePage, saveReview, setSetting } from "./db";
+import { costOf, designSitePage, pagesOf } from "./designer";
+import type { Env } from "./env";
+import { recordBuildCost } from "./tenants";
+
+/** Half of the 10 browser hours a month the Workers Paid plan includes. */
+export const BROWSER_BUDGET_SECONDS = 5 * 3600;
+/** The critique reads two screenshots; Sonnet sees them well and costs a few cents at most. */
+export const CRITIQUE_MODEL = "claude-sonnet-5-5";
+/** Below this, or with any failed check, the home page is written again with the notes. */
+const FIX_BELOW = 7;
+
+export interface Check {
+  id: string;
+  label: string;
+  ok: boolean;
+  detail?: string;
+}
+
+export interface Issue {
+  what: string;
+  fix: string;
+  severity: "high" | "medium" | "low";
+}
+
+export interface OldSite {
+  url: string;
+  loaded: boolean;
+  score: number;
+  checks: Check[];
+}
+
+export interface Review {
+  at: string;
+  /** Why the review didn't run (no browser, budget spent, an error). */
+  skipped?: string;
+  score?: number;
+  verdict?: string;
+  strengths?: string[];
+  issues?: Issue[];
+  checks?: Check[];
+  /** The home page was written again with the notes. */
+  fixed?: boolean;
+  fixError?: string;
+  consoleErrors?: string[];
+  old?: OldSite | null;
+  seconds?: number;
+  costUsd?: number;
+  /** Which screenshots were saved (image names under the version). */
+  shots?: string[];
+}
+
+/** What the page tells us about itself, from inside the browser. */
+interface PageFacts {
+  overflow: boolean;
+  h1: number;
+  noAlt: number;
+  brokenImgs: number;
+  links: string[];
+  hasViewport: boolean;
+  tel: boolean;
+  forms: number;
+  textPx: number;
+  words: number;
+  https: boolean;
+}
+
+const FACTS = `() => ({
+  overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+  h1: document.querySelectorAll("h1").length,
+  noAlt: Array.from(document.images).filter((i) => !i.hasAttribute("alt")).length,
+  brokenImgs: Array.from(document.images).filter((i) => i.src && i.complete && !i.naturalWidth).length,
+  links: Array.from(document.querySelectorAll("a[href]")).map((a) => a.getAttribute("href") || "").slice(0, 400),
+  hasViewport: !!document.querySelector('meta[name="viewport"]'),
+  tel: !!document.querySelector('a[href^="tel:"]'),
+  forms: document.querySelectorAll("form").length,
+  textPx: parseFloat(getComputedStyle(document.body).fontSize) || 0,
+  words: (document.body.innerText || "").split(/\\s+/).filter(Boolean).length,
+  https: location.protocol === "https:",
+})`;
+
+/** The slice of Puppeteer this module uses (so tests can hand in a stand-in). */
+export interface BrowserPage {
+  setViewport(v: { width: number; height: number; deviceScaleFactor?: number; isMobile?: boolean }): Promise<void>;
+  goto(url: string, opts?: { waitUntil?: "load" | "domcontentloaded" | "networkidle0" | "networkidle2"; timeout?: number }): Promise<unknown>;
+  screenshot(opts: { type: "jpeg"; quality: number; fullPage?: boolean }): Promise<Uint8Array | Buffer | string>;
+  evaluate<T>(fn: string | (() => T)): Promise<T>;
+  on(event: "console" | "pageerror", handler: (arg: { type(): string; text(): string } & Error) => void): void;
+  close(): Promise<void>;
+}
+export interface Browser {
+  newPage(): Promise<BrowserPage>;
+  close(): Promise<void>;
+}
+export interface ReviewDeps {
+  launch(env: Env): Promise<Browser>;
+  critique(env: Env, shots: { desktop: Uint8Array; phone: Uint8Array }, facts: string): Promise<{ score: number; verdict: string; strengths: string[]; issues: Issue[]; costUsd: number }>;
+}
+
+async function launchReal(env: Env): Promise<Browser> {
+  const { default: puppeteer } = await import("@cloudflare/puppeteer");
+  return (await puppeteer.launch(env.BROWSER as never)) as unknown as Browser;
+}
+
+const bytesOf = (b: Uint8Array | Buffer | string): Uint8Array => (typeof b === "string" ? Uint8Array.from(atob(b), (c) => c.charCodeAt(0)) : new Uint8Array(b));
+const b64 = (u: Uint8Array) => {
+  let s = "";
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+
+const CRITIQUE_SYSTEM = `You are the creative director at Mianro Systems reviewing a website home page your studio just built for a local business. You see the page as a visitor would: a desktop screenshot and a phone screenshot. Be exacting but fair; this is a first version and your notes go straight back to the designer.
+
+Score the page from 1 to 10 overall, weighing: first impression and distinctiveness (does it look custom and expensive, or like an AI template?), hierarchy and typography, colour and contrast, layout and spacing on desktop AND on the phone, use of imagery, clarity of the offer and the call to action, trust signals, and copy. Mark these down hard: text cut off or overlapping, elements running off the screen, unreadable contrast, an empty or broken-looking area, a hero that doesn't explain what the business does, the same card grid repeated section after section, a label above every single heading, gradient text used as decoration, nested cards, cards rounded like pills.
+
+Reply with JSON only, no markdown: {"score": 1-10, "verdict": "one sentence", "strengths": ["..."], "issues": [{"what": "...", "fix": "a concrete instruction the designer can act on", "severity": "high|medium|low"}]}. At most 8 issues, most important first. If the page is genuinely excellent, say so and keep the issues list short.`;
+
+async function critiqueReal(env: Env, shots: { desktop: Uint8Array; phone: Uint8Array }, facts: string) {
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 120_000 });
+  const res = await client.messages.create({
+    model: CRITIQUE_MODEL,
+    max_tokens: 1500,
+    system: CRITIQUE_SYSTEM,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Desktop (1280×800):" },
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64(shots.desktop) } },
+          { type: "text", text: "Phone (390×844):" },
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64(shots.phone) } },
+          { type: "text", text: `Facts measured in the browser (treat as true):\n${facts}` },
+        ],
+      },
+    ],
+  });
+  const text = res.content.map((c) => (c.type === "text" ? c.text : "")).join("");
+  const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+  const p = JSON.parse(json) as { score?: unknown; verdict?: unknown; strengths?: unknown; issues?: unknown };
+  const issues = Array.isArray(p.issues)
+    ? (p.issues as Partial<Issue>[]).slice(0, 8).map((i) => ({ what: String(i.what ?? "").slice(0, 300), fix: String(i.fix ?? "").slice(0, 400), severity: i.severity === "high" || i.severity === "low" ? i.severity : ("medium" as const) }))
+    : [];
+  return {
+    score: Math.max(1, Math.min(10, Math.round(Number(p.score) || 5))),
+    verdict: String(p.verdict ?? "").slice(0, 300),
+    strengths: Array.isArray(p.strengths) ? (p.strengths as unknown[]).slice(0, 6).map((s) => String(s).slice(0, 200)) : [],
+    issues,
+    costUsd: costOf(CRITIQUE_MODEL, res.usage as unknown as Record<string, unknown>),
+  };
+}
+
+export const realDeps: ReviewDeps = { launch: launchReal, critique: critiqueReal };
+
+/** Browser seconds used this month, and the key they live under. */
+export async function browserUsed(env: Env): Promise<{ key: string; seconds: number }> {
+  const key = `browser:${new Date().toISOString().slice(0, 7)}`;
+  return { key, seconds: Number(await getSetting(env, key)) || 0 };
+}
+
+async function addBrowserSeconds(env: Env, seconds: number): Promise<void> {
+  const { key, seconds: before } = await browserUsed(env);
+  await setSetting(env, key, String(Math.ceil(before + seconds)));
+}
+
+/** Checks on a built page. `paths` are the site's real page paths; `prefix` is where it is served. */
+function checksFor(desktop: PageFacts, phone: PageFacts, paths: string[], prefix: string, consoleErrors: string[]): Check[] {
+  const internal = desktop.links.filter((h) => h.startsWith(prefix + "/") || h === prefix);
+  const broken = internal.filter((h) => {
+    const p = h.slice(prefix.length).split(/[?#]/)[0] || "/";
+    return !paths.includes(p) && !p.startsWith("/_");
+  });
+  return [
+    { id: "overflow-desktop", label: "No sideways scrolling on desktop", ok: !desktop.overflow },
+    { id: "overflow-phone", label: "No sideways scrolling on a phone", ok: !phone.overflow },
+    { id: "h1", label: "Exactly one main heading", ok: desktop.h1 === 1, detail: `${desktop.h1} found` },
+    { id: "alt", label: "Every image has alt text", ok: desktop.noAlt === 0, detail: desktop.noAlt ? `${desktop.noAlt} without` : undefined },
+    { id: "images", label: "No broken images", ok: desktop.brokenImgs === 0, detail: desktop.brokenImgs ? `${desktop.brokenImgs} broken` : undefined },
+    { id: "links", label: "Every link goes to a real page", ok: broken.length === 0, detail: broken.length ? `${broken.length} dead: ${[...new Set(broken)].slice(0, 4).join(", ")}` : undefined },
+    { id: "console", label: "No script errors", ok: consoleErrors.length === 0, detail: consoleErrors.length ? consoleErrors[0]!.slice(0, 120) : undefined },
+    { id: "tel", label: "Tap-to-call phone link", ok: desktop.tel },
+    { id: "form", label: "A form on the page", ok: desktop.forms > 0 },
+    { id: "text", label: "Readable text size on a phone", ok: phone.textPx >= 15, detail: `${phone.textPx}px` },
+  ];
+}
+
+/** A simple, explainable score for the business's current website (10 is good). */
+export function scoreOld(f: PageFacts | null): { score: number; checks: Check[] } {
+  if (!f) return { score: 1, checks: [{ id: "loaded", label: "Website loads", ok: false }] };
+  const checks: Check[] = [
+    { id: "loaded", label: "Website loads", ok: true },
+    { id: "viewport", label: "Built for phones (viewport set)", ok: f.hasViewport },
+    { id: "overflow-phone", label: "No sideways scrolling on a phone", ok: !f.overflow },
+    { id: "h1", label: "One clear main heading", ok: f.h1 === 1, detail: `${f.h1} found` },
+    { id: "https", label: "Secure (https)", ok: f.https },
+    { id: "tel", label: "Tap-to-call phone link", ok: f.tel },
+    { id: "form", label: "A way to send a message", ok: f.forms > 0 },
+    { id: "text", label: "Readable text size", ok: f.textPx >= 14, detail: `${f.textPx}px` },
+    { id: "alt", label: "Images described for search engines", ok: f.noAlt <= 2 },
+  ];
+  const weights: Record<string, number> = { viewport: 3, "overflow-phone": 2, h1: 1, https: 1, tel: 1, form: 1, text: 1, alt: 1 };
+  const score = checks.reduce((s, c) => s - (c.ok ? 0 : (weights[c.id] ?? 0)), 11);
+  return { score: Math.max(1, Math.min(10, score)), checks };
+}
+
+/** Run the review for a version that is live. Never throws: whatever happens is recorded on the version. */
+export async function reviewSite(env: Env, slug: string, version: string, deps: ReviewDeps = realDeps): Promise<Review> {
+  const at = new Date().toISOString();
+  const done = async (r: Review) => (await saveReview(env, slug, version, r), r);
+  const demo = await getDemo(env, slug);
+  if (!demo || demo.liveVersion !== version) return { at, skipped: "not live" };
+  if (!env.BROWSER) return done({ at, skipped: "no browser" });
+  if (!env.ANTHROPIC_API_KEY) return done({ at, skipped: "no Claude key" });
+  const used = await browserUsed(env);
+  if (used.seconds >= BROWSER_BUDGET_SECONDS) return done({ at, skipped: "browser budget for this month is used up" });
+  const kit = await getKit(env, slug, version);
+  if (!kit) return done({ at, skipped: "no kit" });
+  const base = env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : "";
+  if (!base) return done({ at, skipped: "no public site address (SITES_ORIGIN)" });
+  const prefix = `/${slug}`;
+  const siteUrl = `${base}${prefix}?r=${version}`;
+
+  const started = Date.now();
+  let browser: Browser | null = null;
+  const shots: string[] = [];
+  let review: Review = { at };
+  try {
+    browser = await deps.launch(env);
+    const page = await browser.newPage();
+    const consoleErrors: string[] = [];
+    page.on("console", (m) => {
+      if (m.type() === "error") consoleErrors.push(m.text());
+    });
+    page.on("pageerror", (e) => consoleErrors.push(String(e.message || e)));
+
+    // The new site: desktop, then phone, then a social-preview frame.
+    await page.setViewport({ width: 1280, height: 800 });
+    await page.goto(siteUrl, { waitUntil: "networkidle0", timeout: 25_000 });
+    const desktop = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
+    const dFacts = await page.evaluate<PageFacts>(FACTS);
+    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true });
+    await page.goto(siteUrl, { waitUntil: "networkidle0", timeout: 25_000 });
+    const phone = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
+    const pFacts = await page.evaluate<PageFacts>(FACTS);
+    await page.setViewport({ width: 1200, height: 630 });
+    await page.goto(siteUrl, { waitUntil: "networkidle0", timeout: 20_000 });
+    const og = bytesOf(await page.screenshot({ type: "jpeg", quality: 78 }));
+    await saveImage(env, slug, version, "shot-desktop.jpg", "The home page on desktop", desktop);
+    await saveImage(env, slug, version, "shot-phone.jpg", "The home page on a phone", phone);
+    await saveImage(env, slug, version, "og.jpg", "Link preview", og);
+    shots.push("shot-desktop.jpg", "shot-phone.jpg", "og.jpg");
+
+    const checks = checksFor(dFacts, pFacts, pagesOf(kit).map((p) => p.path), prefix, consoleErrors.filter((e) => !/favicon|ERR_BLOCKED|net::/i.test(e)));
+
+    // The business's current website, for the before/after.
+    let old: OldSite | null = null;
+    if (demo.intake.websiteUrl) {
+      try {
+        await page.setViewport({ width: 1280, height: 800 });
+        await page.goto(demo.intake.websiteUrl, { waitUntil: "domcontentloaded", timeout: 20_000 });
+        await new Promise((r) => setTimeout(r, 1500));
+        const oDesk = bytesOf(await page.screenshot({ type: "jpeg", quality: 65 }));
+        await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true });
+        await page.goto(demo.intake.websiteUrl, { waitUntil: "domcontentloaded", timeout: 20_000 });
+        await new Promise((r) => setTimeout(r, 1500));
+        const oPhone = bytesOf(await page.screenshot({ type: "jpeg", quality: 65 }));
+        const oFacts = await page.evaluate<PageFacts>(FACTS);
+        await saveImage(env, slug, version, "old-desktop.jpg", "Their current website on desktop", oDesk);
+        await saveImage(env, slug, version, "old-phone.jpg", "Their current website on a phone", oPhone);
+        shots.push("old-desktop.jpg", "old-phone.jpg");
+        old = { url: demo.intake.websiteUrl, loaded: true, ...scoreOld(oFacts) };
+      } catch (e) {
+        console.log("old site capture failed", slug, e instanceof Error ? e.message : String(e));
+        old = { url: demo.intake.websiteUrl, loaded: false, ...scoreOld(null) };
+      }
+    }
+    await page.close();
+    await browser.close();
+    browser = null;
+    const seconds = (Date.now() - started) / 1000;
+    await addBrowserSeconds(env, seconds);
+
+    // Claude's critique of the screenshots.
+    const facts = checks.map((c) => `- ${c.label}: ${c.ok ? "ok" : "FAILED"}${c.detail ? ` (${c.detail})` : ""}`).join("\n");
+    const crit = await deps.critique(env, { desktop, phone }, facts);
+    review = { at, score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues, checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
+
+    // Fix: write the home page again with the notes, when it isn't good enough.
+    const failed = checks.filter((c) => !c.ok && !["tel", "form", "text", "alt"].includes(c.id));
+    const notes = [
+      ...failed.map((c) => `${c.label}: FAILED${c.detail ? ` (${c.detail})` : ""}. Fix this.`),
+      ...crit.issues.filter((i) => i.severity !== "low").map((i) => `${i.what} → ${i.fix}`),
+    ];
+    if ((crit.score < FIX_BELOW || failed.length) && notes.length) {
+      const spec = pagesOf(kit).find((p) => p.path === "/");
+      const current = await getPage(env, slug, version, "/");
+      if (spec && current) {
+        try {
+          const { page: fixedPage, usage } = await designSitePage(env, kit, spec, { notes, current });
+          await savePage(env, slug, version, "/", fixedPage, usage);
+          const u = usage as { cost_usd?: number };
+          review.fixed = true;
+          review.costUsd = (review.costUsd ?? 0) + (Number(u.cost_usd) || 0);
+        } catch (e) {
+          review.fixError = e instanceof Error ? e.message : String(e);
+        }
+      }
+    }
+    await recordBuildCost(env, demo.tenantId, slug, `${version}:review`, review.costUsd ?? 0, review.fixed ? 2 : 1, "review");
+    return done(review);
+  } catch (e) {
+    if (browser) await browser.close().catch(() => undefined);
+    await addBrowserSeconds(env, (Date.now() - started) / 1000);
+    console.error("review failed", slug, e instanceof Error ? e.message : String(e));
+    return done({ ...review, at, skipped: `error: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`, shots });
+  }
+}
+

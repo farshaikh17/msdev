@@ -24,6 +24,8 @@ export interface Env {
   ROLE?: string;
   /** Where the forge-sites Worker lives, e.g. https://forge-sites.example.workers.dev. Unset: sites are served here at /s/<slug>. */
   SITES_ORIGIN?: string;
+  /** Cloudflare Browser Run (screenshots for the automatic review). Absent: sites go live without a review. */
+  BROWSER?: unknown;
 }
 
 // Minimal D1 types (avoids pulling in @cloudflare/workers-types).
@@ -43,7 +45,13 @@ export interface KVNamespace {
 }
 
 /** "kit": design the site (CSS, header, footer, script), then queue one "page" job per page. */
-export type BuildJob = { slug: string; version: string; stage: "kit" } | { slug: string; version: string; stage: "page"; path: string };
+export type BuildJob =
+  | { slug: string; version: string; stage: "kit" }
+  | { slug: string; version: string; stage: "page"; path: string }
+  /** After go-live: screenshot, check and critique the site, and fix the home page if needed. */
+  | { slug: string; version: string; stage: "review" }
+  /** A change request on one page of the live site. */
+  | { slug: string; version: string; stage: "change"; path: string; instruction: string };
 /** Copy one clip from the team's Google Drive folder into the video library. */
 export interface VideoJob { stage: "video"; driveId: string }
 export interface Queue<T> { send(body: T, opts?: { delaySeconds?: number }): Promise<void> }

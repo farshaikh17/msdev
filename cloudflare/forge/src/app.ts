@@ -13,16 +13,22 @@ import {
   deleteVideo,
   getDemo,
   getKit,
+  getReview,
   getSetting,
   listDemos,
   listLeads,
   listOwnVideos,
   listSharedVideos,
+  markQueued,
   pagesDone,
   recordAttempt,
+  replaceText,
   saveVideo,
+  setChangeNote,
+  setOutreach,
   setSetting,
   throttled,
+  viewStats,
 } from "./db";
 import { Invalid, NoCredits, checkWidget, createDemo, noCreditsText, rawFields, redesignDemo, startMessage } from "./demos";
 import { pagesOf, sitemapFor } from "./designer";
@@ -30,7 +36,10 @@ import { DEFAULT_FOLDER, FOLDER_KEY, folderId, syncFolder } from "./drive";
 import type { Ctx, Env } from "./env";
 import { ghlLink, ghlSnippet, sitesBase } from "./ghl";
 import { parseKeywords, parseVideoUrls } from "./hero";
-import { serveSite, takeLead, templateJson } from "./serve";
+import { serveImage, servePitch, serveSite, takeLead, templateJson } from "./serve";
+import { IMAGE_PATH } from "./index";
+import { qrSvg, writeOutreach } from "./outreach";
+import { BROWSER_BUDGET_SECONDS, browserUsed } from "./review";
 import { DEFAULT_WIDGET_ID, widgetId } from "./site";
 import {
   createApiKey,
@@ -59,6 +68,7 @@ import {
 } from "./tenants";
 import { demoPage, homePage, invitePage, isOwner, loginPage, page, setupPage } from "./ui";
 import { adminInquiriesPage, adminPage, adminSitePage, adminTenantPage, adminVideosPage } from "./ui-admin";
+import { STUDIO_CREDITS } from "./tenants";
 import { apiPage, passwordCard, settingsPage, teamPage } from "./ui-settings";
 import { deliver, newWebhookSecret, webhookUrlProblem } from "./webhook";
 import { countNewInquiries, getPlans, getShowcaseSlugs, handleWeb, listInquiries, parsePlans, parseSlugs, payUrlOk, setInquiryStatus, webNotFound } from "./web";
@@ -96,6 +106,10 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     return new Response(null, { status: 204, headers: /\/_lead$/.test(path) ? { ...CORS, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" } : CORS });
   let m = path.match(/^\/s\/([a-z0-9-]+)\/_lead$/);
   if (m && post) return takeLead(req, env, ctx, m[1]);
+  m = path.match(/^\/s\/([a-z0-9-]{3,64})\/_pitch$/);
+  if (m && req.method === "GET") return env.SITES_ORIGIN ? Response.redirect(`${site(m[1])}/_pitch`, 302) : servePitch(req, env, m[1], `/s/${m[1]}`);
+  const im = path.replace(/^\/s/, "").match(IMAGE_PATH);
+  if (im && path.startsWith("/s/") && req.method === "GET") return serveImage(req, env, ctx, im[1], im[2], im[3]);
   m = path.match(/^\/s\/([a-z0-9-]+)((?:\/[a-z0-9-]+){1,2})?$/);
   if (m && req.method === "GET") {
     if (env.SITES_ORIGIN) return Response.redirect(`${site(m[1])}${m[2] ?? ""}`, 302);
@@ -192,7 +206,40 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
   const needOwner = () => redirect(withMsg("/", "error", "Only an account owner can do that."));
 
   // ---- Dashboard and demos -------------------------------------------------------------------
-  if (path === "/" && req.method === "GET") return homePage(s, await listDemos(env, s.tenant.id), site, aiOn, await tenantUsage(env, s.tenant.id), q("error"), q("ok"));
+  if (path === "/" && req.method === "GET") {
+    const [demos, views, usage] = await Promise.all([listDemos(env, s.tenant.id), viewStats(env, { tenantId: s.tenant.id }), tenantUsage(env, s.tenant.id)]);
+    return homePage(s, demos.map((d) => ({ ...d, views: views.get(d.slug) })), site, aiOn, usage, q("error"), q("ok"));
+  }
+
+  // Several at once: one business per line (a name, "name | city", or a Google Maps link).
+  if (path === "/demos/bulk" && post) {
+    const f = await req.formData();
+    const style = f.get("style") === "studio" ? "studio" : "standard";
+    const lines = String(f.get("bulk") ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 25);
+    if (!lines.length) return redirect(withMsg("/", "error", "Paste at least one business, one per line."));
+    const each = style === "studio" ? STUDIO_CREDITS : 1;
+    if (!s.tenant.unlimited && s.tenant.credits < lines.length * each && aiOn)
+      return redirect(withMsg("/", "error", `${lines.length} ${style === "studio" ? "Studio " : ""}builds need ${lines.length * each} credits and this account has ${s.tenant.credits}.`));
+    let started = 0, queued = 0;
+    const problems: string[] = [];
+    for (const line of lines) {
+      const [first, second] = line.split("|").map((x) => x.trim());
+      const raw: Record<string, string> = /^https?:\/\//i.test(first) ? { googleUrl: first, city: second ?? "" } : { businessName: first, city: second ?? "" };
+      raw.style = style;
+      try {
+        const r = await createDemo(env, (await getTenant(env, s.tenant.id)) ?? s.tenant, s.user.id, raw);
+        if (r.start === "busy") {
+          await markQueued(env, r.slug);
+          queued++;
+        } else if (r.start === "started" || r.start === "ai-off") started++;
+        else problems.push(`${first}: no credits left`);
+      } catch (e) {
+        problems.push(`${first.slice(0, 40)}: ${e instanceof NoCredits ? "no credits left" : e instanceof Invalid ? e.message : "couldn't start"}`);
+      }
+    }
+    const msg = `Started ${started} build${started === 1 ? "" : "s"}${queued ? `, ${queued} queued (they start as slots free up)` : ""}.${problems.length ? ` Skipped: ${problems.join("; ")}` : ""}`;
+    return redirect(withMsg("/", problems.length && !started && !queued ? "error" : "ok", msg));
+  }
 
   if (path === "/demos" && post) {
     try {
@@ -206,7 +253,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     }
   }
 
-  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive)?$/);
+  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/replace|\/review)?$/);
   if (m) {
     const [, slug, action] = m;
     // Always scoped to this account: another account's demo is simply "not found".
@@ -220,9 +267,15 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
         demo.liveVersion ? getKit(env, slug, demo.liveVersion) : null,
         listLeads(env, slug),
       ]);
-      const pages = liveKit ? pagesOf(liveKit).map((p) => ({ name: p.name, url: `${site(slug)}${p.path === "/" ? "" : p.path}` })) : [];
+      const pages = liveKit ? pagesOf(liveKit).map((p) => ({ name: p.name, path: p.path, url: `${site(slug)}${p.path === "/" ? "" : p.path}` })) : [];
       const total = (buildKit ? pagesOf(buildKit) : sitemapFor(demo.intake)).length;
-      return demoPage(s, demo, { site: site(slug), ghl: ghlLink(s.tenant.ghlPageUrl, slug), pages }, { done, total }, leads, q("ok"), q("error"));
+      const [review, views] = await Promise.all([demo.liveVersion ? getReview(env, slug, demo.liveVersion) : null, viewStats(env, { slugs: [slug] })]);
+      return demoPage(s, demo, { site: site(slug), ghl: ghlLink(s.tenant.ghlPageUrl, slug), pages }, { done, total }, leads, q("ok"), q("error"), {
+        review,
+        views: views.get(slug),
+        pitch: review?.shots?.length ? `${site(slug)}/_pitch` : "",
+        qr: qrSvg(site(slug)),
+      });
     }
     if ((action === "/rewrite" || action === "/rebuild") && post) {
       try {
@@ -235,6 +288,42 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
         if (e instanceof Invalid) return redirect(withMsg(`/demos/${slug}`, "error", e.message));
         throw e;
       }
+    }
+    if (action === "/review" && post) {
+      if (!owner) return needOwner();
+      if (!demo.liveVersion) return redirect(withMsg(`/demos/${slug}`, "error", "Wait for the design to finish first."));
+      await env.BUILDS.send({ slug, version: demo.liveVersion, stage: "review" });
+      return redirect(withMsg(`/demos/${slug}`, "ok", "Quality check queued. It takes a few minutes; this page shows the result."));
+    }
+    if (action === "/outreach" && post) {
+      if (!aiOn) return redirect(withMsg(`/demos/${slug}`, "error", "Outreach needs Claude, which is switched off."));
+      const out = await writeOutreach(env, demo, site(slug), { name: s.user.email.split("@")[0]!.replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), agency: s.tenant.name });
+      await setOutreach(env, slug, out);
+      return redirect(withMsg(`/demos/${slug}`, "ok", "Outreach written. Edit it to taste before sending."));
+    }
+    if (action === "/change" && post) {
+      const f = await req.formData();
+      const pagePath = String(f.get("path") ?? "/");
+      const instruction = String(f.get("instruction") ?? "").trim().slice(0, 600);
+      if (!demo.liveVersion) return redirect(withMsg(`/demos/${slug}`, "error", "Wait for the design to finish before requesting changes."));
+      if (!aiOn) return redirect(withMsg(`/demos/${slug}`, "error", "Changes need Claude, which is switched off."));
+      const kit = await getKit(env, slug, demo.liveVersion);
+      if (!kit || !pagesOf(kit).some((p) => p.path === pagePath)) return redirect(withMsg(`/demos/${slug}`, "error", "Pick one of the site's pages."));
+      if (instruction.length < 5) return redirect(withMsg(`/demos/${slug}`, "error", "Say what should change, in a sentence or two."));
+      const busyNote = demo.changeNote?.status === "working" && Date.now() - Date.parse(demo.changeNote.at) < 10 * 60_000;
+      if (busyNote) return redirect(withMsg(`/demos/${slug}`, "error", "A change is still being applied. Give it a minute."));
+      await setChangeNote(env, slug, { path: pagePath, instruction, status: "working", error: "", at: new Date().toISOString() });
+      await env.BUILDS.send({ slug, version: demo.liveVersion, stage: "change", path: pagePath, instruction });
+      return redirect(withMsg(`/demos/${slug}`, "ok", "Applying your change. The page updates itself in a minute or two."));
+    }
+    if (action === "/replace" && post) {
+      const f = await req.formData();
+      const find = String(f.get("find") ?? "").trim().slice(0, 200);
+      const replacement = String(f.get("replace") ?? "").trim().slice(0, 200);
+      if (!demo.liveVersion) return redirect(withMsg(`/demos/${slug}`, "error", "Wait for the design to finish first."));
+      if (find.length < 2) return redirect(withMsg(`/demos/${slug}`, "error", "Type the exact text to replace."));
+      const n = await replaceText(env, slug, demo.liveVersion, find, replacement);
+      return redirect(withMsg(`/demos/${slug}`, n ? "ok" : "error", n ? `Replaced "${find}" in ${n} place${n === 1 ? "" : "s"}. Pages update within 30 seconds.` : `"${find}" wasn't found on any page (it has to match exactly, including capitals).`));
     }
     if (action === "/archive" && post) {
       await archiveDemo(env, slug, s.tenant.id);
@@ -381,7 +470,7 @@ async function handleAdmin(req: Request, env: Env, s: Session, path: string, ori
   const post = req.method === "POST";
   const flashQ = { ok: q("ok"), err: q("error") };
 
-  const adminHome = async (extra: Parameters<typeof adminPage>[2] = {}) => adminPage(s, await listTenants(env), extra, await countNewInquiries(env));
+  const adminHome = async (extra: Parameters<typeof adminPage>[2] = {}) => adminPage(s, await listTenants(env), extra, await countNewInquiries(env), { seconds: (await browserUsed(env)).seconds, budget: BROWSER_BUDGET_SECONDS });
   if (path === "/admin" && req.method === "GET") {
     const name = q("name");
     const prefill = name || q("email") ? { name: (name ?? "").slice(0, 80), email: (q("email") ?? "").slice(0, 120), credits: String(Math.max(0, Math.min(10000, Math.floor(Number(q("credits")) || 3)))) } : undefined;

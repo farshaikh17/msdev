@@ -32,7 +32,13 @@ async function sign(secret: string, message: string): Promise<string> {
   return [...new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message)))].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export type WebhookEvent = "demo.ready" | "demo.failed" | "lead.created" | "ping";
+export type WebhookEvent = "demo.ready" | "demo.failed" | "demo.viewed" | "lead.created" | "ping";
+
+/** Sent with demo.viewed: the first time a demo is opened each day. */
+export interface ViewInfo {
+  views_today: number;
+  visitors_today: number;
+}
 
 /** A form submission sent with a lead.created message. */
 export interface LeadInfo {
@@ -41,7 +47,7 @@ export interface LeadInfo {
 }
 
 /** The JSON the receiver gets. */
-export async function webhookBody(env: Env, event: WebhookEvent, demo: Stored | null, lead?: LeadInfo): Promise<string> {
+export async function webhookBody(env: Env, event: WebhookEvent, demo: Stored | null, lead?: LeadInfo, views?: ViewInfo): Promise<string> {
   const base = env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : "";
   let pages: { name: string; url: string }[] = [];
   if (demo?.liveVersion) {
@@ -62,15 +68,16 @@ export async function webhookBody(env: Env, event: WebhookEvent, demo: Stored | 
         }
       : null,
     ...(lead ? { lead: { page: lead.page, fields: lead.fields } } : {}),
+    ...(views ? { views } : {}),
   });
 }
 
 /** Send one delivery. Never throws: the result is stored on the account for its owner to see. */
-export async function deliver(env: Env, tenant: Tenant, event: WebhookEvent, demo: Stored | null, lead?: LeadInfo): Promise<string> {
+export async function deliver(env: Env, tenant: Tenant, event: WebhookEvent, demo: Stored | null, lead?: LeadInfo, views?: ViewInfo): Promise<string> {
   if (!tenant.webhookUrl || !tenant.webhookSecret) return "";
   let status: string;
   try {
-    const body = await webhookBody(env, event, demo, lead);
+    const body = await webhookBody(env, event, demo, lead, views);
     const ts = String(Math.floor(Date.now() / 1000));
     const res = await fetch(tenant.webhookUrl, {
       method: "POST",

@@ -17,13 +17,16 @@
  *              POST /<slug>/_lead      the site's form submissions (shown on the demo in the app)
  */
 import { handleApp } from "./app";
-import { build } from "./build";
-import { pruneThrottle } from "./db";
+import { build, startQueued } from "./build";
+import { pruneThrottle, pruneVisitors, queuedTenants } from "./db";
 import { importClip, serveVideo, syncFolder } from "./drive";
 import type { BuildJob, Ctx, Env, MessageBatch, VideoJob } from "./env";
-import { CORS, serveImage, serveSite, takeLead, text } from "./serve";
+import { CORS, serveImage, servePitch, serveSite, takeLead, text } from "./serve";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)) || "Something went wrong.";
+
+/** A site image: preview photos, the review's screenshots, the social preview and the old-site captures. */
+export const IMAGE_PATH = /^\/([a-z0-9-]{3,64})\/_img\/([a-z0-9]{6,40})\/((?:photo-\d{1,2}|og|shot-desktop|shot-phone|old-desktop|old-phone)\.jpg)$/;
 
 /** /<slug> plus an optional page path such as /services or /services/drain-cleaning. */
 const PAGE_PATH = /^\/([a-z0-9-]{3,64})((?:\/[a-z0-9-]+){1,2})?$/;
@@ -37,8 +40,10 @@ async function handleSites(req: Request, env: Env, ctx: Ctx): Promise<Response> 
   if (m && req.method === "POST") return takeLead(req, env, ctx, m[1]);
   m = path.match(/^\/_v\/([A-Za-z0-9_-]{10,80})\.mp4$/);
   if (m && read) return serveVideo(req, env, m[1]);
-  m = path.match(/^\/([a-z0-9-]{3,64})\/_img\/([a-z0-9]{6,40})\/(photo-\d{1,2}\.jpg)$/);
+  m = path.match(IMAGE_PATH);
   if (m && read) return serveImage(req, env, ctx, m[1], m[2], m[3]);
+  m = path.match(/^\/([a-z0-9-]{3,64})\/_pitch$/);
+  if (m && read) return servePitch(req, env, m[1], `/${m[1]}`);
   m = path.match(PAGE_PATH);
   if (m && read) return serveSite(req, env, ctx, m[1], m[2] ?? "", `/${m[1]}`, false);
   return text("Nothing here. Demo links look like /business-name-1a2b3c4d.", 404);
@@ -76,6 +81,9 @@ const worker = {
   /** Hourly: pick up clips added to (or removed from) the shared Drive folder. */
   async scheduled(_event: unknown, env: Env): Promise<void> {
     await pruneThrottle(env).catch(() => undefined);
+    await pruneVisitors(env).catch(() => undefined);
+    // Queued (bulk) builds whose account has a free slot: a safety net for the start-on-finish path.
+    for (const id of await queuedTenants(env).catch(() => [] as number[])) await startQueued(env, id).catch((e) => console.error("queued build", errText(e)));
     await syncFolder(env).catch((e) => console.error("video sync failed", errText(e)));
   },
 };

@@ -6,6 +6,8 @@
 import { renderPage, renderSite } from "../../../src/forge/render";
 import {
   countLeads,
+  countView,
+  getReview,
   getDemo,
   getImage,
   getKit,
@@ -20,6 +22,8 @@ import { pagesOf } from "./designer";
 import type { Ctx, Env } from "./env";
 import { heroMotion, matchVideo } from "./hero";
 import { assemble, chatWidget, creditFor, finish, templateCredit, widgetFor } from "./site";
+import { sha256Hex } from "./crypto";
+import { pitchPage } from "./pitch";
 import { getTenant } from "./tenants";
 import { deliver } from "./webhook";
 
@@ -47,14 +51,23 @@ async function publicDemo(env: Env, slug: string) {
 export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, sub: string, prefix: string, sandbox: boolean): Promise<Response> {
   const cache = (caches as unknown as { default: Cache }).default;
   const hit = await cache.match(req);
-  if (hit) return hit;
+  if (hit) {
+    trackView(req, env, ctx, slug);
+    return hit;
+  }
   const found = await publicDemo(env, slug);
   if (!found) return text("This demo isn't available.", 404);
   const { demo, tenant } = found;
+  trackView(req, env, ctx, slug);
+  const pageUrl = new URL(req.url);
+  pageUrl.search = "";
   let html: string;
   let accent: string;
   let current: string | null = null;
   let motion = "";
+  let ogImage: string | null = null;
+  let ogTitle = `${demo.intake.businessName}${demo.content.industry ? ` | ${demo.content.industry}` : ""}${demo.intake.city ? ` in ${demo.intake.city}` : ""}`;
+  let ogDesc = `A new website for ${demo.intake.businessName}.`;
   if (demo.liveVersion) {
     const path = sub || "/";
     const kit = await getKit(env, slug, demo.liveVersion);
@@ -65,8 +78,13 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
     html = assemble(kit, page, slug, creditFor(tenant));
     accent = kit.accent || demo.intake.primaryColor;
     current = path;
+    const names = await imageNames(env, slug, demo.liveVersion);
+    ogImage = names.includes("og.jpg") ? "og.jpg" : names.includes("photo-1.jpg") ? "photo-1.jpg" : null;
+    if (ogImage) ogImage = new URL(`${prefix}/_img/${demo.liveVersion}/${ogImage}`, req.url).toString();
+    ogTitle = page.title;
+    ogDesc = page.description;
     if (path === "/") {
-      const [names, library] = await Promise.all([imageNames(env, slug, demo.liveVersion), listLibrary(env, tenant.id)]);
+      const library = await listLibrary(env, tenant.id);
       motion = heroMotion(
         matchVideo(library, demo.intake, slug, pagesOf(kit).map((p) => p.name).join(" ")),
         names.map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`),
@@ -81,9 +99,50 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
   const widget = chatWidget(widgetFor(tenant, demo.intake.chatWidget), accent);
   const headers: Record<string, string> = { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "x-content-type-options": "nosniff", "cache-control": "public, max-age=30" };
   if (sandbox) headers["content-security-policy"] = SANDBOX_CSP;
-  const res = finish(new Response(html, { headers }), { prefix, current, widget, leadUrl: `${prefix}/_lead`, heroMotion: motion, legacyHero: !!motion && !html.includes('class="hero-motion"') });
+  const res = finish(new Response(html, { headers }), {
+    prefix,
+    current,
+    widget,
+    leadUrl: `${prefix}/_lead`,
+    heroMotion: motion,
+    legacyHero: !!motion && !html.includes('class="hero-motion"'),
+    og: { title: ogTitle, description: ogDesc, url: pageUrl.toString(), image: ogImage },
+  });
   ctx.waitUntil(cache.put(req, res.clone()));
   return res;
+}
+
+const BOT = /bot|crawl|spider|slurp|preview|facebookexternalhit|whatsapp|telegram|discord|slack|skype|twitterbot|linkedin|pinterest|curl|wget|python|java\/|headless|lighthouse|pagespeed|gtmetrix|uptime|monitor/i;
+
+/**
+ * Count a page view (not bots, not link-preview fetchers) without slowing the response. The first
+ * view of a day tells the account's webhook: that's when a rep wants to call.
+ */
+function trackView(req: Request, env: Env, ctx: Ctx, slug: string): void {
+  const ua = req.headers.get("user-agent") ?? "";
+  if (!ua || BOT.test(ua)) return;
+  // A build's own review opens the site with ?r=<version>: not a visitor.
+  if (new URL(req.url).searchParams.has("r")) return;
+  ctx.waitUntil(
+    (async () => {
+      const visitor = await sha256Hex(`${clientIp(req)}|${ua}|${new Date().toISOString().slice(0, 10)}`);
+      const r = await countView(env, slug, visitor);
+      if (!r.firstToday) return;
+      const found = await publicDemo(env, slug);
+      if (found?.tenant.webhookUrl) await deliver(env, found.tenant, "demo.viewed", found.demo, undefined, { views_today: r.views, visitors_today: r.visitors });
+    })().catch((e) => console.log("view not counted", e instanceof Error ? e.message : String(e))),
+  );
+}
+
+/** The before/after page: the business's current website beside the new one, with scores. */
+export async function servePitch(req: Request, env: Env, slug: string, prefix: string): Promise<Response> {
+  const found = await publicDemo(env, slug);
+  if (!found?.demo.liveVersion) return text("This demo isn't available.", 404);
+  const version = found.demo.liveVersion;
+  const review = await getReview(env, slug, version);
+  if (!review || !review.shots?.length) return text("The review of this site hasn't run yet. Try again in a few minutes.", 404);
+  const html = pitchPage(found.demo, review, { site: new URL(prefix, req.url).toString(), img: (n) => `${prefix}/_img/${version}/${n}` }, creditFor(found.tenant));
+  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "x-content-type-options": "nosniff", "cache-control": "public, max-age=60" } });
 }
 
 /** A preview photo. Its address names the site version, so it never changes and caches for a year. */

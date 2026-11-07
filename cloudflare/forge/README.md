@@ -216,3 +216,33 @@ A Studio build:
 The public site shows the tier at `/studio` (itself built with the engine) and a concept site for a
 made-up roofer at `/studio/concept`. "Get a Studio preview" requests arrive in Admin → Inquiries
 with `tier: studio`.
+
+## After a build: review, views, outreach, changes, bulk
+
+- **Automatic quality check** (`src/review.ts`): a few minutes after a site goes live, a `review`
+  job opens it in Cloudflare Browser Run, screenshots it on desktop and phone (saved as
+  `shot-desktop.jpg`, `shot-phone.jpg`; a 1200×630 `og.jpg` becomes the link preview), runs checks
+  (sideways scrolling, one h1, alt text, broken links and images, script errors, tap-to-call, a
+  form, text size), has Claude Sonnet critique the screenshots (a few cents), and when the score is
+  under 7 or a hard check fails, writes the home page again with the notes. If the business has a
+  website it is captured too (`old-desktop.jpg`, `old-phone.jpg`) and scored, for the before/after
+  page at `<site>/_pitch`. Owners can re-run it from the demo page.
+  **Budget:** browser seconds are counted per month in `settings` (`browser:YYYY-MM`) and the
+  review stops at `BROWSER_BUDGET_SECONDS` (5 hours, half of the 10 the Workers Paid plan includes),
+  so Browser Run never bills extra. Admin shows the minutes used. Without the binding, or past the
+  budget, sites still go live; the review is just marked skipped.
+- **Who looked:** every real page view (bots and link-preview fetchers excluded) is counted per day
+  with a hashed visitor id (`demo_views`, `demo_visitors`; hashes kept 60 days). The dashboard
+  shows 7-day views; the demo page shows today / 7 / 30 days and a per-day table. The first view of
+  each day sends the account's webhook a `demo.viewed` event with that day's counts.
+- **Outreach kit:** one click writes an email, a text and a 30-second call script with Haiku, and
+  the demo page shows a QR code for the site link (`src/outreach.ts`).
+- **Change requests:** "Request a change" rewrites one page of the live site with the instruction
+  on the cheaper model (`change` job; no credit, cost recorded as `change`). "Quick text fix"
+  replaces an exact phrase on every page with no AI.
+- **Bulk builds:** up to 25 businesses at once (a name, `name | city`, or a Google Maps link per
+  line). Credits for the batch are checked first; three build at a time and the rest wait with
+  status `queued`, started when a build finishes (and by the hourly cron as a safety net).
+- **Anti-template rules:** the design brief now names the devices that make a site look AI-made
+  (an eyebrow on every heading, numbered markers everywhere, gradient text, identical card grids,
+  nested cards, pill-rounded cards) and limits them to deliberate use.

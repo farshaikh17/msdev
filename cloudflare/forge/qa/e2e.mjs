@@ -167,6 +167,27 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
     const res = await sp.evaluate(async (s) => (await fetch(`/s/${s}/_lead`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ page: "/", fields: { name: "Visitor Vee", phone: "555-0100" } }) })).status, slug);
     ok(res === 200, "lead status " + res);
   });
+  await step("demo page has the quality check, who looked, outreach and change sections", async () => {
+    await op.goto(`${BASE}/demos/${slug}`); const t = await op.content();
+    for (const x of ["Who's looked", "Outreach kit", "<svg"]) ok(t.includes(x), x + " missing");
+    // The quality check and change box need a Claude-built site; a template draft (no AI key here) has neither, by design.
+    const ai = t.includes("Designed by Claude"); ok(ai ? t.includes("Quality check") && t.includes("Request a change") : !t.includes("Request a change"), "sections don't match the site type");
+  });
+  await step("a real visitor is counted; a headless bot is not", async () => {
+    const c = await browser.newContext({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", viewport: { width: 390, height: 844 } });
+    const v = await c.newPage(); await v.goto(`${BASE}/s/${slug}`); await v.waitForTimeout(800); await c.close();
+    await op.goto(`${BASE}/`); ok(await op.locator("tr", { hasText: "Dummy Plumbing Co" }).first().locator("text=1 today").isVisible(), "view not counted on the dashboard");
+  });
+  await step("quick text fix changes the live site", async () => {
+    await op.goto(`${BASE}/demos/${slug}`);
+    if (!(await op.locator("input[name=find]").count())) { log("      (template site: no change box, as designed)"); return; }
+    await op.fill("input[name=find]", "Dummy Plumbing Co"); await op.fill("input[name=replace]", "Dummy Plumbing Company"); await op.click("button:has-text('Replace everywhere')");
+    await op.waitForURL(/demos\//); ok((await op.content()).includes("wasn't found") || (await op.content()).includes("Replaced"), "no result message");
+  });
+  await step("bulk build queues beyond three at a time", async () => {
+    await op.goto(`${BASE}/`); await op.click("summary:has-text('Build several at once')"); await op.fill("textarea[name=bulk]", "Bulk One | Tampa, FL\nBulk Two | Austin, TX\nBulk Three\nBulk Four");
+    await op.click("button:has-text('Build them all')"); await op.waitForURL(/\/\?/); const t = await op.content(); ok(/Started \d+ build/.test(t), "no bulk message: " + (t.match(/flash[^<]*<[^>]*>([^<]*)/) || [])[1]);
+  });
   await step("the submission appears on the demo page for the owner", async () => { await op.goto(`${BASE}/demos/${slug}`); ok(await op.isVisible("text=Visitor Vee"), "lead not shown"); });
   await step("owner team page: invite a member", async () => {
     await op.goto(BASE + "/team"); await op.fill("input[name=email]", "member@dummy-agency.test"); await op.click("button:has-text('invite'), button:has-text('Invite'), button:has-text('Create')");

@@ -282,7 +282,8 @@ Our system assembles each page as: <!doctype html><html data-theme="light|dark">
 - Hero: eyebrow line (location · trade · since/licence if known), a big confident headline with an accent phrase in italic serif or the accent colour, a one-paragraph promise, two buttons, and 3–4 trust points with tiny icons.
 - The home hero has a moving background (a video or slowly animating photos) that our system supplies. Build it as a full-bleed <section> with position:relative, overflow:hidden and a min-height of about 88vh (about 640px on phones) whose FIRST child is exactly <div class="hero-motion" aria-hidden="true"></div> (leave it empty and don't style it; our system fills and positions it), then a gradient overlay layer (position:absolute; inset:0) that keeps the text readable over any photo in both modes, then the content with position:relative and z-index:2. Inner pages keep a page hero without the motion layer.
 - Inner pages open with a page hero in the same visual language (smaller), with an eyebrow, h1, one line and a breadcrumb, and then have at least 5–6 meaningful sections written for that page — never the same generic blocks or paragraphs on every page. Vary layouts, image scales and backgrounds from section to section.
-- Section eyebrows in small letter-spaced caps with a short rule, italic accent words in headings, 1200px max content width, generous vertical rhythm (≈96–128px between sections on desktop), soft 1px borders, large radii (16–24px), subtle shadows, hover states on every interactive element, balanced headings (text-wrap: balance).
+- 1200px max content width, generous and VARIED vertical rhythm (≈96–128px between sections on desktop, not identical padding everywhere), soft 1px borders, cards rounded 12–16px (images and big panels up to 24px), subtle shadows, hover states on every interactive element, balanced headings (text-wrap: balance).
+- Devices that read as "AI template" when used as wallpaper (the wallpaper test: a device on 3 or more sections is decoration, cut it back): a small caps eyebrow above every heading (use at most 2 per page), numbered 01/02/03 markers on everything (only where there is a real sequence), the same icon+heading+text card grid repeated section after section (vary the layout: a split, a full-bleed band, a list, a timeline, a single big quote), gradient text, nested cards, decorative glass blur, a coloured left stripe on cards, cards rounded like pills (32px+), hand-drawn sketchy SVG scenes standing in for photos. Tinted neutrals toward the brand hue beat flat grey or default beige. Text contrast at least 4.5:1 for body copy; body line length 65–75 characters; a type scale with clear steps (ratio ≥ 1.25); no all-caps body copy.
 - Reviews: real quotes when supplied (name + context). Otherwise clearly-labelled samples with the name "Sample review" and the note "Sample reviews — your Google reviews appear here at launch." Never invent a star rating or review count.
 - Service area: the real map embed with a readable list of the places served; never a decorative or made-up map.
 - FAQ: <details>/<summary> accordions, direct answers.
@@ -307,7 +308,7 @@ Pair the display face with a clean text face (Hanken Grotesk, Inter Tight, Manro
 
 Signature moves: use most of these on the home page and several on every inner page:
 - The hero: display type at about clamp(3.2rem, min(11vw, 16vh), 13rem) with data-split="chars" (keep the headline short: 2–4 lines on desktop; the headline, its paragraph and the CTA must all fit in the first screen at 1440×900 and at 390×844, clear of the header), over the moving background, tinted by a living shader (data-shader) in the brand colours, with a large round magnetic CTA (data-magnetic) and the phone close by.
-- Numbered section labels (01 — Services) and huge section headings with data-split="lines"; a manifesto statement with data-scrub-text.
+- Huge section headings with data-split="lines"; a manifesto statement with data-scrub-text; a numbered label only on the one or two sections that are a real index or sequence (never as decoration on every section).
 - At least one marquee (services, towns or a promise) and one big interactive moment: a pinned horizontal gallery (data-horizontal) or stacked service cards (data-stack).
 - A services index as big full-width rows (number, name, arrow) that reveal a floating image preview following the pointer (data-follow) and lead to each service page.
 - Images in rounded or arched masks with data-parallax; data-cursor-text on every card and gallery item; data-tilt on feature cards; data-distort on a hero or gallery image.
@@ -499,7 +500,7 @@ type Content = string | { type: "text"; text: string; cache_control?: { type: "e
 type Effort = "low" | "medium" | "high";
 
 /** `cut`: the reply hit max_tokens before it finished. */
-async function ask(
+export async function ask(
   env: Env,
   content: Content,
   maxTokens: number,
@@ -604,7 +605,14 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[], styl
  * Stage 2: one page, written against the kit so every page matches. Everything but the page's
  * own task is identical across a site's inner pages and cached, so later pages pay a tenth for it.
  */
-export async function designSitePage(env: Env, kit: Kit, page: PageSpec): Promise<{ page: PageDraft; usage: unknown }> {
+/** What a second pass on a page is for: review notes (from screenshots) and/or a requested change. */
+export interface PageRevision {
+  notes?: string[];
+  instruction?: string;
+  current?: PageDraft;
+}
+
+export async function designSitePage(env: Env, kit: Kit, page: PageSpec, rev: PageRevision = {}): Promise<{ page: PageDraft; usage: unknown }> {
   const shared = `## The business
 ${kit.brief}
 
@@ -626,8 +634,17 @@ Components:
 ${kit.components ?? ""}
 
 ${PAGE_TASK}`;
-  const task = `## Write this page: ${page.name} (${page.path})
-${page.brief}`;
+  const current = rev.current
+    ? `\n\n## The page as it is now\nCSS:\n${rev.current.css || "(none)"}\n\nMAIN:\n${rev.current.body}`
+    : "";
+  const notes = rev.notes?.length
+    ? `\n\n## Review of the rendered page (from screenshots on desktop and on a phone)\nWrite the page again: keep everything that works (the same copy and components unless a point below says otherwise) and fix every point:\n${rev.notes.map((n) => `- ${n}`).join("\n")}`
+    : "";
+  const change = rev.instruction
+    ? `\n\n## Requested change\n${rev.instruction}\n\nApply only this change. Keep everything else exactly as it is (same copy, same sections, same components), and reply with the whole page.`
+    : "";
+  const task = `## ${rev.instruction ? "Change" : rev.notes?.length ? "Improve" : "Write"} this page: ${page.name} (${page.path})
+${page.brief}${current}${notes}${change}`;
   // The home page is the showcase, so it gets the design model; the rest follow the kit on the cheaper one.
   const home = page.path === "/";
   const studio = kit.style === "studio";

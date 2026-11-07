@@ -18,7 +18,7 @@ interface Extra {
   err?: string;
 }
 
-export function adminPage(s: Session, tenants: TenantSummary[], extra: Extra = {}, newInquiries = 0): Response {
+export function adminPage(s: Session, tenants: TenantSummary[], extra: Extra = {}, newInquiries = 0, browser: { seconds: number; budget: number } = { seconds: 0, budget: 1 }): Response {
   const total = tenants.reduce((a, t) => a + t.costTotal, 0);
   const month = tenants.reduce((a, t) => a + t.costMonth, 0);
   return page(
@@ -29,7 +29,8 @@ export function adminPage(s: Session, tenants: TenantSummary[], extra: Extra = {
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
 <div class="card" style="gap:2px;padding:16px"><span class="note">Accounts</span><b style="font:800 1.6rem var(--display)">${tenants.length}</b></div>
 <div class="card" style="gap:2px;padding:16px"><span class="note">Claude cost this month</span><b style="font:800 1.6rem var(--display)">${usd(month)}</b></div>
-<div class="card" style="gap:2px;padding:16px"><span class="note">Claude cost, all time</span><b style="font:800 1.6rem var(--display)">${usd(total)}</b></div></div>
+<div class="card" style="gap:2px;padding:16px"><span class="note">Claude cost, all time</span><b style="font:800 1.6rem var(--display)">${usd(total)}</b></div>
+<div class="card" style="gap:2px;padding:16px" title="Browser Run time used by the automatic reviews this month. Capped at half of what the plan includes, so it never bills extra."><span class="note">Review browser time this month</span><b style="font:800 1.6rem var(--display)">${Math.round(browser.seconds / 60)} <span class="note" style="font-size:.85rem">of ${Math.round(browser.budget / 60)} min</span></b></div></div>
 <div class="table"><table><thead><tr><th>Account</th><th>Status</th><th>Credits</th><th>Demos</th><th>People</th><th>Builds</th><th>Cost (month)</th><th>Cost (all)</th><th></th></tr></thead><tbody>${tenants
       .map(
         (t) =>

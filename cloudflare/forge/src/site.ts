@@ -106,13 +106,32 @@ export function formScript(url: string): string {
  * Point the site's root-relative links ("/services") at this demo ("/<slug>/services"),
  * mark the current page in the nav, fill the hero's motion layer, and add the chat widget.
  */
-export function finish(res: Response, opts: { prefix: string; current: string | null; widget: string; leadUrl: string; heroMotion?: string; legacyHero?: boolean }): Response {
+export interface OgTags {
+  title: string;
+  description: string;
+  url: string;
+  image: string | null;
+}
+
+/** Social/link-preview tags for a demo page (iMessage, WhatsApp, Slack and co. read these). */
+export function ogHtml(og: OgTags): string {
+  return `<meta property="og:type" content="website"><meta property="og:title" content="${esc(og.title)}"><meta property="og:description" content="${esc(og.description)}"><meta property="og:url" content="${esc(og.url)}">${
+    og.image ? `<meta property="og:image" content="${esc(og.image)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image">` : '<meta name="twitter:card" content="summary">'
+  }`;
+}
+
+export function finish(res: Response, opts: { prefix: string; current: string | null; widget: string; leadUrl: string; heroMotion?: string; legacyHero?: boolean; og?: OgTags }): Response {
   const local = (v: string | null) => !!v && v.startsWith("/") && !v.startsWith("//");
   const move = (v: string) => {
     const [, path, rest] = v.match(/^([^?#]*)(.*)$/)!;
     return `${opts.prefix}${path === "/" ? "" : path}${rest}`;
   };
   let r = new HTMLRewriter()
+    .on("head", {
+      element(e) {
+        if (opts.og) e.append(ogHtml(opts.og), { html: true });
+      },
+    })
     .on("a[href]", {
       element(e) {
         const href = e.getAttribute("href");

@@ -1,11 +1,15 @@
 /** Demos and settings in D1. Demos are archived, not deleted. */
 import { Intake, SiteContent, type Demo } from "../../../src/forge/schema";
+import type { Outreach } from "./outreach";
+import type { Review } from "./review";
 import type { Kit, PageDraft } from "./designer";
 import type { Env } from "./env";
 import { parseKeywords, parseVideoUrls, type LibraryEntry } from "./hero";
 import { recordBuildCost, refundBuild } from "./tenants";
 
 interface Row {
+  outreach?: string | null;
+  change_note?: string | null;
   html: string | null;
   live_version: string | null;
   build_version: string | null;
@@ -35,7 +39,11 @@ export type Stored = Demo & {
   liveVersion: string | null;
   buildVersion: string | null;
   buildStage: "kit" | "pages" | null;
-  buildStatus: "building" | "ready" | "failed";
+  buildStatus: "building" | "ready" | "failed" | "queued";
+  /** The outreach kit written for this demo, if any. */
+  outreach: Outreach | null;
+  /** The latest change request and where it is. */
+  changeNote: ChangeNote | null;
   buildError: string;
   /** What the live design cost to build (US$) and how many Claude calls it took; null before the first build. */
   buildCost: { usd: number; calls: number } | null;
@@ -43,6 +51,8 @@ export type Stored = Demo & {
 
 export interface Listed {
   buildStatus: string;
+  /** Who has looked at it (absent before the first view). */
+  views?: ViewStat;
   slug: string;
   businessName: string;
   industry: string;
@@ -52,6 +62,23 @@ export interface Listed {
 
 /** A build that has made no progress this long was stopped by the platform (a queue job runs at most 15 minutes). */
 const STALE_MS = 16 * 60_000;
+
+export interface ChangeNote {
+  path: string;
+  instruction: string;
+  status: "working" | "done" | "failed";
+  error: string;
+  at: string;
+}
+
+function parseJson<T>(raw: string | null | undefined): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
 
 function costFrom(raw: string | null): Stored["buildCost"] {
   if (!raw) return null;
@@ -72,7 +99,9 @@ function toDemo(r: Row): Stored {
     buildVersion: r.build_version ?? null,
     buildStage: r.build_stage === "kit" || r.build_stage === "pages" ? r.build_stage : null,
     buildCost: costFrom(r.build_usage),
-    buildStatus: stale ? "failed" : r.build_status === "building" || r.build_status === "failed" ? r.build_status : "ready",
+    buildStatus: stale ? "failed" : r.build_status === "building" || r.build_status === "failed" || r.build_status === "queued" ? r.build_status : "ready",
+    outreach: parseJson<Outreach>(r.outreach),
+    changeNote: parseJson<ChangeNote>(r.change_note),
     buildError: stale ? "The build stopped before finishing." : (r.build_error ?? ""),
     slug: r.slug,
     intake: Intake.parse(JSON.parse(r.intake)),
@@ -397,4 +426,125 @@ export async function pruneThrottle(env: Env): Promise<void> {
 export async function countLeads(env: Env, slug: string): Promise<number> {
   const r = await env.DB.prepare("SELECT count(*) c FROM leads WHERE slug = ?").bind(slug).first<{ c: number }>();
   return r?.c ?? 0;
+}
+
+// ---- The automatic review ---------------------------------------------------------------------
+
+export async function saveReview(env: Env, slug: string, version: string, review: Review): Promise<void> {
+  await env.DB.prepare("UPDATE site_versions SET review = ? WHERE slug = ? AND version = ?").bind(JSON.stringify(review), slug, version).run();
+}
+
+export async function getReview(env: Env, slug: string, version: string): Promise<Review | null> {
+  const r = await env.DB.prepare("SELECT review FROM site_versions WHERE slug = ? AND version = ?").bind(slug, version).first<{ review: string | null }>();
+  return parseJson<Review>(r?.review);
+}
+
+// ---- Who looked at a demo ---------------------------------------------------------------------
+
+export interface ViewStat {
+  today: number;
+  week: number;
+  month: number;
+  visitorsWeek: number;
+  lastAt: string | null;
+  days: { day: string; views: number; visitors: number }[];
+}
+
+const dayOf = (d = new Date()) => d.toISOString().slice(0, 10);
+const daysAgo = (n: number) => dayOf(new Date(Date.now() - n * 86_400_000));
+
+/** Count one view. `visitor` is a hash, never an address. Returns whether this is the day's first view. */
+export async function countView(env: Env, slug: string, visitor: string): Promise<{ firstToday: boolean; views: number; visitors: number }> {
+  const day = dayOf();
+  const now = new Date().toISOString();
+  const before = await env.DB.prepare("SELECT views FROM demo_views WHERE slug = ? AND day = ?").bind(slug, day).first<{ views: number }>();
+  await env.DB.prepare("INSERT INTO demo_views (slug, day, views, last_at) VALUES (?1, ?2, 1, ?3) ON CONFLICT (slug, day) DO UPDATE SET views = views + 1, last_at = ?3").bind(slug, day, now).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO demo_visitors (slug, day, visitor) VALUES (?, ?, ?)").bind(slug, day, visitor).run();
+  const v = await env.DB.prepare("SELECT count(*) c FROM demo_visitors WHERE slug = ? AND day = ?").bind(slug, day).first<{ c: number }>();
+  return { firstToday: !before, views: (before?.views ?? 0) + 1, visitors: v?.c ?? 0 };
+}
+
+/** View counts for an account's demos (or the given slugs), with a per-day breakdown for the last `detailDays`. */
+export async function viewStats(env: Env, scope: { tenantId: number } | { slugs: string[] }, detailDays = 14): Promise<Map<string, ViewStat>> {
+  const since = daysAgo(30);
+  const rows =
+    "tenantId" in scope
+      ? await env.DB.prepare("SELECT v.slug, v.day, v.views, v.last_at, (SELECT count(*) FROM demo_visitors x WHERE x.slug = v.slug AND x.day = v.day) visitors FROM demo_views v JOIN demos d ON d.slug = v.slug WHERE d.tenant_id = ? AND v.day >= ? ORDER BY v.day DESC")
+          .bind(scope.tenantId, since)
+          .all<{ slug: string; day: string; views: number; last_at: string; visitors: number }>()
+      : scope.slugs.length
+        ? await env.DB.prepare(`SELECT v.slug, v.day, v.views, v.last_at, (SELECT count(*) FROM demo_visitors x WHERE x.slug = v.slug AND x.day = v.day) visitors FROM demo_views v WHERE v.slug IN (${scope.slugs.map(() => "?").join(",")}) AND v.day >= ? ORDER BY v.day DESC`)
+            .bind(...scope.slugs, since)
+            .all<{ slug: string; day: string; views: number; last_at: string; visitors: number }>()
+        : { results: [] };
+  const out = new Map<string, ViewStat>();
+  const today = dayOf();
+  const week = daysAgo(6);
+  const detail = daysAgo(detailDays - 1);
+  for (const r of rows.results) {
+    const st = out.get(r.slug) ?? { today: 0, week: 0, month: 0, visitorsWeek: 0, lastAt: null, days: [] };
+    st.month += r.views;
+    if (r.day >= week) {
+      st.week += r.views;
+      st.visitorsWeek += r.visitors;
+    }
+    if (r.day === today) st.today += r.views;
+    if (!st.lastAt || r.last_at > st.lastAt) st.lastAt = r.last_at;
+    if (r.day >= detail) st.days.push({ day: r.day, views: r.views, visitors: r.visitors });
+    out.set(r.slug, st);
+  }
+  return out;
+}
+
+/** Visitor hashes older than 60 days aren't needed (the daily totals stay). */
+export async function pruneVisitors(env: Env): Promise<void> {
+  await env.DB.prepare("DELETE FROM demo_visitors WHERE day < ?").bind(daysAgo(60)).run();
+}
+
+// ---- Outreach, change requests, queued builds -------------------------------------------------
+
+export async function setOutreach(env: Env, slug: string, outreach: Outreach): Promise<void> {
+  await env.DB.prepare("UPDATE demos SET outreach = ? WHERE slug = ?").bind(JSON.stringify(outreach), slug).run();
+}
+
+export async function setChangeNote(env: Env, slug: string, note: ChangeNote): Promise<void> {
+  await env.DB.prepare("UPDATE demos SET change_note = ? WHERE slug = ?").bind(JSON.stringify(note), slug).run();
+}
+
+/** Put a demo in the account's build queue (the 3-at-a-time limit was reached). It starts when a slot frees up. */
+export async function markQueued(env: Env, slug: string): Promise<void> {
+  await env.DB.prepare("UPDATE demos SET build_status = 'queued', build_error = NULL, updated_at = ? WHERE slug = ?").bind(new Date().toISOString(), slug).run();
+}
+
+export async function nextQueued(env: Env, tenantId: number): Promise<string | null> {
+  const r = await env.DB.prepare("SELECT slug FROM demos WHERE tenant_id = ? AND status = 'active' AND build_status = 'queued' ORDER BY created_at ASC LIMIT 1").bind(tenantId).first<{ slug: string }>();
+  return r?.slug ?? null;
+}
+
+export async function queuedTenants(env: Env): Promise<number[]> {
+  const { results } = await env.DB.prepare("SELECT DISTINCT tenant_id FROM demos WHERE status = 'active' AND build_status = 'queued'").all<{ tenant_id: number }>();
+  return results.map((r) => r.tenant_id);
+}
+
+export async function markQueueFailed(env: Env, slug: string, error: string): Promise<void> {
+  await env.DB.prepare("UPDATE demos SET build_status = 'failed', build_error = ?, updated_at = ? WHERE slug = ? AND build_status = 'queued'").bind(error.slice(0, 500), new Date().toISOString(), slug).run();
+}
+
+/** Replace a phrase on every page of the live version (exact text, HTML-escaped to match what the pages hold). Returns how many places changed. */
+export async function replaceText(env: Env, slug: string, version: string, find: string, replacement: string): Promise<number> {
+  const { results } = await env.DB.prepare("SELECT path, title, description, css, body FROM site_pages WHERE slug = ? AND version = ?").bind(slug, version).all<PageDraft & { path: string }>();
+  const escHtml = (t: string) => t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+  let count = 0;
+  for (const p of results) {
+    const body = p.body.split(escHtml(find));
+    const title = p.title.split(find);
+    const description = p.description.split(find);
+    const n = body.length - 1 + title.length - 1 + description.length - 1;
+    if (!n) continue;
+    count += n;
+    await env.DB.prepare("UPDATE site_pages SET title = ?, description = ?, body = ? WHERE slug = ? AND version = ? AND path = ?")
+      .bind(title.join(replacement), description.join(replacement), body.join(escHtml(replacement)), slug, version, p.path)
+      .run();
+  }
+  return count;
 }

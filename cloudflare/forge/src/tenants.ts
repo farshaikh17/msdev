@@ -418,7 +418,7 @@ export async function listLedger(env: Env, tenantId: number, limit = 30): Promis
 // ---- Cost and usage ----------------------------------------------------------------------------
 
 /** Record what a finished (or failed) build cost, once per version and outcome. */
-export async function recordBuildCost(env: Env, tenantId: number, slug: string, version: string, usd: number, calls: number, outcome: "ready" | "failed"): Promise<void> {
+export async function recordBuildCost(env: Env, tenantId: number, slug: string, version: string, usd: number, calls: number, outcome: "ready" | "failed" | "review" | "change"): Promise<void> {
   await env.DB.prepare("INSERT OR IGNORE INTO build_costs (tenant_id, slug, version, usd, calls, outcome, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(tenantId, slug, version, usd, calls, outcome, now()).run();
 }
 
