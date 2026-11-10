@@ -58,7 +58,8 @@ export function matchVideo(library: LibraryEntry[], i: Intake, slug: string, sit
     if (score > bestScore) [clips, bestScore] = [[], score];
     clips.push(...e.urls);
   }
-  if (!clips.length) return null;
+  // One stray word in the services (a motel's "breakfast") isn't a match: the trade must hit, or two words.
+  if (!clips.length || bestScore < 2) return null;
   // Same clip for a given demo every time; different demos in the trade spread across the clips.
   let h = 0;
   for (const c of slug) h = (h * 31 + c.charCodeAt(0)) >>> 0;

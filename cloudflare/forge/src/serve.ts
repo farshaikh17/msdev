@@ -87,7 +87,8 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
       const library = await listLibrary(env, tenant.id);
       motion = heroMotion(
         matchVideo(library, demo.intake, slug, pagesOf(kit).map((p) => p.name).join(" ")),
-        names.map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`),
+        // Only the site's own photos: never the link preview, review screenshots or before/after pairs.
+        names.filter((n) => /^photo-\d+\.jpg$/.test(n)).map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`),
       );
     }
   } else {

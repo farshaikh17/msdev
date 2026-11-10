@@ -32,7 +32,10 @@ export function chatWidget(id: string, accent: string): string {
   const css = c
     ? `<style>chat-widget{--chat-widget-primary-color:${c}!important;--chat-widget-active-color:${c}!important;--chat-widget-bubble-color:${c}!important}</style>`
     : "";
-  return `${css}<script src="https://widgets.leadconnectorhq.com/loader.js" data-resources-url="https://widgets.leadconnectorhq.com/chat-widget/loader.js" data-widget-id="${id}"></script>`;
+  // The widget's greeting bubble ("Hi there! Have a question?") lands on top of the hero: keep it
+  // off phones altogether, and on desktop hold it back for ten seconds. The chat button itself stays.
+  const quiet = `<script>(function(){var n=0,t=setInterval(function(){var w=document.querySelector("chat-widget"),r=w&&w.shadowRoot;if(r){clearInterval(t);var s=document.createElement("style");s.textContent=".lc_text-widget--prompt{display:none!important}";r.appendChild(s);if(matchMedia("(min-width:768px)").matches)setTimeout(function(){s.remove()},10000)}else if(++n>80)clearInterval(t)},250)})()</script>`;
+  return `${css}<script src="https://widgets.leadconnectorhq.com/loader.js" data-resources-url="https://widgets.leadconnectorhq.com/chat-widget/loader.js" data-widget-id="${id}"></script>${quiet}`;
 }
 
 /** Fallbacks under the kit's own CSS: legal pages and form messages stay readable even if the kit missed them. */

@@ -6,7 +6,7 @@
  */
 
 export interface Profile {
-  id: "contractor" | "restaurant" | "beauty" | "health" | "professional" | "fitness" | "retail";
+  id: "contractor" | "restaurant" | "beauty" | "health" | "professional" | "fitness" | "retail" | "lodging";
   /** The page listing what the business offers, and the pages under it. */
   items: { name: string; path: string; one: string; many: string; example: string };
   /** The main action a visitor takes. */
@@ -235,9 +235,45 @@ const P: Record<Exclude<Profile["id"], "contractor">, Omit<Profile, "id">> = {
     item: "A page for the range \"{name}\". Page hero (breadcrumb Home / Shop / {name}); what's in the range, as designed tiles with a short description each (plausible for this kind of shop; 'Sample selection — the real range replaces this at launch' in small type unless real items were given; never a price unless given); what makes it good; who it suits or the occasions; a photo; an enquiry CTA; links to 2–3 other ranges.",
     faq: "opening hours and visiting, orders and custom requests, the products, gifts and occasions",
   },
+  lodging: {
+    items: { name: "Rooms", path: "/rooms", one: "room type or amenity", many: "rooms and amenities", example: "Standard Rooms, Family Suites, Extended Stays, Breakfast" },
+    cta: {
+      name: "Check Rates",
+      path: "/rates",
+      form: "name, phone, email, check-in date, check-out date, guests, room type (select), notes",
+      about: "how the team replies with open rooms and rates, that nothing is booked until the guest confirms, and check-in and check-out in general terms (no invented prices or times)",
+    },
+    visit: {
+      name: "Location",
+      path: "/location",
+      brief: "Page hero; the address with the real map embed large; getting here by road (general, nothing invented); parking; front desk hours and check-in if given, otherwise 'Call the front desk'; what's nearby in general terms (never a named attraction that wasn't given); the phone as a tel: link; closing CTA.",
+    },
+    steps: {
+      name: "Your Stay",
+      path: "/your-stay",
+      brief: "Page hero; a stay from asking about rates to check-out as a calm visual timeline (4–5 steps); what's in every room and what's included (only what was given; otherwise general comforts without specifics); families, work crews and long stays; policies in general terms (no invented fees); FAQs; closing CTA.",
+    },
+    gallery: {
+      name: "Gallery",
+      brief: "Page hero; the rooms, the building and the surroundings, using only the supplied photos and the generated preview photos with short captions; what guests notice first; a review; closing CTA to check rates.",
+    },
+    about: "Page hero; the story of the place and the people who run it (only facts given; warm and general if few are known); what kind of stay it offers and who it suits; what guests say (2–3 reviews); location summary; closing CTA.",
+    home: [
+      "Rooms: photo-led cards for every room or amenity page ({items}), each linking to its page, plus 'All rooms' → {itemsPath}.",
+      "What's included: the comforts guests get (only those given; otherwise general ones without specifics), shown as a calm editorial list, not a card grid.",
+      "The place: the building, the rooms and the setting in photos, linking to /gallery.",
+      "Who stays here: travellers passing through, families, work crews, long stays, each with what suits them.",
+      "Our story: the people who run it, linking to /about.",
+      "Your stay, step by step, linking to {stepsPath}.",
+      "Location: the real map embed and the address, linking to {visitPath}.",
+    ],
+    item: "A detail page for \"{name}\". Page hero (breadcrumb Home / Rooms / {name}); what it is and who it suits; what's included (a checklist of only what was given, otherwise general comforts; never a price, size or bed count that wasn't given); photos; how to ask about it; FAQs; a 'Check Rates' CTA; links to 2–3 other rooms or amenities.",
+    faq: "rates and booking, check-in and check-out, the rooms and what's included, parking, pets and long stays",
+  },
 };
 
 const MATCH: [RegExp, Exclude<Profile["id"], "contractor">][] = [
+  [/\b(motel|hotel|inn|lodge|lodging|resort|bed (and|&) breakfast|b&b|guest ?house|hostel|cabins?|campground|rv park|vacation rentals?)\b/i, "lodging"],
   [/\b(restaurant|bar|grill|grille|pub|tavern|saloon|brewery|brewing|taproom|steakhouse|bbq|barbecue|diner|kitchen|eatery|bistro|cantina|taqueria|pizza|pizzeria|sushi|burgers?|wings|cafe|café|coffee|bakery|deli|donuts?|bagels?|ice cream|creamery|food truck|catering)\b/i, "restaurant"],
   [/\b(salon|barber|barbershop|hair|nails?|lash|lashes|brows?|beauty|spa|med ?spa|massage|tattoo|aesthetic|waxing|makeup)\b/i, "beauty"],
   [/\b(dental|dentist|dentistry|orthodont\w*|medical|clinic|doctor|physician|chiropract\w*|physio\w*|physical therapy|therap(y|ist)|optomet\w*|eye care|dermatolog\w*|pediatric\w*|veterinar\w*|vet|animal hospital|urgent care|counsel(l)?ing)\b/i, "health"],

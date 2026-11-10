@@ -55,6 +55,8 @@ describe("Forge worker — multi-page sites", () => {
     expect(kind("Harper & Lane", "Law Firm")).toBe("professional");
     expect(kind("Petal & Stem Florist")).toBe("retail");
     expect(kind("The Grill", "Roofing")).toBe("contractor");
+    expect(kind("B&B Motel", "Motel")).toBe("lodging");
+    expect(sitemapFor(Intake.parse({ businessName: "B&B Motel", industry: "Motel" })).map((p) => p.path)).toEqual(expect.arrayContaining(["/rooms", "/rates", "/your-stay", "/location"]));
     expect(profileNote(Intake.parse({ businessName: "Acme Plumbing" }))).toBe("");
   });
 
