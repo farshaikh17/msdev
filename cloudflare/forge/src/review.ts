@@ -112,6 +112,8 @@ export interface Browser {
 }
 export interface ReviewDeps {
   launch(env: Env): Promise<Browser>;
+  /** Wait (a stand-in in tests, so they don't sit through the intro animations). */
+  sleep?(ms: number): Promise<void>;
   critique(env: Env, shots: { desktop: Uint8Array; phone: Uint8Array }, facts: string, studio?: boolean): Promise<{ score: number; verdict: string; strengths: string[]; issues: Issue[]; costUsd: number }>;
 }
 
@@ -224,6 +226,21 @@ export function scoreOld(f: PageFacts | null): { score: number; checks: Check[] 
   return { score: Math.max(1, Math.min(10, score)), checks };
 }
 
+/**
+ * Open a page and let it settle. A busy page (chat widget, animation engine, video) may never go
+ * fully quiet, so running out of time waiting for quiet is fine: the page has loaded by then.
+ */
+async function visit(page: BrowserPage, url: string, settleMs: number, sleep: (ms: number) => Promise<void>): Promise<void> {
+  try {
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 22_000 });
+  } catch (e) {
+    if (!/timeout|exceeded/i.test(e instanceof Error ? e.message : String(e))) throw e;
+  }
+  await sleep(settleMs);
+}
+
+const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 /** Run the review for a version that is live. Never throws: whatever happens is recorded on the version. */
 export async function reviewSite(env: Env, slug: string, version: string, deps: ReviewDeps = realDeps): Promise<Review> {
   const at = new Date().toISOString();
@@ -247,6 +264,9 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
   const siteUrl = `${base}${prefix}?r=${version}`;
 
   const started = Date.now();
+  const sleep = deps.sleep ?? realSleep;
+  // A Studio site opens with an intro (preloader, then the headline assembling): wait it out so the picture shows the site.
+  const settle = kit.style === "studio" ? 5500 : 1200;
   let browser: Browser | null = null;
   const shots: string[] = [];
   let review: Review = { at };
@@ -261,15 +281,15 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
 
     // The new site: desktop, then phone, then a social-preview frame.
     await page.setViewport({ width: 1280, height: 800 });
-    await page.goto(siteUrl, { waitUntil: "networkidle0", timeout: 25_000 });
+    await visit(page, siteUrl, settle, sleep);
     const desktop = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
     const dFacts = factsOf(await page.evaluate<PageFacts>(FACTS));
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true });
-    await page.goto(siteUrl, { waitUntil: "networkidle0", timeout: 25_000 });
+    await visit(page, siteUrl, settle, sleep);
     const phone = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
     const pFacts = factsOf(await page.evaluate<PageFacts>(FACTS));
     await page.setViewport({ width: 1200, height: 630 });
-    await page.goto(siteUrl, { waitUntil: "networkidle0", timeout: 20_000 });
+    await visit(page, siteUrl, settle, sleep);
     const og = bytesOf(await page.screenshot({ type: "jpeg", quality: 78 }));
     await saveImage(env, slug, version, "shot-desktop.jpg", "The home page on desktop", desktop);
     await saveImage(env, slug, version, "shot-phone.jpg", "The home page on a phone", phone);
@@ -283,12 +303,10 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     if (demo.intake.websiteUrl) {
       try {
         await page.setViewport({ width: 1280, height: 800 });
-        await page.goto(demo.intake.websiteUrl, { waitUntil: "domcontentloaded", timeout: 20_000 });
-        await new Promise((r) => setTimeout(r, 1500));
+        await visit(page, demo.intake.websiteUrl, 1500, sleep);
         const oDesk = bytesOf(await page.screenshot({ type: "jpeg", quality: 65 }));
         await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true });
-        await page.goto(demo.intake.websiteUrl, { waitUntil: "domcontentloaded", timeout: 20_000 });
-        await new Promise((r) => setTimeout(r, 1500));
+        await visit(page, demo.intake.websiteUrl, 1500, sleep);
         const oPhone = bytesOf(await page.screenshot({ type: "jpeg", quality: 65 }));
         const oFacts = factsOf(await page.evaluate<PageFacts>(FACTS));
         await saveImage(env, slug, version, "old-desktop.jpg", "Their current website on desktop", oDesk);

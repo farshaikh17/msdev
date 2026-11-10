@@ -95,7 +95,7 @@ describe("the automatic review", () => {
     const links = ["/" + slug, `/${slug}/about`, `/${slug}/nowhere`, "tel:+15555555555"];
     const { browser, visited } = fakeBrowser(goodFacts(links));
     const critique = vi.fn<ReviewDeps["critique"]>(async () => ({ score: 5, verdict: "Flat hero.", strengths: ["Clear phone"], issues: [{ what: "Hero lacks contrast", fix: "Darken the overlay", severity: "high" as const }], costUsd: 0.012 }));
-    const deps: ReviewDeps = { launch: async () => browser, critique };
+    const deps: ReviewDeps = { launch: async () => browser, critique, sleep: async () => undefined };
     const env = { ...h.env, BROWSER: {} } as Env;
     const r = await reviewSite(env, slug, version, deps);
     expect(r.skipped).toBeUndefined();
@@ -126,7 +126,7 @@ describe("the automatic review", () => {
     await drain(h);
     const version = (await getDemo(h.env, slug))!.liveVersion!;
     const { browser, visited } = fakeBrowser({ ...goodFacts([`/${slug}/about`]), hasViewport: false, textPx: 12 });
-    const deps: ReviewDeps = { launch: async () => browser, critique: async () => ({ score: 9, verdict: "Lovely.", strengths: [], issues: [{ what: "minor", fix: "tiny", severity: "low" as const }], costUsd: 0.01 }) };
+    const deps: ReviewDeps = { launch: async () => browser, sleep: async () => undefined, critique: async () => ({ score: 9, verdict: "Lovely.", strengths: [], issues: [{ what: "minor", fix: "tiny", severity: "low" as const }], costUsd: 0.01 }) };
     const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, deps);
     expect(r.fixed).toBeUndefined();
     expect(vi.mocked(designSitePage).mock.calls.some((c) => c[3]?.notes)).toBe(false);
@@ -414,7 +414,7 @@ describe("Studio art directions", () => {
     h.db.prepare("UPDATE site_versions SET kit = ? WHERE slug = ? AND version = ?").run(JSON.stringify({ ...JSON.parse(row.kit), style: "studio" }), slug, version);
     const { browser } = fakeBrowser(goodFacts([`/${slug}/about`]));
     const critique = vi.fn<ReviewDeps["critique"]>(async () => ({ score: 7, verdict: "Competent.", strengths: [], issues: [{ what: "Generic hero", fix: "Make the headline huge", severity: "medium" as const }], costUsd: 0.01 }));
-    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => browser, critique });
+    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => browser, critique, sleep: async () => undefined });
     expect(critique.mock.calls[0]![3]).toBe(true);
     expect(r.fixed).toBe(true); // 7 is good enough for Standard, not for Studio
   });
@@ -454,5 +454,43 @@ describe("adding before/after photos to a site that is already live", () => {
     await call(h, `/demos/${slug}/pairs`, { cookie: b.cookie, form: {} });
     await drain(h);
     expect((await getDemo(h.env, slug))!.changeNote!.error).toContain("daily allowance");
+  });
+});
+
+describe("the review's page visits", () => {
+  it("wait out a Studio intro before the screenshot, and carry on when a busy page never goes quiet", async () => {
+    const { slug, demo } = await liveDemo();
+    const version = demo.liveVersion!;
+    const row = h.db.prepare("SELECT kit FROM site_versions WHERE slug = ? AND version = ?").get(slug, version) as { kit: string };
+    const order: string[] = [];
+    const page = {
+      setViewport: async () => undefined,
+      goto: async (url: string) => {
+        order.push("goto");
+        if (url.includes("?r=")) throw new Error("Navigation timeout of 22000 ms exceeded"); // a page that never goes quiet
+      },
+      screenshot: async () => (order.push("shot"), new Uint8Array([0xff, 0xd8, 0xff])),
+      evaluate: async () => goodFacts([`/${slug}/about`]) as never,
+      on: () => undefined,
+      close: async () => undefined,
+    };
+    const waits: number[] = [];
+    const deps: ReviewDeps = {
+      launch: async () => ({ newPage: async () => page as never, close: async () => undefined }),
+      sleep: async (ms) => void (order.push("wait"), waits.push(ms)),
+      critique: async () => ({ score: 9, verdict: "ok", strengths: [], issues: [], costUsd: 0 }),
+    };
+    // A standard site settles briefly...
+    let r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, deps);
+    expect(r.skipped).toBeUndefined();
+    expect(waits.slice(0, 3)).toEqual([1200, 1200, 1200]);
+    // ...a Studio site waits out its intro, and each screenshot comes after a wait.
+    h.db.prepare("UPDATE site_versions SET kit = ? WHERE slug = ? AND version = ?").run(JSON.stringify({ ...JSON.parse(row.kit), style: "studio" }), slug, version);
+    waits.length = 0;
+    order.length = 0;
+    r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, deps);
+    expect(r.skipped).toBeUndefined();
+    expect(waits.slice(0, 3)).toEqual([5500, 5500, 5500]);
+    expect(order.slice(0, 3)).toEqual(["goto", "wait", "shot"]);
   });
 });
