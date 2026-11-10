@@ -17,7 +17,7 @@
  *              POST /<slug>/_lead      the site's form submissions (shown on the demo in the app)
  */
 import { handleApp } from "./app";
-import { build, startQueued } from "./build";
+import { build, fillPairs, startQueued } from "./build";
 import { pruneThrottle, pruneVisitors, queuedTenants, reviewsDue } from "./db";
 import { importClip, serveVideo, syncFolder } from "./drive";
 import type { BuildJob, Ctx, Env, MessageBatch, VideoJob } from "./env";
@@ -84,6 +84,8 @@ const worker = {
     await pruneVisitors(env).catch(() => undefined);
     // A live site whose review never ran or crashed gets another go (2 an hour at most).
     if (env.BROWSER) for (const r of await reviewsDue(env).catch(() => [] as { slug: string; version: string }[])) await env.BUILDS.send({ slug: r.slug, version: r.version, stage: "review" }).catch(() => undefined);
+    // Sites still showing empty before/after boxes get their pictures made.
+    await fillPairs(env).catch((e) => console.error("pairs catch-up", errText(e)));
     // Queued (bulk) builds whose account has a free slot: a safety net for the start-on-finish path.
     for (const id of await queuedTenants(env).catch(() => [] as number[])) await startQueued(env, id).catch((e) => console.error("queued build", errText(e)));
     await syncFolder(env).catch((e) => console.error("video sync failed", errText(e)));

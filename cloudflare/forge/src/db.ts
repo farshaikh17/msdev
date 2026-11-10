@@ -556,6 +556,29 @@ export async function replaceText(env: Env, slug: string, version: string, find:
  * these, two at a time, so a missed or failed review heals itself. A crashed one is retried at
  * most 3 times, an hour apart; "no browser" / budget skips are left alone.
  */
+/** The note the before/after job leaves on a demo (also how we know it has already been tried). */
+export const PAIRS_NOTE = "Add illustrative before/after photos";
+
+/**
+ * Live sites still showing the empty "Your before photo appears here" boxes, with no before/after
+ * pictures made and no attempt yet: they get pairs made without anyone pressing a button.
+ */
+export async function pairsDue(env: Env, slug?: string, limit = 2): Promise<{ slug: string; version: string }[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT d.slug, d.live_version version FROM demos d
+      WHERE d.status = 'active' AND d.build_status = 'ready' AND d.live_version IS NOT NULL
+        AND (?1 IS NULL OR d.slug = ?1)
+        AND d.tenant_id IN (SELECT id FROM tenants WHERE status = 'active')
+        AND (d.change_note IS NULL OR (d.change_note NOT LIKE '%' || ?2 || '%' AND d.change_note NOT LIKE '%"status":"working"%'))
+        AND EXISTS (SELECT 1 FROM site_pages p WHERE p.slug = d.slug AND p.version = d.live_version AND p.path IN ('/', '/gallery') AND p.body LIKE '%photo appears here%')
+        AND NOT EXISTS (SELECT 1 FROM site_images i WHERE i.slug = d.slug AND i.version = d.live_version AND i.name = 'ba-1-before.jpg')
+      ORDER BY d.updated_at DESC LIMIT ?3`,
+  )
+    .bind(slug ?? null, PAIRS_NOTE, limit)
+    .all<{ slug: string; version: string }>();
+  return results;
+}
+
 export async function reviewsDue(env: Env, limit = 2): Promise<{ slug: string; version: string }[]> {
   const { results } = await env.DB.prepare(
     `SELECT d.slug, d.live_version version, v.review FROM demos d

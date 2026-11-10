@@ -24,6 +24,7 @@ import {
   recordAttempt,
   replaceText,
   saveVideo,
+  PAIRS_NOTE,
   setChangeNote,
   setOutreach,
   setSetting,
@@ -39,6 +40,7 @@ import { parseKeywords, parseVideoUrls } from "./hero";
 import { serveImage, servePitch, serveSite, takeLead, templateJson } from "./serve";
 import { IMAGE_PATH } from "./index";
 import { qrSvg, writeOutreach } from "./outreach";
+import { fillPairs } from "./build";
 import { BROWSER_BUDGET_SECONDS, browserUsed } from "./review";
 import { DEFAULT_WIDGET_ID, widgetId } from "./site";
 import {
@@ -260,6 +262,8 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     const demo = await getDemo(env, slug, { tenantId: s.tenant.id });
     if (!demo) return redirect(withMsg("/", "error", "That demo doesn't exist or was archived."));
     if (!action && req.method === "GET") {
+      // Empty before/after boxes on the live site: start making the pictures now, without a button.
+      if (aiOn && (await fillPairs(env, slug).catch(() => 0))) return redirect(withMsg(`/demos/${slug}`, "ok", "This site had empty before/after photo spots, so we're making the pictures now. Usually 3–6 minutes."));
       const building = demo.buildStatus === "building" && demo.buildVersion ? demo.buildVersion : null;
       const [done, buildKit, liveKit, leads] = await Promise.all([
         building ? pagesDone(env, slug, building).then((d) => d.length) : 0,
@@ -293,7 +297,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
       if (!demo.liveVersion) return redirect(withMsg(`/demos/${slug}`, "error", "Wait for the design to finish first."));
       if (!aiOn) return redirect(withMsg(`/demos/${slug}`, "error", "This needs Claude, which is switched off."));
       if (demo.changeNote?.status === "working" && Date.now() - Date.parse(demo.changeNote.at) < 10 * 60_000) return redirect(withMsg(`/demos/${slug}`, "error", "A change is still being applied. Give it a minute."));
-      await setChangeNote(env, slug, { path: "/gallery", instruction: "Add illustrative before/after photos", status: "working", error: "", at: new Date().toISOString() });
+      await setChangeNote(env, slug, { path: "/gallery", instruction: PAIRS_NOTE, status: "working", error: "", at: new Date().toISOString() });
       await env.BUILDS.send({ slug, version: demo.liveVersion, stage: "pairs" });
       return redirect(withMsg(`/demos/${slug}`, "ok", "Making the before and after pictures and rewriting the gallery and home page around them. Usually 3–6 minutes."));
     }

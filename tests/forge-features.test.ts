@@ -69,6 +69,7 @@ beforeEach(() => {
   vi.mocked(designKit).mockImplementation(async (env, brief, pages) => goodKit(env, brief, pages));
   vi.mocked(designSitePage).mockImplementation(async (_env, _kit, spec, rev) => goodPage(spec, rev?.instruction ? `CHANGED: ${rev.instruction}` : rev?.notes?.length ? `FIXED: ${rev.notes.length} notes` : ""));
   vi.mocked(readWebsite).mockResolvedValue(null);
+  vi.mocked(beforeAfterImages).mockResolvedValue([]);
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -445,13 +446,51 @@ describe("adding before/after photos to a site that is already live", () => {
     vi.mocked(planPairs).mockResolvedValue({ pairs: [], cost: 0.001 });
     await call(h, `/demos/${slug}/pairs`, { cookie: b.cookie, form: {} });
     await drain(h);
-    expect((await getDemo(h.env, slug))!.changeNote).toMatchObject({ status: "failed" });
-    expect((await getDemo(h.env, slug))!.changeNote!.error).toContain("natural before and after");
+    // No natural before and after: nothing is added, and it isn't an error.
+    expect((await getDemo(h.env, slug))!.changeNote).toMatchObject({ status: "done" });
     vi.mocked(planPairs).mockResolvedValue({ pairs: [{ before: "a", after: "b" }], cost: 0.001 });
     vi.mocked(beforeAfterImages).mockResolvedValue([]);
     await call(h, `/demos/${slug}/pairs`, { cookie: b.cookie, form: {} });
     await drain(h);
     expect((await getDemo(h.env, slug))!.changeNote!.error).toContain("daily allowance");
+  });
+});
+
+describe("empty before/after boxes fill themselves", () => {
+  const img = (name: string) => ({ name, description: `${name.includes("before") ? "Before" : "After"}: scene`, bytes: new Uint8Array([1, 2, 3]) });
+
+  it("opening a site that shows the empty boxes starts the pictures, once, with no button", async () => {
+    const { slug, b, demo } = await liveDemo();
+    const version = demo.liveVersion!;
+    (h.env as { AI?: unknown }).AI = { run: async () => ({}) };
+    // Nothing to do while the pages have no empty boxes.
+    expect((await call(h, `/demos/${slug}`, { cookie: b.cookie })).status).toBe(200);
+    expect(h.queued).toHaveLength(0);
+    h.db.prepare("UPDATE site_pages SET body = body || '<div>Your “before” photo appears here</div>' WHERE slug = ? AND version = ? AND path = '/'").run(slug, version);
+    vi.mocked(planPairs).mockResolvedValue({ pairs: [{ before: "a dead lawn", after: "a lush lawn" }], cost: 0.001 });
+    vi.mocked(beforeAfterImages).mockResolvedValue([img("ba-1-before.jpg"), img("ba-1-after.jpg")]);
+    const r = await call(h, `/demos/${slug}`, { cookie: b.cookie });
+    expect(loc(r)).toContain("making the pictures now");
+    expect(h.queued.map((q) => (q.body as BuildJob).stage)).toEqual(["pairs"]);
+    // Opening it again while that runs doesn't start a second one.
+    expect((await call(h, `/demos/${slug}`, { cookie: b.cookie })).status).toBe(200);
+    expect(h.queued).toHaveLength(1);
+    await drain(h);
+    expect((h.db.prepare("SELECT count(*) c FROM site_images WHERE slug = ? AND name LIKE 'ba-%'").get(slug) as { c: number }).c).toBe(2);
+    expect((await call(h, `/demos/${slug}`, { cookie: b.cookie })).status).toBe(200);
+    expect(h.queued).toHaveLength(0);
+  });
+
+  it("a trade with no before and after has the empty boxes taken off instead", async () => {
+    const { slug, b, demo } = await liveDemo();
+    (h.env as { AI?: unknown }).AI = { run: async () => ({}) };
+    h.db.prepare("UPDATE site_pages SET body = body || '<div>Your before photo appears here</div>' WHERE slug = ? AND version = ? AND path = '/'").run(slug, demo.liveVersion!);
+    vi.mocked(planPairs).mockResolvedValue({ pairs: [], cost: 0.001 });
+    await call(h, `/demos/${slug}`, { cookie: b.cookie });
+    await drain(h);
+    const instr = vi.mocked(designSitePage).mock.calls.filter((c) => c[3]?.instruction).map((c) => c[3]!.instruction!);
+    expect(instr.some((t) => t.includes("Remove the before/after area"))).toBe(true);
+    expect((await getDemo(h.env, slug))!.changeNote).toMatchObject({ status: "done" });
   });
 });
 

@@ -9,6 +9,8 @@ import {
   getDemo,
   getKit,
   getPage,
+  pairsDue,
+  PAIRS_NOTE,
   goLive,
   markBuilding,
   markQueueFailed,
@@ -84,8 +86,20 @@ export async function startBuild(env: Env, tenant: Tenant, userId: number | null
 }
 
 /** Every page is written: go live and tell the account's webhook. */
+/** Make before/after pictures for sites left showing empty before/after boxes (one site, or the next few). */
+export async function fillPairs(env: Env, slug?: string): Promise<number> {
+  if (!env.AI || !env.ANTHROPIC_API_KEY) return 0;
+  const due = await pairsDue(env, slug);
+  for (const d of due) {
+    await setChangeNote(env, d.slug, { path: "/gallery", instruction: PAIRS_NOTE, status: "working", error: "", at: new Date().toISOString() });
+    await env.BUILDS.send({ slug: d.slug, version: d.version, stage: "pairs" });
+  }
+  return due.length;
+}
+
 async function finishBuild(env: Env, slug: string, version: string): Promise<void> {
   await goLive(env, slug, version);
+  await fillPairs(env, slug).catch((e) => console.log("pairs not queued", errText(e)));
   await notify(env, slug, "demo.ready");
   // Look at the live site in a real browser and fix the home page if it isn't good enough.
   await env.BUILDS.send({ slug, version, stage: "review" }).catch((e) => console.log("review not queued", errText(e)));
@@ -249,13 +263,23 @@ const PAIR_PAGES = ["/gallery", "/"];
  * again around them. No credit is taken: the cost is a few cents, recorded as a change.
  */
 async function addPairs(env: Env, slug: string, version: string, attempts: number): Promise<void> {
-  const note = (status: "working" | "done" | "failed", error = "") => setChangeNote(env, slug, { path: "/gallery", instruction: "Add illustrative before/after photos", status, error, at: new Date().toISOString() });
+  const note = (status: "working" | "done" | "failed", error = "") => setChangeNote(env, slug, { path: "/gallery", instruction: PAIRS_NOTE, status, error, at: new Date().toISOString() });
   try {
     const demo = await getDemo(env, slug);
     const kit = await getKit(env, slug, version);
     if (!demo || !kit) return void (await note("failed", "The site isn't live yet."));
     const { pairs, cost } = await planPairs(env, demo.intake);
-    if (!pairs.length) return void (await note("failed", "This kind of business doesn't have a natural before and after (nothing visibly changes), so nothing was added."));
+    if (!pairs.length) {
+      // Nothing visibly changes in this trade: take the empty before/after boxes off instead of leaving them.
+      for (const path of PAIR_PAGES) {
+        const spec = pagesOf(kit).find((p) => p.path === path);
+        const current = await getPage(env, slug, version, path);
+        if (!spec || !current || !/photo appears here/i.test(current.body)) continue;
+        const { page, usage } = await designSitePage(env, kit, spec, { instruction: 'Remove the before/after area and its "Your before photo appears here" / "Your after photo appears here" placeholder boxes entirely, closing the gap cleanly. Keep everything else as it is.', current });
+        await savePage(env, slug, version, path, page, usage);
+      }
+      return void (await note("done"));
+    }
     const made = await beforeAfterImages(env, pairs);
     await Promise.all(made.map((img) => saveImage(env, slug, version, img.name, img.description, img.bytes)));
     const base = `${env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : ""}/${slug}/_img/${version}/`;
