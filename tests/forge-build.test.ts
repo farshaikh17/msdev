@@ -201,8 +201,8 @@ describe("when things go wrong", () => {
     expect(JSON.parse(seen[0].body).demo).toMatchObject({ slug, status: "failed", error: "The Claude API account is out of credit." });
     // The page shows the failure and that the credit came back.
     const page = await html(await call(h, `/demos/${slug}`, { cookie: b.cookie }));
-    expect(page).toContain("The design build failed.");
-    expect(page).toContain("Your credits were refunded; trying again uses 1 credit.");
+    expect(page).toContain("The build stopped before it finished.");
+    expect(page).toContain("your credit was refunded (trying again uses 1)");
   });
 
   it("'Try again' picks up where a failed build stopped, writing only the missing pages", async () => {

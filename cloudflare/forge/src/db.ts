@@ -58,6 +58,8 @@ export interface Listed {
   industry: string;
   city: string;
   createdAt: string;
+  /** The live version, when it has a desktop screenshot to show as a picture. */
+  shot?: string;
 }
 
 /** A build that has made no progress this long was stopped by the platform (a queue job runs at most 15 minutes). */
@@ -142,15 +144,15 @@ export async function getDemo(env: Env, slug: string, opts: { tenantId?: number;
 
 export async function listDemos(env: Env, tenantId: number): Promise<Listed[]> {
   const { results } = await env.DB.prepare(
-    "SELECT slug, business_name, intake, content, created_at, updated_at, build_status FROM demos WHERE tenant_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 200",
+    "SELECT slug, business_name, intake, content, created_at, updated_at, build_status, (SELECT v.version FROM site_versions v WHERE v.slug = demos.slug AND v.version = demos.live_version AND v.review LIKE '%shot-desktop.jpg%') AS shot FROM demos WHERE tenant_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 200",
   )
     .bind(tenantId)
-    .all<Row>();
+    .all<Row & { shot: string | null }>();
   return results.map((r) => {
     const intake = JSON.parse(r.intake) as { city?: string };
     const content = JSON.parse(r.content) as { industry?: string };
     const stale = r.build_status === "building" && Date.now() - Date.parse(r.updated_at ?? r.created_at) > STALE_MS;
-    return { buildStatus: stale ? "failed" : r.build_status, slug: r.slug, businessName: r.business_name, industry: content.industry ?? "", city: intake.city ?? "", createdAt: r.created_at };
+    return { buildStatus: stale ? "failed" : r.build_status, slug: r.slug, businessName: r.business_name, industry: content.industry ?? "", city: intake.city ?? "", createdAt: r.created_at, ...(r.shot ? { shot: r.shot } : {}) };
   });
 }
 

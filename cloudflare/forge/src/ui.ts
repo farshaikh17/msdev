@@ -77,6 +77,20 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 .tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.dim{background:var(--chrome);color:var(--muted)}
 .credits{font:600 .78rem var(--body);padding:4px 10px;border-radius:999px;background:var(--steel-soft);color:var(--steel);max-width:100%;overflow-wrap:anywhere}
 .right{margin-left:auto}
+.hero-form{padding:28px;gap:18px;border-color:var(--ember);box-shadow:0 18px 50px -34px var(--ember)}
+.big-field{font-size:.95rem}.big-field input{font-size:1.15rem;padding:15px 16px}
+.btn.big{font-size:1.05rem;padding:14px 26px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+.site-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px;min-width:0}
+.thumb{display:block;aspect-ratio:16/10;border-radius:9px;overflow:hidden;background:var(--chrome);border:1px solid var(--line);text-decoration:none}
+.thumb img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+.thumb span{display:grid;place-items:center;height:100%;font:800 2.6rem var(--display);color:var(--muted)}
+.site-name{font-weight:700;color:var(--ink);text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.step h2{display:flex;align-items:center;gap:10px}
+.stepn{width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--surface);display:inline-grid;place-items:center;font:700 .95rem var(--body);flex:none}
+.next{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;padding:18px;border-radius:12px;background:var(--ember-soft);border:1px solid var(--ember)}
+.issue{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:12px 14px;border:1px solid var(--line);border-radius:10px}.issue>div{min-width:0}
+.score{font:800 2.2rem var(--display);color:var(--steel);line-height:1}.score small{font-size:1rem;color:var(--muted)}
 .mono{font:.8rem var(--mono)}
 `;
 
@@ -189,10 +203,12 @@ export function fields(v?: Partial<Intake>, reuse: { slug: string; name: string 
   ).join("")}${radio("primaryColor", "custom", custom, `<i class="dot" style="background:${custom ? esc(color) : "#fff"}"></i>Custom`)}
 <input name="customColor" type="color" value="${custom ? esc(color) : "#2f5fd0"}" aria-label="Custom colour" style="width:44px;height:36px;padding:2px"></div>
 <p class="note" style="margin:0">Every site gets a light/dark switch; this sets which one it opens in.</p></fieldset>`;
-  return `<div class="grid">${t("businessName", "Business name", "e.g. Vanguard Pipe & Water")}${t("googleUrl", "or a Google Maps link to the business", "https://maps.app.goo.gl/…", false, "url")}${t("industry", "Trade", "e.g. Plumbing, HVAC, Roofing")}${t("city", "City", "e.g. Myrtle Beach, SC (gives the site a map)")}${t("phone", "Phone", "e.g. (646) 594-9379")}</div>
-<p class="note" style="margin:-6px 0 0">Type the name, or paste a Google Maps link and we read the name and location from it. A website address under "More details" fills in the phone, address and hours the business publishes.</p>
-<details><summary>Options: style and look</summary><div style="display:grid;gap:16px;margin-top:12px">${reuseSel}${tier}${look}</div></details>
-<details><summary>More details (optional; the more you add, the more tailored the site)</summary><div class="grid">
+  return `<div class="grid"><label class="full big-field" for="f-businessName">Business name or Google Maps link<input id="f-businessName" name="businessName" value="${esc(v?.businessName ?? "")}" placeholder="e.g. Vanguard Pipe & Water   or   https://maps.app.goo.gl/…" required autocomplete="off"></label>
+${t("city", "City (optional, adds a map)", "e.g. Myrtle Beach, SC")}${t("industry", "What they do (optional)", "e.g. Plumbing, Roofing, Hair salon")}</div>
+<details><summary>More options</summary><div style="display:grid;gap:16px;margin-top:12px">
+<p class="note" style="margin:0">Everything here is optional. Left alone, Forge picks what suits the business.</p>
+${reuseSel}${tier}${look}
+<div class="grid">${t("phone", "Phone", "e.g. (646) 594-9379")}${t("googleUrl", "Google Maps link", "https://maps.app.goo.gl/…", false, "url")}
 ${t("websiteUrl", "Their current website (we read it for facts, photos and contact details)", "https://…", false, "url")}
 ${a("services", "Services", "Comma or line separated, e.g. Drain cleaning, Water heaters")}
 ${a("serviceAreas", "Service areas", "e.g. Myrtle Beach, Conway, Surfside Beach")}
@@ -202,33 +218,47 @@ ${a("notes", "Other facts about the business", "e.g. Family owned since 2009, ow
 ${a("photoUrls", "Photo links (one per line)", "Links to photos of their work, team or premises, e.g. from their Google listing or Facebook")}
 ${t("logoUrl", "Logo image link", "https://…", false, "url")}${t("heroImageUrl", "Main photo link", "https://…", false, "url")}
 ${t("chatWidget", "Chat widget (GoHighLevel)", "Empty: the account's widget. Or paste a widget ID / embed code, or type off")}
-</div></details>`;
+</div></div></details>`;
 }
 
 const stat = (label: string, value: string | number) => `<div class="card" style="gap:2px;padding:16px"><span class="note">${esc(label)}</span><b style="font:800 1.6rem var(--display)">${esc(String(value))}</b></div>`;
 
+/** One website on the home screen: a picture of it, its state in plain words, and the two things people do with it. */
+function siteCard(d: Listed, url: string): string {
+  const state =
+    d.buildStatus === "building"
+      ? `<span class="tag">Building…</span>`
+      : d.buildStatus === "queued"
+        ? `<span class="tag dim">Waiting its turn</span>`
+        : d.buildStatus === "failed"
+          ? `<span class="tag bad">Needs attention</span>`
+          : `<span class="tag ok">Ready</span>`;
+  const thumb = d.shot ? `<img loading="lazy" src="${esc(url)}/_img/${esc(d.shot)}/shot-desktop.jpg" alt="">` : `<span>${esc(d.businessName.slice(0, 1).toUpperCase())}</span>`;
+  return `<article class="site-card"><a class="thumb" href="/demos/${esc(d.slug)}" aria-label="${esc(d.businessName)}">${thumb}</a>
+<div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><div style="min-width:0"><a class="site-name" href="/demos/${esc(d.slug)}">${esc(d.businessName)}</a><div class="note">${esc([d.city, d.createdAt.slice(0, 10)].filter(Boolean).join(" · "))}</div></div>${state}</div>
+<div class="row"><a class="btn ghost" href="/demos/${esc(d.slug)}">Open</a><button class="btn ghost" data-copy="${esc(url)}">Copy link</button></div></article>`;
+}
+
 export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string): Response {
   const out = !s.tenant.unlimited && s.tenant.credits < 1;
-  const rows = demos.length
-    ? `<div class="table"><table><thead><tr><th>Business</th><th>City</th><th>Made</th><th></th></tr></thead><tbody>${demos
-        .map(
-          (d) =>
-            `<tr><td><a href="/demos/${esc(d.slug)}">${esc(d.businessName)}</a> ${d.buildStatus === "building" ? `<span class="tag">Building…</span>` : d.buildStatus === "queued" ? `<span class="tag">Queued</span>` : d.buildStatus === "failed" ? `<span class="tag bad">Build failed</span>` : ""}</td><td>${esc(d.city)}</td><td class="note">${esc(d.createdAt.slice(0, 10))}</td><td><a href="${esc(siteUrl(d.slug))}" target="_blank" rel="noreferrer">Open ↗</a> &nbsp;<button class="btn ghost" data-copy="${esc(siteUrl(d.slug))}">Copy</button></td></tr>`,
-        )
-        .join("")}</tbody></table></div>`
-    : `<div class="card empty">Nothing here yet. Build your first website above.</div>`;
+  const reuse = demos.filter((d) => d.buildStatus === "ready").map((d) => ({ slug: d.slug, name: `${d.businessName}${d.city ? ` (${d.city})` : ""}` }));
+  const list = demos.length
+    ? `<div class="cards">${demos.map((d) => siteCard(d, siteUrl(d.slug))).join("")}</div>`
+    : `<div class="card empty">Your websites will appear here. Build the first one above: it takes one line.</div>`;
   return page(
-    "Demos",
+    "Websites",
     `<main class="main">${flash(ok, err)}
-${out ? `<div class="flash bad" role="alert">This account has no build credits left. Ask your Forge administrator to add more; sites you've already built keep working.</div>` : ""}
-<div><h1>Build a website</h1><p class="lead">Type a business name (or paste its Google Maps link). Forge designs a full website and gives you a link to share. It takes about 10–20 minutes and builds in the background.${s.tenant.unlimited ? "" : ` A Standard build uses 1 credit and a Studio build ${STUDIO_CREDITS}; a build that fails is refunded.`}${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template and no credit is used.)"}</p></div>
-<form method="post" action="/demos" class="card">${fields(undefined, demos.filter((d) => d.buildStatus === "ready").map((d) => ({ slug: d.slug, name: `${d.businessName}${d.city ? ` (${d.city})` : ""}` })))}<div><button class="btn ember" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build website</button></div></form>
-<details class="card"><summary>Advanced: build several at once</summary><form method="post" action="/demos/bulk" style="display:grid;gap:14px">
+${out ? `<div class="flash bad" role="alert">You have no builds left. Ask your Forge administrator to add more. The websites you've already built keep working.</div>` : ""}
+<form method="post" action="/demos" class="card hero-form"><div><h1>Build a website for any business</h1>
+<p class="lead">Type the business name or paste its Google Maps link. That's all we need.${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template.)"}</p></div>
+${fields(undefined, reuse)}
+<div class="row"><button class="btn ember big" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build website</button><span class="note">Ready in about 10–20 minutes. You can close this page; it keeps building.</span></div></form>
+<section style="display:grid;gap:14px"><h2>Your websites${demos.length ? ` (${demos.length})` : ""}</h2>${list}</section>
+<details class="card"><summary>Have a list? Build several at once</summary><form method="post" action="/demos/bulk" style="display:grid;gap:14px">
 <label for="bulk">One business per line: a name, <b>name | city</b>, or a Google Maps link (up to 25)<textarea id="bulk" name="bulk" rows="6" placeholder="Joe's Plumbing | Tampa, FL&#10;https://maps.app.goo.gl/…&#10;Bright Smile Dental | Austin, TX"></textarea></label>
 <div class="look-row"><label class="choice"><input type="radio" name="style" value="standard" checked><span>Standard · 1 credit each</span></label><label class="choice"><input type="radio" name="style" value="studio"><span>Studio · ${STUDIO_CREDITS} credits each</span></label></div>
-<p class="note" style="margin:0">Three builds run at a time; the rest wait in a queue and start by themselves. Credits for the whole batch are checked before anything starts.</p>
-<div><button class="btn" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build them all</button></div></form></details>
-<section style="display:grid;gap:14px"><h2>Your websites (${demos.length})</h2>${rows}</section></main>`,
+<p class="note" style="margin:0">Three build at a time; the rest wait their turn and start by themselves.</p>
+<div><button class="btn" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build them all</button></div></form></details></main>`,
     { nav: "demos", session: s },
   );
 }
@@ -247,30 +277,90 @@ const checkList = (checks: { label: string; ok: boolean; detail?: string }[]) =>
     .map((c) => `<li style="display:flex;gap:8px;align-items:flex-start;font-size:.9rem"><span class="tag ${c.ok ? "ok" : "bad"}" style="flex:none">${c.ok ? "✓" : "✕"}</span><span>${esc(c.label)}${c.detail && !c.ok ? ` <span class="note">· ${esc(c.detail)}</span>` : ""}</span></li>`)
     .join("")}</ul>`;
 
-function qualityCard(d: Stored, r: Review | null | undefined, links: { site: string }, pitch: string): string {
-  if (!d.liveVersion) return "";
-  const again = `<form method="post" action="/demos/${esc(d.slug)}/review"><button class="btn ghost" type="submit" data-busy="Queued…">Run the quality check${r ? " again" : " now"}</button></form>`;
-  if (!r) return `<section class="card"><h2>Quality check</h2><p class="note" style="margin:0">The automatic review runs a few minutes after the design goes live: screenshots on desktop and phone, checks, and Claude's critique. It fixes the home page itself when something's off.</p>${again}</section>`;
+const when = (iso: string) => `${esc(iso.slice(0, 16).replace("T", " "))} UTC`;
+const scoreWord = (n: number) => (n >= 9 ? "Excellent" : n >= 8 ? "Great" : n >= 7 ? "Good" : n >= 5 ? "Needs a polish" : "Needs work");
+
+/** Is a change being applied right now (a stuck one stops counting after ten minutes)? */
+const changing = (n: ChangeNote | null) => n?.status === "working" && Date.now() - Date.parse(n.at) < 10 * 60_000;
+
+/** The full results of the quality check, for people who want the detail. */
+function checkDetail(d: Stored, r: Review, links: { site: string }): string {
   const img = (n: string) => `${links.site}/_img/${d.liveVersion}/${n}`;
-  if (r.skipped && !r.score)
-    return `<section class="card"><h2>Quality check</h2><p class="note" style="margin:0">${r.skipped.startsWith("error") ? "The check hit a problem and will try again by itself within the hour" : "Not run for this version"} (${esc(r.skipped)}).</p>${
-      r.shots?.includes("shot-desktop.jpg") ? `<div class="row" style="align-items:flex-start"><img src="${esc(img("shot-desktop.jpg"))}" alt="Desktop screenshot" style="width:min(100%,420px);border-radius:10px;border:1px solid var(--line)"><img src="${esc(img("shot-phone.jpg"))}" alt="Phone screenshot" style="width:110px;border-radius:10px;border:1px solid var(--line)"></div>` : ""
-    }${again}</section>`;
-  const passed = r.checks?.filter((c) => c.ok).length ?? 0;
-  return `<section class="card"><div class="row" style="justify-content:space-between"><h2>Quality check: <span style="color:var(--steel)">${r.score}/10</span> design · ${passed} of ${r.checks?.length ?? 0} checks</h2>${pitch ? `<a class="btn ghost" href="${esc(pitch)}" target="_blank" rel="noreferrer">Before &amp; after page ↗</a>` : ""}</div>
-${r.verdict ? `<p style="margin:0"><i>${esc(r.verdict)}</i></p>` : ""}
-${r.fixed ? `<div class="flash ok" role="status">✓ The home page was written again to fix what the review found.</div>` : r.fixError ? `<div class="flash bad">The automatic fix didn't finish: ${esc(r.fixError)}</div>` : ""}
+  return `<details><summary>See the full quality check</summary><div style="display:grid;gap:14px">
 ${r.shots?.includes("shot-desktop.jpg") ? `<div class="row" style="align-items:flex-start"><img src="${esc(img("shot-desktop.jpg"))}" alt="Desktop screenshot" style="width:min(100%,420px);border-radius:10px;border:1px solid var(--line)"><img src="${esc(img("shot-phone.jpg"))}" alt="Phone screenshot" style="width:110px;border-radius:10px;border:1px solid var(--line)"></div>` : ""}
 ${r.checks ? checkList(r.checks) : ""}
-${r.issues?.length ? `<details><summary>${r.issues.length} note${r.issues.length === 1 ? "" : "s"} from the critique</summary><ul style="margin:0;padding-left:18px;display:grid;gap:6px">${r.issues.map((i) => `<li><b>${esc(i.what)}</b> <span class="note">(${esc(i.severity)})</span><br><span class="note">${esc(i.fix)}</span></li>`).join("")}</ul></details>` : ""}
+${r.strengths?.length ? `<p class="note" style="margin:0">What works: ${esc(r.strengths.join(" · "))}</p>` : ""}
 ${r.old ? `<p class="note" style="margin:0">Their current website scored <b>${r.old.score}/10</b> on the same checks${r.old.loaded ? "" : " (it didn't load)"}.</p>` : ""}
-${r.strengths?.length ? `<p class="note" style="margin:0">Strengths: ${esc(r.strengths.join(" · "))}</p>` : ""}${again}</section>`;
+${r.fixed ? `<p class="note" style="margin:0">The home page was already rewritten once, automatically, after this check.</p>` : r.fixError ? `<p class="note" style="margin:0">The automatic fix didn't finish: ${esc(r.fixError)}</p>` : ""}</div></details>`;
+}
+
+/** Step 1: what the site looks like and how good it is. */
+function lookStep(d: Stored, r: Review | null | undefined, links: { site: string }, owner: boolean): string {
+  const again = owner && d.liveVersion ? `<form method="post" action="/demos/${esc(d.slug)}/review"><button class="btn ghost" type="submit" data-busy="Queued…">${r ? "Check again" : "Check it now"}</button></form>` : "";
+  let quality = "";
+  if (d.liveVersion) {
+    if (r?.score) quality = `<div class="row" style="justify-content:space-between"><div class="row"><span class="score">${r.score}<small>/10</small></span><div><b>Quality check: ${esc(scoreWord(r.score))}</b>${r.verdict ? `<div class="note" style="max-width:62ch">${esc(r.verdict)}</div>` : ""}</div></div>${again}</div>${checkDetail(d, r, links)}`;
+    else if (r?.skipped)
+      quality = `<div class="row" style="justify-content:space-between"><div><b>Quality check: ${r.skipped.startsWith("error") ? "didn't finish" : "not run"}</b><div class="note">${r.skipped.startsWith("error") ? "It tries again by itself within the hour, or press the button to try now." : "Press the button to run it."} <span title="${esc(r.skipped)}">(details)</span></div></div>${again}</div>`;
+    else quality = `<div class="row" style="justify-content:space-between"><div><b>Quality check: on its way</b><div class="note">A few minutes after a build we open the site on a desktop and a phone, score it, and list anything worth fixing.</div></div>${again}</div>`;
+  }
+  return `<section class="card step"><h2><span class="stepn">1</span>Look at it</h2>
+<iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(d.intake.businessName)}"></iframe>
+<div class="row"><a class="btn" href="${esc(links.site)}" target="_blank" rel="noreferrer">Open the full site ↗</a><span class="note">Check it on your phone too.</span></div>
+${quality}</section>`;
+}
+
+/** Step 2: fix what the check found (one press each), or ask for anything else. */
+function improveStep(d: Stored, r: Review | null | undefined, pages: { name: string; path: string }[], aiOn: boolean): string {
+  if (!d.liveVersion || !pages.length) return "";
+  const n = d.changeNote;
+  const working = changing(n);
+  const off = working || !aiOn ? " disabled" : "";
+  const status = !n
+    ? ""
+    : working
+      ? `<div class="status" role="status"><span class="spin"></span><div><b>Working on it: "${esc(n.instruction.slice(0, 160))}${n.instruction.length > 160 ? "…" : ""}"</b><br><span class="note">Usually 1–3 minutes. This page refreshes itself.</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
+      : n.status === "done"
+        ? `<div class="flash ok">✓ Done (${when(n.at)}). The site updates within 30 seconds: open it to see.</div>`
+        : n.status === "failed"
+          ? `<div class="flash bad">That change didn't go through${n.error ? `: ${esc(n.error)}` : ""}. Nothing was changed on the site. Try again, or word it differently.</div>`
+          : "";
+  const issues = r?.issues ?? [];
+  const stale = !!(r && n?.status === "done" && Date.parse(n.at) > Date.parse(r.at));
+  const found = issues.length
+    ? `<div style="display:grid;gap:10px"><div class="row" style="justify-content:space-between"><b>${stale ? "From the last check (some may be fixed already)" : `The check found ${issues.length} thing${issues.length === 1 ? "" : "s"} to improve`}</b>
+<form method="post" action="/demos/${esc(d.slug)}/fix"><input type="hidden" name="n" value="all"><button class="btn ember" type="submit" data-busy="Starting…"${off}>Fix everything</button></form></div>
+${issues
+        .map(
+          (i, k) =>
+            `<div class="issue"><div><b>${esc(i.what)}</b> ${i.severity === "high" ? `<span class="tag bad">Important</span>` : ""}<div class="note">How we'd fix it: ${esc(i.fix)}</div></div><form method="post" action="/demos/${esc(d.slug)}/fix"><input type="hidden" name="n" value="${k}"><button class="btn ghost" type="submit" data-busy="Starting…"${off}>Fix this</button></form></div>`,
+        )
+        .join("")}</div>`
+    : r?.score
+      ? `<p class="note" style="margin:0">The check found nothing that needs fixing.</p>`
+      : "";
+  return `<section class="card step"><h2><span class="stepn">2</span>Make it better</h2>${status}${found}
+<form method="post" action="/demos/${esc(d.slug)}/change" style="display:grid;gap:12px"><b>Request a change</b>
+<div class="grid"><label class="full">Tell us in your own words what to change<textarea name="instruction" rows="2" maxlength="600" placeholder="e.g. Make the top photo brighter and add a section about financing" required></textarea></label>
+<label>On which page?<select name="path">${pages.map((p) => `<option value="${esc(p.path)}">${esc(p.name)}</option>`).join("")}</select></label></div>
+<div class="row"><button class="btn" type="submit" data-busy="Sending…"${off}>Make this change</button><span class="note">Free. Only that page is rewritten.</span></div></form>
+<form method="post" action="/demos/${esc(d.slug)}/pairs" class="row"><button class="btn ghost" type="submit" data-busy="Starting…"${off}>Add illustrative before/after photos</button><span class="note">Good for trades where the work shows (landscaping, cleaning, painting, roofing). Labelled as samples until real photos replace them.</span></form></section>`;
+}
+
+/** Step 3: get it in front of the business. */
+function sendStep(d: Stored, links: { site: string }, extra: DemoExtra, n: number): string {
+  const v = extra.views;
+  const seen = v ? `Opened <b>${v.week}</b> time${v.week === 1 ? "" : "s"} in the last 7 days${v.today ? ` (<b>${v.today} today</b>)` : ""}${v.lastAt ? `, last on ${when(v.lastAt)}` : ""}.` : "Nobody has opened the link yet. We'll show it here when they do.";
+  return `<section class="card step"><h2><span class="stepn">${n}</span>Send it</h2>
+<div class="share"><div class="share-row"><div><b>Website link</b><span>${esc(links.site)}</span></div><button class="btn" data-copy="${esc(links.site)}">Copy</button></div>
+${extra.pitch ? `<div class="share-row"><div><b>Before &amp; after page</b><span>Their current website next to the new one, with scores. A strong thing to send first.</span></div><div class="row"><a class="btn ghost" href="${esc(extra.pitch)}" target="_blank" rel="noreferrer">Open ↗</a><button class="btn ghost" data-copy="${esc(extra.pitch)}">Copy</button></div></div>` : ""}</div>
+<p class="note" style="margin:0">${seen}</p></section>`;
 }
 
 function viewsCard(v: ViewStat | undefined): string {
-  if (!v) return `<section class="card"><h2>Who's looked</h2><p class="note" style="margin:0">No views yet. Views are counted when a real person opens the site (not link previews or bots), and your webhook hears about the first view each day.</p></section>`;
+  if (!v) return `<section class="card"><h2>Who's looked</h2><p class="note" style="margin:0">No views yet. Views are counted when a real person opens the site (not link previews or bots).</p></section>`;
   return `<section class="card"><h2>Who's looked</h2><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">${stat("Today", v.today)}${stat("Last 7 days", v.week)}${stat("Visitors (7 days)", v.visitorsWeek)}${stat("Last 30 days", v.month)}</div>
-<p class="note" style="margin:0">Last opened ${v.lastAt ? esc(v.lastAt.slice(0, 16).replace("T", " ")) + " UTC" : "never"}.</p>
+<p class="note" style="margin:0">Last opened ${v.lastAt ? when(v.lastAt) : "never"}.</p>
 ${v.days.length ? `<div class="table"><table><thead><tr><th>Day</th><th>Views</th><th>Visitors</th></tr></thead><tbody>${v.days.map((x) => `<tr><td>${esc(x.day)}</td><td>${x.views}</td><td>${x.visitors}</td></tr>`).join("")}</tbody></table></div>` : ""}</section>`;
 }
 
@@ -281,29 +371,8 @@ function outreachCard(d: Stored, links: { site: string }, qr: string, aiOn: bool
 <div style="flex:1;min-width:240px;display:grid;gap:10px">${
     o
       ? `<div class="share">${copy(`Email · ${o.subject}`, o.email)}${copy("Text message", o.sms)}${copy("Call script (30 seconds)", o.call)}</div><form method="post" action="/demos/${esc(d.slug)}/outreach"><button class="btn ghost" type="submit" data-busy="Writing…">Write it again</button></form>`
-      : `<p class="note" style="margin:0">A short email, a text and a 30-second call script written for ${esc(d.intake.businessName)}, with the link in each. Costs a fraction of a cent.</p><form method="post" action="/demos/${esc(d.slug)}/outreach"><button class="btn" type="submit" data-busy="Writing…"${aiOn ? "" : " disabled"}>Write the outreach</button></form>`
+      : `<p class="note" style="margin:0">A short email, a text and a 30-second call script written for ${esc(d.intake.businessName)}, with the link in each.</p><form method="post" action="/demos/${esc(d.slug)}/outreach"><button class="btn" type="submit" data-busy="Writing…"${aiOn ? "" : " disabled"}>Write the outreach</button></form>`
   }<p class="note" style="margin:0">QR code opens ${esc(links.site)}</p></div></div></section>`;
-}
-
-function changeCard(d: Stored, pages: { name: string; path: string }[], aiOn: boolean): string {
-  if (!d.liveVersion || !pages.length) return "";
-  const n: ChangeNote | null = d.changeNote;
-  const working = n?.status === "working" && Date.now() - Date.parse(n.at) < 10 * 60_000;
-  const status = !n
-    ? ""
-    : working
-      ? `<div class="status" role="status"><span class="spin"></span><div><b>Applying: "${esc(n.instruction)}"</b> on ${esc(n.path)}<br><span class="note">Usually 1–3 minutes. This page refreshes itself.</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
-      : n.status === "done"
-        ? `<div class="flash ok">✓ Done on ${esc(n.path)}: "${esc(n.instruction)}" (${esc(n.at.slice(0, 16).replace("T", " "))} UTC). Pages update within 30 seconds.</div>`
-        : n.status === "failed"
-          ? `<div class="flash bad">The change on ${esc(n.path)} didn't apply: ${esc(n.error || "unknown error")}</div>`
-          : "";
-  return `<section class="card"><h2>Request a change</h2>${status}
-<form method="post" action="/demos/${esc(d.slug)}/change" style="display:grid;gap:12px"><div class="grid"><label>Page<select name="path">${pages.map((p) => `<option value="${esc(p.path)}">${esc(p.name)}</option>`).join("")}</select></label>
-<label class="full">What should change?<textarea name="instruction" rows="2" maxlength="600" placeholder="e.g. Make the hero darker and add a financing section before the reviews" required></textarea></label></div>
-<div><button class="btn" type="submit" data-busy="Sending…"${working || !aiOn ? " disabled" : ""}>Apply the change</button> <span class="note">Only that page is rewritten; a few cents, no credit.</span></div></form>
-<form method="post" action="/demos/${esc(d.slug)}/pairs" style="display:grid;gap:8px"><p class="note" style="margin:0"><b>Before &amp; after photos</b>: for trades where the work visibly changes something (landscaping, cleaning, painting, roofing…), make AI before-and-after pairs and rewrite the gallery and home page around them. They're labelled "Illustrative sample" until real photos replace them. A few cents, no credit.</p><div><button class="btn ghost" type="submit" data-busy="Starting…"${working || !aiOn ? " disabled" : ""}>Add illustrative before/after photos</button></div></form>
-<form method="post" action="/demos/${esc(d.slug)}/replace" style="display:grid;gap:12px"><p class="note" style="margin:0"><b>Quick text fix</b> (no AI): replace an exact phrase everywhere on the site.</p><div class="grid"><label>Find<input name="find" maxlength="200" required placeholder="e.g. (555) 123-4567"></label><label>Replace with<input name="replace" maxlength="200" placeholder="e.g. (305) 555-0100"></label></div><div><button class="btn ghost" type="submit">Replace everywhere</button></div></form></section>`;
 }
 
 export function demoPage(
@@ -324,43 +393,46 @@ export function demoPage(
     `<div class="share-row"><div><b>${title}</b><span>${esc(shown)}</span></div>${copy ? `<button class="btn ghost" data-copy="${esc(copy)}">Copy</button>` : ""}</div>`;
   const out = !s.tenant.unlimited && s.tenant.credits < 1;
   const busy = d.buildStatus === "building";
+  const owner = isOwner(s);
+  const r = extra.review;
+  const pages = links.pages.filter((p): p is { name: string; path: string; url: string } => !!p.path);
+  const hasSite = !!(d.liveVersion || d.html);
+  const improve = improveStep(d, r, pages, true);
+  const cost = buildCost(d.intake);
+  // One sentence at the top: where this website is and the single next thing to do.
+  const next = busy
+    ? `<div class="status" role="status"><span class="spin"></span><div><b>${d.buildStage === "pages" ? `Writing the pages: ${progress.done} of ${progress.total} done` : "Designing the look…"}</b><br><span class="note">Nothing for you to do. It usually takes 10–20 minutes and this page refreshes itself; you can also close it and come back.${hasSite ? " The current version stays live until the new one is finished." : ""}</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
+    : d.buildStatus === "queued"
+      ? `<div class="status" role="status"><span class="spin"></span><div><b>Waiting its turn.</b><br><span class="note">Three websites build at a time. This one starts by itself when one finishes; nothing for you to do.</span></div></div><script>setTimeout(()=>location.reload(),20000)</script>`
+      : d.buildStatus === "failed"
+        ? `<div class="status bad" role="alert"><div><b>The build stopped before it finished.</b> ${esc(d.buildError)}<br><b>What to do:</b> press Try again. It carries on from the pages already written${s.tenant.unlimited ? "" : `, and your credit${cost === 1 ? " was" : "s were"} refunded (trying again uses ${cost})`}. ${hasSite ? "Meanwhile the link still shows the previous version." : "Meanwhile the link shows a simple placeholder version."} If it fails twice, tell your Forge administrator the message above.</div><form method="post" action="/demos/${esc(d.slug)}/rebuild"><button class="btn" type="submit"${out ? " disabled" : ""}>Try again</button></form></div>`
+        : changing(d.changeNote)
+          ? ""
+          : r?.issues?.length && (r.score ?? 10) < 8 && !(d.changeNote?.status === "done" && Date.parse(d.changeNote.at) > Date.parse(r.at))
+            ? `<div class="next"><div><b>Next: fix the ${r.issues.length} thing${r.issues.length === 1 ? "" : "s"} the quality check found.</b><div class="note">One press. It takes a couple of minutes and costs no credit.</div></div><form method="post" action="/demos/${esc(d.slug)}/fix"><input type="hidden" name="n" value="all"><button class="btn ember" type="submit" data-busy="Starting…">Fix everything</button></form></div>`
+            : d.liveVersion
+              ? `<div class="next"><div><b>This website is ready to send.</b><div class="note">Copy the link and send it to ${esc(i.businessName)}.</div></div><button class="btn ember" data-copy="${esc(links.site)}">Copy link</button></div>`
+              : "";
   return page(
     i.businessName,
     `<main class="main">${flash(ok, err)}
-<div class="row" style="justify-content:space-between"><div><h1>${esc(i.businessName)}${i.style === "studio" ? ` <span class="pill">Studio</span>` : ""}</h1>
-<p class="lead">${esc(d.content.industry)}${i.city ? ` · ${esc(i.city)}` : ""} · <span class="pill">${d.liveVersion ? `Designed by Claude · ${links.pages.length} pages` : d.html ? "Designed by Claude · 1 page" : "Template"}</span> · updated ${esc(d.updatedAt.slice(0, 16).replace("T", " "))} UTC${
+<div><a class="note" href="/">← All websites</a><h1 style="margin-top:6px">${esc(i.businessName)}${i.style === "studio" ? ` <span class="pill">Studio</span>` : ""}</h1>
+<p class="lead">${esc([d.content.industry, i.city].filter(Boolean).join(" · "))}${d.liveVersion ? ` · ${links.pages.length} pages` : ""}${
       s.user.role === "admin" && d.buildCost ? ` · built for <b>$${d.buildCost.usd.toFixed(2)}</b> (${d.buildCost.calls} Claude calls)` : ""
     }</p></div>
-<a class="btn" href="${esc(links.site)}" target="_blank" rel="noreferrer">Open site ↗</a></div>
-${
-      busy
-        ? `<div class="status" role="status"><span class="spin"></span><div><b>${
-            d.buildStage === "pages" ? `Claude is writing the pages… ${progress.done} of ${progress.total} done` : "Claude is designing the look…"
-          }</b><br><span class="note">Usually 7–20 minutes in all. This page refreshes itself.${d.liveVersion || d.html ? " The current version stays live until the new one is complete." : " Until then the link shows a quick template version."}</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
-        : d.buildStatus === "queued"
-          ? `<div class="status" role="status"><span class="spin"></span><div><b>Waiting for a free build slot.</b><br><span class="note">Three builds run at a time; this one starts by itself when one finishes. This page refreshes itself.</span></div></div><script>setTimeout(()=>location.reload(),20000)</script>`
-        : d.buildStatus === "failed"
-          ? `<div class="status bad" role="alert"><div><b>The design build failed.</b> ${esc(d.buildError)}<br>The link still works${d.liveVersion || d.html ? " with the previous design" : " with the quick template version"}.${s.tenant.unlimited ? "" : ` Your credits were refunded; trying again uses ${buildCost(d.intake)} credit${buildCost(d.intake) === 1 ? "" : "s"}.`} Trying again keeps the pages already written.</div><form method="post" action="/demos/${esc(d.slug)}/rebuild"><button class="btn" type="submit"${out ? " disabled" : ""}>Try again</button></form></div>`
-          : ""
-    }
-<section class="card"><h2>Share it</h2><div class="share">
-${row("Website link", links.site, links.site)}
-${links.pages.length ? `<div class="row note">Pages: ${links.pages.map((p) => `<a href="${esc(p.url)}" target="_blank" rel="noreferrer">${esc(p.name)}</a>`).join(" · ")}</div>` : ""}
-</div>
-<details><summary>More ways to share</summary><div class="share" style="margin-top:12px">
-${links.ghl ? row("On your GoHighLevel page", links.ghl, links.ghl) : row("On your GoHighLevel page", isOwner(s) ? "Set up your GoHighLevel page first (Settings, top menu)." : "Ask your account owner to set up the GoHighLevel page.", "")}
-${row("Chat message", chat, chat)}
-${row("Sheet row (date · business · trade · city · phone · link)", sheet.replace(/\t/g, " · "), sheet)}
-</div></details></section>
-<iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(i.businessName)}"></iframe>
-${qualityCard(d, extra.review, links, extra.pitch ?? "")}
-<details class="card"><summary>More tools: views, outreach, changes, form messages</summary><div style="display:grid;gap:16px;margin-top:12px">
-<section class="card"><h2>Form submissions (${leads.length}${leads.length === 50 ? "+" : ""})</h2>${
+${next}
+${lookStep(d, r, links, owner)}
+${improve}
+${sendStep(d, links, extra, improve ? 3 : 2)}
+<details class="card"><summary>More tools</summary><div style="display:grid;gap:16px;margin-top:12px">
+${outreachCard(d, links, extra.qr ?? "", true)}
+${viewsCard(extra.views)}
+<section class="card"><h2>Messages from the site's forms (${leads.length}${leads.length === 50 ? "+" : ""})</h2>${
       leads.length
         ? `<div class="share">${leads
             .map(
               (l) =>
-                `<div class="share-row"><div><b>${esc(l.createdAt.slice(0, 16).replace("T", " "))} UTC · ${esc(l.page || "/")}</b><span>${esc(
+                `<div class="share-row"><div><b>${when(l.createdAt)} · ${esc(l.page || "/")}</b><span>${esc(
                   Object.entries(l.fields)
                     .map(([k, v]) => `${k}: ${v}`)
                     .join("\n"),
@@ -369,13 +441,21 @@ ${qualityCard(d, extra.review, links, extra.pitch ?? "")}
             .join("")}</div>`
         : `<p class="note" style="margin:0">Anything sent through the site's forms shows up here.</p>`
     }</section>
-${viewsCard(extra.views)}
-${outreachCard(d, links, extra.qr ?? "", true)}
-${changeCard(d, links.pages.filter((p): p is { name: string; path: string; url: string } => !!p.path), true)}
+${
+      d.liveVersion && pages.length
+        ? `<form method="post" action="/demos/${esc(d.slug)}/replace" class="card"><h2>Quick text fix</h2><p class="note" style="margin:0">Swap an exact word or phrase everywhere on the site, instantly (a wrong phone number, a misspelt name).</p><div class="grid"><label>Find<input name="find" maxlength="200" required placeholder="e.g. (555) 123-4567"></label><label>Replace with<input name="replace" maxlength="200" placeholder="e.g. (305) 555-0100"></label></div><div><button class="btn ghost" type="submit">Replace everywhere</button></div></form>`
+        : ""
+    }
+<section class="card"><h2>Other ways to share</h2><div class="share">
+${links.pages.length ? `<div class="row note">Pages: ${links.pages.map((p) => `<a href="${esc(p.url)}" target="_blank" rel="noreferrer">${esc(p.name)}</a>`).join(" · ")}</div>` : ""}
+${links.ghl ? row("On your GoHighLevel page", links.ghl, links.ghl) : row("On your GoHighLevel page", owner ? "Set up your GoHighLevel page first (Settings, top menu)." : "Ask your account owner to set up the GoHighLevel page.", "")}
+${row("Chat message", chat, chat)}
+${row("Sheet row (date · business · trade · city · phone · link)", sheet.replace(/\t/g, " · "), sheet)}
+</div></section>
+<form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Start over with a new design</h2><p class="note" style="margin:0">Correct the details below, or just press the button for a completely new look. The link stays the same.${s.tenant.unlimited ? "" : ` This uses ${cost} credit${cost === 1 ? "" : "s"}.`}</p>${fields(i)}
+<div><button class="btn" type="submit" data-busy="Starting…"${busy || out ? " disabled" : ""}>Redesign the whole site</button>${out ? ` <span class="note">No credits left.</span>` : ""}</div></form>
+<form method="post" action="/demos/${esc(d.slug)}/archive"><button class="btn danger" type="submit">Delete this website (its link stops working)</button></form>
 </div></details>
-<form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Edit details &amp; redesign</h2><p class="note">Change the details (or just press the button for a fresh design). Claude rebuilds it in the background; the links stay the same.${s.tenant.unlimited ? "" : ` A redesign uses 1 credit (Studio: ${STUDIO_CREDITS}).`}</p>${fields(i)}
-<div><button class="btn" type="submit" data-busy="Starting…"${busy || out ? " disabled" : ""}>Redesign site</button>${out ? ` <span class="note">No credits left.</span>` : ""}</div></form>
-<form method="post" action="/demos/${esc(d.slug)}/archive"><button class="btn danger" type="submit">Archive demo (its links stop working)</button></form>
 </main>`,
     { nav: "demos", session: s },
   );

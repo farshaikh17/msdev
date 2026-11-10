@@ -77,6 +77,8 @@ export function checkWidget(v: string): void {
  * name (when none was typed) and the map position.
  */
 export async function prepareIntake(raw: Record<string, string>): Promise<Intake> {
+  // One box takes either: a link typed where the name goes is the Google Maps link.
+  if (/^https?:\/\//i.test(raw.businessName ?? "")) raw = { ...raw, googleUrl: raw.googleUrl || raw.businessName, businessName: "" };
   const g = (k: string) => raw[k] ?? "";
   let place: MapsPlace | null = null;
   if (g("googleUrl")) {

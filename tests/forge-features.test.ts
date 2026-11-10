@@ -243,7 +243,7 @@ describe("bulk builds", () => {
     expect(statuses().filter((x) => x.endsWith(":queued"))).toEqual(["Delta Cleaning:queued", "Epsilon Pest:queued"]);
     expect((await getTenant(h.env, b.id))!.credits).toBe(7); // queued ones aren't charged yet
     const home = await html(await call(h, "/", { cookie: b.cookie }));
-    expect(home).toContain("Queued");
+    expect(home).toContain("Waiting its turn");
     await drain(h);
     expect(statuses().every((x) => x.endsWith(":ready"))).toBe(true);
     expect((await getTenant(h.env, b.id))!.credits).toBe(5);

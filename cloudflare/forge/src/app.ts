@@ -253,7 +253,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     }
   }
 
-  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/replace|\/review|\/pairs)?$/);
+  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/fix|\/replace|\/review|\/pairs)?$/);
   if (m) {
     const [, slug, action] = m;
     // Always scoped to this account: another account's demo is simply "not found".
@@ -308,6 +308,21 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
       const out = await writeOutreach(env, demo, site(slug), { name: s.user.email.split("@")[0]!.replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), agency: s.tenant.name });
       await setOutreach(env, slug, out);
       return redirect(withMsg(`/demos/${slug}`, "ok", "Outreach written. Edit it to taste before sending."));
+    }
+    // One press on a problem the quality check found: its fix goes to the page writer as a change.
+    if (action === "/fix" && post) {
+      const back = (kind: "ok" | "error", msg: string) => redirect(withMsg(`/demos/${slug}`, kind, msg));
+      if (!demo.liveVersion) return back("error", "Wait for the design to finish first.");
+      if (!aiOn) return back("error", "Fixes need Claude, which is switched off. Ask your Forge administrator.");
+      if (demo.changeNote?.status === "working" && Date.now() - Date.parse(demo.changeNote.at) < 10 * 60_000) return back("error", "A change is still being applied. Give it a minute, then try again.");
+      const issues = (await getReview(env, slug, demo.liveVersion))?.issues ?? [];
+      const n = String((await req.formData()).get("n") ?? "all");
+      const picked = n === "all" ? issues : issues.slice(Number(n), Number(n) + 1);
+      if (!picked.length) return back("error", "There's nothing from the quality check to fix. Run the check again first.");
+      const instruction = picked.length === 1 ? `${picked[0]!.what}. ${picked[0]!.fix}` : `Fix each of these problems found in a review of the rendered page:\n${picked.map((i) => `- ${i.what}: ${i.fix}`).join("\n")}`;
+      await setChangeNote(env, slug, { path: "/", instruction: picked.length === 1 ? picked[0]!.what : `Fix all ${picked.length} things the quality check found`, status: "working", error: "", at: new Date().toISOString() });
+      await env.BUILDS.send({ slug, version: demo.liveVersion, stage: "change", path: "/", instruction: instruction.slice(0, 4000) });
+      return back("ok", "Fixing it now. The home page updates itself in a couple of minutes.");
     }
     if (action === "/change" && post) {
       const f = await req.formData();

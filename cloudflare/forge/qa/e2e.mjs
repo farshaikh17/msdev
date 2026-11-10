@@ -151,7 +151,7 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
   });
   await step("owner can choose Studio, and the demo is labelled Studio", async () => {
     await op.goto(BASE + "/"); await op.click("summary:has-text('Options')"); ok(await op.isVisible("text=Studio · 3 credits"), "no Studio choice");
-    ok((await op.content()).includes("a Studio build 3"), "credit wording missing");
+    ok((await op.content()).includes("Studio · 3 credits"), "credit wording missing");
     await op.fill("input[name=businessName]", "Dummy Studio Roofing"); await op.fill("input[name=city]", "105 Court St, Cynthiana, KY 41031, United States");
     await op.click("label.choice:has(input[name=style][value=studio])"); ok(await op.isChecked("input[name=style][value=studio]"), "Studio not selected");
     await op.locator("button[type=submit]:has-text('Build')").first().click(); await op.waitForURL(/\/demos\/[a-z0-9-]+/);
@@ -168,7 +168,8 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
     ok(res === 200, "lead status " + res);
   });
   await step("demo page has the quality check, who looked, outreach and change sections", async () => {
-    await op.goto(`${BASE}/demos/${slug}`); const t = await op.content();
+    await op.goto(`${BASE}/`); await op.screenshot({ path: SHOTS + "/qa-app-home.png", fullPage: true });
+    await op.goto(`${BASE}/demos/${slug}`); await op.screenshot({ path: SHOTS + "/qa-app-site.png", fullPage: true }); const t = await op.content();
     for (const x of ["Who's looked", "Outreach kit", "<svg"]) ok(t.includes(x), x + " missing");
     // The quality check and change box need a Claude-built site; a template draft (no AI key here) has neither, by design.
     const ai = t.includes("Designed by Claude"); ok(ai ? t.includes("Quality check") && t.includes("Request a change") : !t.includes("Request a change"), "sections don't match the site type");
