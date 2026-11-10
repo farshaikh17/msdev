@@ -53,7 +53,7 @@ html.m-on .m-cursor,html.m-on .m-ring{opacity:1}
 [data-horizontal].m-pinned{overflow:hidden;scroll-snap-type:none}
 [data-follow]{pointer-events:none;display:none}html.m-on.m-fine [data-follow]{display:block}
 html.m-wait [data-split],html.m-wait [data-reveal]{visibility:hidden}
-html.lenis,html.lenis body{height:auto}.lenis.lenis-smooth{scroll-behavior:auto!important}.lenis.lenis-stopped{overflow:hidden}
+html.m-on,html.m-on body{overflow-x:clip}html.lenis,html.lenis body{height:auto}.lenis.lenis-smooth{scroll-behavior:auto!important}.lenis.lenis-stopped{overflow:hidden}
 @media (prefers-reduced-motion:reduce){[data-grain]::after{animation:none}}
 `;
 
@@ -94,7 +94,7 @@ all("[data-scrub-text]").forEach(function(el){
   G.fromTo(s.words,{opacity:.14},{opacity:1,stagger:.1,ease:"none",scrollTrigger:{trigger:el,start:"top 80%",end:"bottom 45%",scrub:true}});
 });
 // --- reveals
-var FROM={up:{y:70,opacity:0},fade:{opacity:0},scale:{scale:.88,opacity:0},left:{x:-80,opacity:0},right:{x:80,opacity:0},clip:{clipPath:"inset(100% 0% 0% 0%)"}};
+var SX=Math.min(80,Math.round(innerWidth*.06));var FROM={up:{y:70,opacity:0},fade:{opacity:0},scale:{scale:.88,opacity:0},left:{x:-SX,opacity:0},right:{x:SX,opacity:0},clip:{clipPath:"inset(100% 0% 0% 0%)"}};
 all("[data-reveal]").forEach(function(el){
   var f=FROM[el.dataset.reveal]||FROM.up,to={y:0,x:0,scale:1,opacity:1,clipPath:"inset(0% 0% 0% 0%)",duration:1.2,ease:"expo.out"};
   G.set(el,f);
