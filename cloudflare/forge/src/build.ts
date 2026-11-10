@@ -26,7 +26,7 @@ import {
   updateIntake,
 } from "./db";
 import type { Kit } from "./designer";
-import { adaptKit, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, TryLater, type Plan } from "./designer";
+import { adaptKit, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, studioHome, TryLater, type Plan } from "./designer";
 import type { BuildJob, Env } from "./env";
 import { beforeAfterImages, previewImages } from "./images";
 import { privacyPage, termsPage } from "./legal";
@@ -181,6 +181,9 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
         return b && a ? [{ beforeUrl: `${imgBase}ba-${n}-before.jpg`, afterUrl: `${imgBase}ba-${n}-after.jpg`, before: b.description.replace(/^Before: /, ""), after: a.description.replace(/^After: /, "") }] : [];
       });
       const pages = sitemapFor(intake, plan?.services);
+      // A Studio home page takes its order and layouts from its art direction, not the standard section list.
+      const concept = intake.style === "studio" ? pickConcept(intake, slug).id : undefined;
+      if (concept && pages[0]) pages[0] = { ...pages[0], brief: studioHome(pages, concept) };
       const facts = factsBlock(intake, site, slug, plan, previews, pairs) + profileNote(intake);
       // Built on another of the account's finished sites: reuse its design (far cheaper than a new one).
       let base: { slug: string; version: string; kit: Kit } | null = null;
@@ -191,7 +194,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       }
       const { kit, usage } = base
         ? await adaptKit(env, base.kit, { slug: base.slug, version: base.version }, facts, pages)
-        : await designKit(env, facts, pages, intake.style, intake.style === "studio" ? pickConcept(intake, slug).id : undefined);
+        : await designKit(env, facts, pages, intake.style, concept);
       // The planning call is counted with the design.
       const u = usage as Record<string, unknown>;
       await saveKit(env, slug, version, kit, { ...u, cost_usd: (Number(u.cost_usd) || 0) + (plan?.cost ?? 0) });

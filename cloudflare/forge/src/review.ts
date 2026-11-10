@@ -10,6 +10,7 @@
  * BROWSER_BUDGET_SECONDS (half of what the Workers Paid plan includes), so this can never cost
  * extra. Past the cap, sites still go live; they just aren't reviewed.
  */
+import { conceptById } from "./concepts";
 import Anthropic from "@anthropic-ai/sdk";
 import { getDemo, getKit, getPage, getReview, getSetting, saveImage, savePage, saveReview, setSetting } from "./db";
 import { costOf, designSitePage, pagesOf } from "./designer";
@@ -361,7 +362,10 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     // Claude's critique of the screenshots.
     const facts = checks.map((c) => `- ${c.label}: ${c.ok ? "ok" : "FAILED"}${c.detail ? ` (${c.detail})` : ""}`).join("\n");
     const studio = kit.style === "studio";
-    const crit = await deps.critique(env, { desktop, phone }, facts, studio);
+    // A Studio site is judged against its own art direction, so one that drifts to the generic layout is marked down.
+    const look = studio ? conceptById(kit.concept) : undefined;
+    const direction = look ? `\n\nThis site's art direction is "${look.name}". Its first screen should be: ${look.hero}\nRuled out for it: ${look.never}\nIf the first screen doesn't match that description (for example it is a big headline over a darkened full-bleed photo when the direction says otherwise), say so as a high-severity issue with the fix, and score no higher than 6.` : "";
+    const crit = await deps.critique(env, { desktop, phone }, facts + direction, studio);
     review = { at, ...(wide.length ? { wide } : {}), score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues, checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
 
     // Fix: write the home page again with the notes, when it isn't good enough.

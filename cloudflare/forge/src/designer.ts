@@ -307,6 +307,39 @@ export async function planPairs(env: Env, i: Intake): Promise<{ pairs: { before:
   return { pairs, cost: Number(usage.cost_usd) || 0 };
 }
 
+/**
+ * A Studio home page: what it must contain, and the order and layout of its scenes, which come
+ * from the art direction (so two Studio sites don't share a skeleton).
+ */
+export function studioHome(pages: PageSpec[], conceptId: string): string {
+  const c = conceptById(conceptId);
+  if (!c) return pages[0]?.brief ?? "";
+  const by = (role: PageSpec["role"], path: string) => pages.find((p) => p.role === role) ?? pages.find((p) => p.path === path);
+  const index = by("index", "/services");
+  const items = pages.filter((p) => (pages.some((x) => x.role === "index") ? p.role === "item" : p.path.startsWith("/services/")));
+  const cta = by("cta", "/quote");
+  const visit = by("visit", "/areas");
+  const steps = by("steps", "/process");
+  return `Compose the home page as the sequence of scenes below, in this order, each laid out the way its line describes. This is the "${c.name}" art direction: do not fall back on a generic order of sections.
+
+First screen: ${c.hero}
+The primary button is "${cta?.name ?? "Get a Quote"}" → ${cta?.path ?? "/quote"}; the phone is a tel: link.
+
+Then:
+${c.scenes.map((x, n) => `${n + 2}. ${x}`).join("\n")}
+
+What the scenes must carry between them (fit each into the scene that suits it; add one more scene in the same style only if something has nowhere to go):
+- What the business offers: every one of ${items.map((p) => `${p.name} → ${p.path}`).join("; ")}, each linking to its page, and a link to ${index?.name ?? "Services"} → ${index?.path ?? "/services"}.
+- The business's story, linking to /about; how it works, linking to ${steps?.path ?? "/process"}; photographs, linking to /gallery.
+- Reviews (real ones, or clearly-labelled samples), linking to /reviews; four or five practical questions, linking to /faq.
+- Where to find it: the real map embed from the facts, linking to ${visit?.name ?? "Service Areas"} → ${visit?.path ?? "/areas"}.
+- A visible form for "${cta?.name ?? "Get a Quote"}" with the privacy note.
+- If illustrative before/after pairs are in the facts, show them inside the photographs scene, in this direction's picture frames.
+
+Motion: ${c.moves}
+Ruled out: ${c.never}`;
+}
+
 /** Told to the designer and every page writer when the site isn't a contractor's: use its own words and pages. */
 export function profileNote(i: Intake): string {
   const p = profileFor(i);
@@ -397,15 +430,14 @@ This is our top tier. It must feel like an Awwwards "Site of the Day" made for a
 
 {{ART_DIRECTION}}
 
-Signature moves: use most of these on the home page and several on every inner page:
-- The hero: display type at about clamp(3.2rem, min(11vw, 16vh), 13rem) with data-split="chars" (keep the headline short: 2–4 lines on desktop; the headline, its paragraph and the CTA must all fit in the first screen at 1440×900 and at 390×844, clear of the header), over the moving background, tinted by a living shader (data-shader) in the brand colours, with a large round magnetic CTA (data-magnetic) and the phone close by.
-- Huge section headings with data-split="lines"; a manifesto statement with data-scrub-text; a numbered label only on the one or two sections that are a real index or sequence (never as decoration on every section).
-- At least one marquee (services, towns or a promise) and one big interactive moment: a pinned horizontal gallery (data-horizontal) or stacked service cards (data-stack).
-- A services index as big full-width rows (number, name, arrow) that reveal a floating image preview following the pointer (data-follow) and lead to each service page.
-- Images in rounded or arched masks with data-parallax; data-cursor-text on every card and gallery item; data-tilt on feature cards; data-distort on a hero or gallery image.
-- Real numbers you were given counting up (data-counter); never invent numbers.
-- An oversized footer: the business name as a wordmark at about 15–20vw over a data-shader background, then the usual footer details.
-- Header: minimal and floating (mix-blend-mode: difference over the hero is welcome). The menu may be a full-screen overlay with huge staggered links on every screen size, opened by a "Menu" button; the header row must still show the phone link and the quote button on desktop.
+The toolbox. These are available, but a move that appears on every site stops being a signature, so use ONLY the ones this site's art direction calls for, and none it rules out:
+- Type: data-split="chars" or "lines" on headings; data-scrub-text for a statement that brightens as you scroll.
+- Sequences: a marquee (data-marquee); a pinned horizontal strip (data-horizontal); stacking cards (data-stack).
+- Pictures: data-parallax, clip and scale reveals (data-reveal), data-tilt, data-distort, masks and frames in the shape the direction asks for.
+- Pointer: data-magnetic buttons, data-cursor-text, a floating preview that follows the pointer (data-follow).
+- Atmosphere: a living shader (data-shader), film grain (data-grain). Real numbers you were given may count up (data-counter); never invent numbers.
+Whatever the direction: the headline, its paragraph and the primary button must all fit in the first screen at 1440×900 and at 390×844, clear of the header; the header is minimal (a full-screen menu overlay opened by a "Menu" button is welcome) and on desktop still shows the phone link and the main action button; the footer suits the direction (a giant wordmark only if it asks for one).
+The first screen must look unmistakably like THIS direction and unlike our other eight: if it could be described as "big headline on a darkened photo with a button underneath", it is wrong unless the direction says exactly that.
 Keep it usable: the 360px phone layout must be as considered as desktop (type sizes that fit, no sideways scroll), one <h1> per page, real contrast, keyboard focus, and both light and dark modes designed (the dark one can be the hero of the concept). Keep CSS efficient: tokens, a few reusable components, no giant inline SVGs.
 
 ${MOTION_API}`;
@@ -415,7 +447,7 @@ export const ART_DIRECTION_FALLBACK = `Art direction first. Choose ONE strong co
 const artDirection = (concept?: string) => {
   const c = conceptById(concept);
   return c
-    ? `## Art direction for this site (fixed: hold every page to it)\n${c.brief}\n\nThis is one of nine distinct directions we use; a neighbouring site is built in a different one, so commit fully to this one's type, colour logic, layout and moves, and avoid the habits of the others. Do not fall back on an italic serif accent phrase, a marquee band, or a giant wordmark footer unless THIS direction calls for them.`
+    ? `## Art direction for this site (fixed: hold every page to it)\n${c.brief}\n\nThe home page's first screen: ${c.hero}\nThis replaces the general rule about a full-bleed hero with a gradient overlay. Our system still supplies the moving picture: put exactly <div class="hero-motion" aria-hidden="true"></div> (empty, unstyled) as the FIRST child of the element the picture belongs in, which must have position:relative and overflow:hidden and its own size or aspect ratio. For a full-screen picture that element is the hero section itself; for a framed picture it is the frame, and then no overlay goes on it.\n\nMotion for this direction: ${c.moves}\nRuled out for this direction: ${c.never}\n\nThis is one of nine distinct directions we use; a neighbouring site is built in a different one with a different first screen, a different order of sections and different layouts for each, so commit fully to this one and avoid the habits of the others. Inner pages carry the same direction: their page heroes, lists and picture frames follow the same logic as the home page, not a generic template.`
     : ART_DIRECTION_FALLBACK;
 };
 
@@ -449,7 +481,7 @@ the primary colour as #rrggbb
 @@@ FONTS
 the Google Fonts <link> tags (preconnects + one stylesheet)
 @@@ CSS
-the whole site's stylesheet (no <style> tag): tokens for both modes, base, header (with a ${drop} dropdown that works on hover, keyboard focus and tap), footer, buttons, eyebrows, and every component the pages will use — home hero (with the motion layer and overlay described above), page hero with breadcrumb, marquee ticker, service cards, feature/why-us cards, process timeline, before/after and gallery tiles (including the labelled photo-space tile), map embed frame with place list, review cards, area cards, checklists, contact cards, forms (with .form-thanks, .form-error and the privacy note), FAQ accordion, CTA band, and legal pages (.legal: a readable article up to 760px wide with h1, h2, p, ul and a .legal-note callout).${index ? " Also what this kind of business needs: an opening-hours table, and a designed list for its offer (for a menu: rows of dish name, short description and an optional price slot, grouped under headings)." : ""}${style === "studio" ? " Also the Studio components: display type scale, numbered section labels, marquee rows, the services index with its floating preview, horizontal gallery panels, stacked cards, the full-screen menu overlay and the footer wordmark. Under about 60 KB." : " Under about 45 KB."}
+the whole site's stylesheet (no <style> tag): tokens for both modes, base, header (with a ${drop} dropdown that works on hover, keyboard focus and tap), footer, buttons, eyebrows, and every component the pages will use — home hero (with the motion layer and overlay described above), page hero with breadcrumb, marquee ticker, service cards, feature/why-us cards, process timeline, before/after and gallery tiles (including the labelled photo-space tile), map embed frame with place list, review cards, area cards, checklists, contact cards, forms (with .form-thanks, .form-error and the privacy note), FAQ accordion, CTA band, and legal pages (.legal: a readable article up to 760px wide with h1, h2, p, ul and a .legal-note callout).${index ? " Also what this kind of business needs: an opening-hours table, and a designed list for its offer (for a menu: rows of dish name, short description and an optional price slot, grouped under headings)." : ""}${style === "studio" ? " Also the Studio components this art direction needs: its display type scale, the hero composition it describes, and one component for each scene in its home page sequence (named after what it is in this direction, e.g. contents list, film strip, sign board, spec table), plus the full-screen menu overlay. Do not build components the direction rules out. Under about 60 KB." : " Under about 45 KB."}
 @@@ HEADER
 the <header> element: logo/name linking to /, the main nav (${nav}), a phone link, a "${cta?.name ?? "Get a Quote"}" button to ${cta?.path ?? "/quote"}, the theme toggle, and the mobile menu (which lists every page above except the legal ones).
 @@@ FOOTER

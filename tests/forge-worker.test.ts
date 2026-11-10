@@ -3,7 +3,8 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { Intake } from "@/forge/schema";
 import { profileFor } from "../cloudflare/forge/src/profiles";
-import { costOf, CREDIT_MARKER, factsBlock, mapEmbed, parseParts, profileNote, sitemapFor, tidyCss, type Kit } from "../cloudflare/forge/src/designer";
+import { CONCEPTS } from "../cloudflare/forge/src/concepts";
+import { costOf, CREDIT_MARKER, factsBlock, mapEmbed, parseParts, profileNote, sitemapFor, studioHome, systemFor, tidyCss, type Kit } from "../cloudflare/forge/src/designer";
 import { clearAttempts, makeSlug, pruneThrottle, recordAttempt, throttled } from "../cloudflare/forge/src/db";
 import { formatPhone, mergeIntake, parseMapsUrl, pickBusiness } from "../cloudflare/forge/src/places";
 import { folderId, parseFolder, serveVideo } from "../cloudflare/forge/src/drive";
@@ -58,6 +59,30 @@ describe("Forge worker — multi-page sites", () => {
     expect(kind("B&B Motel", "Motel")).toBe("lodging");
     expect(sitemapFor(Intake.parse({ businessName: "B&B Motel", industry: "Motel" })).map((p) => p.path)).toEqual(expect.arrayContaining(["/rooms", "/rates", "/your-stay", "/location"]));
     expect(profileNote(Intake.parse({ businessName: "Acme Plumbing" }))).toBe("");
+  });
+
+  it("gives each Studio look its own first screen, its own order of scenes and its own bans", () => {
+    const pages = sitemapFor(Intake.parse({ businessName: "El Rodeo", industry: "Mexican Restaurant" }), ["Tacos", "Seafood Platters", "Margaritas", "Appetizers"]);
+    const homes = CONCEPTS.map((c) => studioHome(pages, c.id));
+    expect(new Set(homes).size).toBe(CONCEPTS.length);
+    for (const [n, c] of CONCEPTS.entries()) {
+      expect(c.scenes.length).toBeGreaterThanOrEqual(7);
+      expect(homes[n]).toContain(c.hero);
+      expect(homes[n]).toContain(c.never);
+      // The business's own pages and main action are in every plan.
+      expect(homes[n]).toContain("/menu/tacos");
+      expect(homes[n]).toContain('"Reserve a Table" → /reserve');
+      expect(systemFor("studio", c.id)).toContain(c.hero);
+    }
+    // No two looks open with the same first screen or share a second scene.
+    expect(new Set(CONCEPTS.map((c) => c.hero)).size).toBe(CONCEPTS.length);
+    expect(new Set(CONCEPTS.map((c) => c.scenes[0])).size).toBe(CONCEPTS.length);
+    // Only the looks that ask for a pinned horizontal strip or stacked cards get them.
+    const uses = (re: RegExp) => CONCEPTS.filter((c) => re.test(c.scenes.join(" "))).map((c) => c.id);
+    expect(uses(/data-horizontal/)).toEqual(["cinematic"]);
+    expect(uses(/data-stack/)).toEqual(["kinetic"]);
+    // The old one-recipe-for-all wording is gone.
+    expect(systemFor("studio", "luxe")).not.toContain("use most of these on the home page");
   });
 
   it("caps service pages at six", () => {
