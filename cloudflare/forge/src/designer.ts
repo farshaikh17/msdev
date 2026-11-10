@@ -460,7 +460,7 @@ one small script (no <script> tag) shared by every page: theme toggle, mobile me
 a short reference for the page writers: each component's class names and markup pattern (a line or two each, no full examples).${style === "studio" ? " Start with the art-direction concept in two sentences, and say which motion attributes each component uses." : ""}`;
 }
 
-const PAGE_TASK = `Next you'll be asked to write one page of this website, using the design system above: its CSS classes, components and tokens. Add new CSS only for components the stylesheet doesn't have yet. Reply with these parts, in this order:
+const PAGE_TASK = `Next you'll be asked to write one page of this website, using the design system above: its CSS classes, components and tokens. Add new CSS only for components the stylesheet doesn't have yet. Any layout you add must work on a 360px-wide phone: multi-column grids and rows collapse to one column below 720px, grid and flex children get min-width:0, nothing has a fixed width or min-width wider than the screen, and forms and images are never wider than their column. Reply with these parts, in this order:
 
 @@@ TITLE
 the page <title>: "Business Name | Service in City" for the home page, otherwise like "Services | Business Name"

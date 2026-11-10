@@ -58,6 +58,8 @@ export interface Review {
   fixed?: boolean;
   fixError?: string;
   consoleErrors?: string[];
+  /** Inner pages that were wider than a phone screen, and whether each was repaired. */
+  wide?: { path: string; px: number; fixed?: boolean }[];
   old?: OldSite | null;
   seconds?: number;
   costUsd?: number;
@@ -305,6 +307,20 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     await visit(page, siteUrl, settle, sleep);
     const phone = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
     const pFacts = factsOf(await page.evaluate<PageFacts>(FACTS));
+    // The other main pages, at phone width: a layout that doesn't collapse pushes content off the screen.
+    const wide: { path: string; px: number; fixed?: boolean }[] = [];
+    const inner = pagesOf(kit).filter((p) => p.kind === "ai" && p.path !== "/");
+    const first = (pred: (p: (typeof inner)[number]) => boolean) => inner.find(pred);
+    const sample = [...new Set([first((p) => p.path === "/contact"), first((p) => p.role === "cta" || p.path === "/quote"), first((p) => p.role === "index" || p.path === "/services"), first((p) => p.path === "/about"), first((p) => p.path === "/gallery"), first((p) => p.role === "visit" || p.path === "/areas"), first((p) => p.role === "item" || p.path.startsWith("/services/")), first((p) => p.path === "/faq")])].filter((p) => !!p);
+    for (const p of sample) {
+      try {
+        await visit(page, `${siteUrl}${p.path}`, 500, sleep);
+        const w = Number(await page.evaluate<number>("document.documentElement.scrollWidth"));
+        if (w > 394) wide.push({ path: p.path, px: Math.round(w - 390) });
+      } catch {
+        // A page that won't load is caught by the link check.
+      }
+    }
     await page.setViewport({ width: 1200, height: 630 });
     await visit(page, siteUrl, settle, sleep);
     const og = bytesOf(await page.screenshot({ type: "jpeg", quality: 78 }));
@@ -314,6 +330,7 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     shots.push("shot-desktop.jpg", "shot-phone.jpg", "og.jpg");
 
     const checks = checksFor(dFacts, pFacts, pagesOf(kit).map((p) => p.path), prefix, consoleErrors.filter((e) => !/favicon|ERR_BLOCKED|net::/i.test(e)));
+    checks.splice(2, 0, { id: "overflow-inner", label: "Other pages fit a phone screen", ok: !wide.length, detail: wide.length ? wide.map((x) => `${x.path} is ${x.px}px too wide`).join(", ") : undefined });
 
     // The business's current website, for the before/after.
     let old: OldSite | null = null;
@@ -345,10 +362,10 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     const facts = checks.map((c) => `- ${c.label}: ${c.ok ? "ok" : "FAILED"}${c.detail ? ` (${c.detail})` : ""}`).join("\n");
     const studio = kit.style === "studio";
     const crit = await deps.critique(env, { desktop, phone }, facts, studio);
-    review = { at, score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues, checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
+    review = { at, ...(wide.length ? { wide } : {}), score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues, checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
 
     // Fix: write the home page again with the notes, when it isn't good enough.
-    const failed = checks.filter((c) => !c.ok && !["tel", "form", "text", "alt"].includes(c.id));
+    const failed = checks.filter((c) => !c.ok && !["tel", "form", "text", "alt", "overflow-inner"].includes(c.id));
     const notes = [
       ...failed.map((c) => `${c.label}: FAILED${c.detail ? ` (${c.detail})` : ""}. Fix this.`),
       ...crit.issues.filter((i) => i.severity !== "low").map((i) => `${i.what} → ${i.fix}`),
@@ -366,6 +383,23 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
         } catch (e) {
           review.fixError = e instanceof Error ? e.message : String(e);
         }
+      }
+    }
+    // Repair inner pages that were too wide for a phone (each is rewritten on its own, cheaper, model).
+    for (const x of wide.slice(0, 4)) {
+      const spec = pagesOf(kit).find((p) => p.path === x.path);
+      const current = await getPage(env, slug, version, x.path);
+      if (!spec || !current) continue;
+      try {
+        const { page: fixedPage, usage } = await designSitePage(env, kit, spec, {
+          instruction: `On a 390px-wide phone this page is ${x.px}px wider than the screen, so content runs off the right edge. Find what causes it and fix it: every multi-column grid or flex row must collapse to one column below 720px, nothing may have a fixed width or min-width wider than the screen (use max-width:100% and min-width:0 on grid children), long words and links must wrap, and forms must be 100% wide. Change only what is needed for that.`,
+          current,
+        });
+        await savePage(env, slug, version, x.path, fixedPage, usage);
+        x.fixed = true;
+        review.costUsd = (review.costUsd ?? 0) + (Number((usage as { cost_usd?: number }).cost_usd) || 0);
+      } catch (e) {
+        console.log("wide page not fixed", slug, x.path, e instanceof Error ? e.message : String(e));
       }
     }
     await recordBuildCost(env, demo.tenantId, slug, `${version}:review`, review.costUsd ?? 0, review.fixed ? 2 : 1, "review");

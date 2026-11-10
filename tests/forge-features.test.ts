@@ -495,6 +495,32 @@ describe("empty before/after boxes fill themselves", () => {
 });
 
 describe("the review's page visits", () => {
+  it("an inner page that is too wide for a phone is reported and repaired", async () => {
+    const { slug, demo } = await liveDemo();
+    const version = demo.liveVersion!;
+    let url = "";
+    const page = {
+      setViewport: async () => undefined,
+      goto: async (u: string) => void (url = u),
+      screenshot: async () => new Uint8Array([0xff, 0xd8, 0xff]),
+      // The contact page is 450px wide on a 390px phone; everything else fits.
+      evaluate: async (fn: unknown) => (typeof fn === "string" && fn.includes("scrollWidth") && !fn.includes("overflow") ? (url.endsWith("/contact") ? 450 : 390) : goodFacts([`/${slug}/about`])) as never,
+      on: () => undefined,
+      close: async () => undefined,
+    };
+    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, {
+      launch: async () => ({ newPage: async () => page as never, close: async () => undefined }),
+      sleep: async () => undefined,
+      critique: async () => ({ score: 9, verdict: "ok", strengths: [], issues: [], costUsd: 0 }),
+    });
+    expect(r.wide).toEqual([{ path: "/contact", px: 60, fixed: true }]);
+    expect(r.checks!.find((c) => c.id === "overflow-inner")).toMatchObject({ ok: false, detail: "/contact is 60px too wide" });
+    // Only that page is rewritten, and the home page is left alone (it scored 9).
+    const fixes = vi.mocked(designSitePage).mock.calls.filter((c) => c[3]?.instruction?.includes("wider than the screen"));
+    expect(fixes.map((c) => c[2].path)).toEqual(["/contact"]);
+    expect(r.fixed).toBeUndefined();
+  });
+
   it("wait out a Studio intro before the screenshot, and carry on when a busy page never goes quiet", async () => {
     const { slug, demo } = await liveDemo();
     const version = demo.liveVersion!;
@@ -520,14 +546,16 @@ describe("the review's page visits", () => {
     // A standard site settles briefly...
     let r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, deps);
     expect(r.skipped).toBeUndefined();
-    expect(waits.slice(0, 3)).toEqual([1200, 1200, 1200]);
+    expect(waits.filter((w) => w !== 500)).toEqual([1200, 1200, 1200]);
+    // The other pages are opened at phone width too, with a short wait each.
+    expect(waits.filter((w) => w === 500).length).toBeGreaterThanOrEqual(4);
     // ...a Studio site waits out its intro, and each screenshot comes after a wait.
     h.db.prepare("UPDATE site_versions SET kit = ? WHERE slug = ? AND version = ?").run(JSON.stringify({ ...JSON.parse(row.kit), style: "studio" }), slug, version);
     waits.length = 0;
     order.length = 0;
     r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, deps);
     expect(r.skipped).toBeUndefined();
-    expect(waits.slice(0, 3)).toEqual([5500, 5500, 5500]);
+    expect(waits.filter((w) => w !== 500)).toEqual([5500, 5500, 5500]);
     expect(order.slice(0, 3)).toEqual(["goto", "wait", "shot"]);
   });
 });
