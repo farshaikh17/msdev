@@ -53,7 +53,7 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
 
   await step("no horizontal overflow on any page at 360px", async () => {
     const m = await ctx({ viewport: { width: 360, height: 800 } }); const p = await m.newPage();
-    for (const path of seen) { await p.goto(BASE + path, { waitUntil: "domcontentloaded" }); if (await p.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) overflow.push(path); }
+    for (const path of seen) { await p.goto(BASE + path, { waitUntil: "load" }); if (await p.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) overflow.push(path); }
     await m.close(); ok(!overflow.length, overflow.join(", "));
   });
 
