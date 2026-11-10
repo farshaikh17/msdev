@@ -133,30 +133,43 @@ const CRITIQUE_SYSTEM = `You are the creative director at Mianro Systems reviewi
 
 Score the page from 1 to 10 overall, weighing: first impression and distinctiveness (does it look custom and expensive, or like an AI template?), hierarchy and typography, colour and contrast, layout and spacing on desktop AND on the phone, use of imagery, clarity of the offer and the call to action, trust signals, and copy. Mark these down hard: text cut off or overlapping, elements running off the screen, unreadable contrast, an empty or broken-looking area, a hero that doesn't explain what the business does, the same card grid repeated section after section, a label above every single heading, gradient text used as decoration, nested cards, cards rounded like pills.
 
-Reply with JSON only, no markdown: {"score": 1-10, "verdict": "one sentence", "strengths": ["..."], "issues": [{"what": "...", "fix": "a concrete instruction the designer can act on", "severity": "high|medium|low"}]}. At most 8 issues, most important first. If the page is genuinely excellent, say so and keep the issues list short.`;
+Reply with JSON only, no markdown: {"score": 1-10, "verdict": "one sentence", "strengths": ["..."], "issues": [{"what": "...", "fix": "a concrete instruction the designer can act on", "severity": "high|medium|low"}]}. Never use double quote characters inside any text value (write quoted words with single quotes). At most 8 issues, most important first. If the page is genuinely excellent, say so and keep the issues list short.`;
 
 async function critiqueReal(env: Env, shots: { desktop: Uint8Array; phone: Uint8Array }, facts: string, studio = false) {
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 120_000 });
+  const content = [
+    { type: "text" as const, text: "Desktop (1280×800):" },
+    { type: "image" as const, source: { type: "base64" as const, media_type: "image/jpeg" as const, data: b64(shots.desktop) } },
+    { type: "text" as const, text: "Phone (390×844):" },
+    { type: "image" as const, source: { type: "base64" as const, media_type: "image/jpeg" as const, data: b64(shots.phone) } },
+    { type: "text" as const, text: `Facts measured in the browser (treat as true):\n${facts}` },
+  ];
+  const messages: { role: "user" | "assistant"; content: string | typeof content }[] = [{ role: "user", content }];
+  let cost = 0;
+  let p: { score?: unknown; verdict?: unknown; strengths?: unknown; issues?: unknown } | null = null;
+  let lastErr = "";
+  for (let attempt = 0; attempt < 2 && !p; attempt++) {
   const res = await client.messages.create({
     model: CRITIQUE_MODEL,
-    max_tokens: 1500,
+    max_tokens: 3000,
     system: studio ? `${CRITIQUE_SYSTEM}\n\nThis is a STUDIO-tier site: it is meant to look like an award-winning creative studio built it. Judge it against that bar. A competent, tidy local-business template is a 5 or 6 at most. Look for a bold, specific concept, striking typography at a scale that stops the scroll, a memorable hero, art-directed imagery, confident use of space and motion cues, and details nobody else would think of. Say plainly what would make it unforgettable, as concrete design changes.` : CRITIQUE_SYSTEM,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: "Desktop (1280×800):" },
-          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64(shots.desktop) } },
-          { type: "text", text: "Phone (390×844):" },
-          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64(shots.phone) } },
-          { type: "text", text: `Facts measured in the browser (treat as true):\n${facts}` },
-        ],
-      },
-    ],
+    messages,
   });
+  cost += costOf(CRITIQUE_MODEL, res.usage as unknown as Record<string, unknown>);
   const text = res.content.map((c) => (c.type === "text" ? c.text : "")).join("");
   const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
-  const p = JSON.parse(json) as { score?: unknown; verdict?: unknown; strengths?: unknown; issues?: unknown };
+  try {
+    p = JSON.parse(json);
+  } catch (e) {
+    lastErr = e instanceof Error ? e.message : String(e);
+    // Keep what can be read so the page still shows a score; retry once for the full notes.
+    const score = /"score"\s*:\s*(\d+(?:\.\d+)?)/.exec(text)?.[1];
+    const verdict = /"verdict"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text)?.[1];
+    if (attempt === 1 && score) p = { score: Number(score), verdict: verdict ?? "", strengths: [], issues: [] };
+    messages.push({ role: "assistant", content: text.slice(0, 6000) }, { role: "user", content: `That was not valid JSON (${lastErr}). Reply again with the same review as valid JSON only. Do not use double quote characters inside any text value; use single quotes.` });
+  }
+  }
+  if (!p) throw new Error(`critique was not valid JSON: ${lastErr}`);
   const issues = Array.isArray(p.issues)
     ? (p.issues as Partial<Issue>[]).slice(0, 8).map((i) => ({ what: String(i.what ?? "").slice(0, 300), fix: String(i.fix ?? "").slice(0, 400), severity: i.severity === "high" || i.severity === "low" ? i.severity : ("medium" as const) }))
     : [];
@@ -165,7 +178,7 @@ async function critiqueReal(env: Env, shots: { desktop: Uint8Array; phone: Uint8
     verdict: String(p.verdict ?? "").slice(0, 300),
     strengths: Array.isArray(p.strengths) ? (p.strengths as unknown[]).slice(0, 6).map((s) => String(s).slice(0, 200)) : [],
     issues,
-    costUsd: costOf(CRITIQUE_MODEL, res.usage as unknown as Record<string, unknown>),
+    costUsd: cost,
   };
 }
 

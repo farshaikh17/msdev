@@ -350,7 +350,8 @@ ${row("Chat message", chat, chat)}
 ${row("Sheet row (date · business · trade · city · phone · link)", sheet.replace(/\t/g, " · "), sheet)}
 </div></details></section>
 <iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(i.businessName)}"></iframe>
-<details class="card"><summary>More tools: quality check, views, outreach, changes, form messages</summary><div style="display:grid;gap:16px;margin-top:12px">
+${qualityCard(d, extra.review, links, extra.pitch ?? "")}
+<details class="card"><summary>More tools: views, outreach, changes, form messages</summary><div style="display:grid;gap:16px;margin-top:12px">
 <section class="card"><h2>Form submissions (${leads.length}${leads.length === 50 ? "+" : ""})</h2>${
       leads.length
         ? `<div class="share">${leads
@@ -365,7 +366,6 @@ ${row("Sheet row (date · business · trade · city · phone · link)", sheet.re
             .join("")}</div>`
         : `<p class="note" style="margin:0">Anything sent through the site's forms shows up here.</p>`
     }</section>
-${qualityCard(d, extra.review, links, extra.pitch ?? "")}
 ${viewsCard(extra.views)}
 ${outreachCard(d, links, extra.qr ?? "", true)}
 ${changeCard(d, links.pages.filter((p): p is { name: string; path: string; url: string } => !!p.path), true)}
