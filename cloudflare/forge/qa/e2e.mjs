@@ -150,7 +150,7 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
     slug = op.url().match(/\/demos\/([a-z0-9-]+)/)[1]; log("      slug " + slug);
   });
   await step("owner can choose Studio, and the demo is labelled Studio", async () => {
-    await op.goto(BASE + "/"); await op.click("summary:has-text('Options')"); ok(await op.isVisible("text=Studio · 3 credits"), "no Studio choice");
+    await op.goto(BASE + "/"); await op.click("summary:has-text('Options')"); ok(await op.isVisible("text=Studio · 3 credits"), "no Studio choice"); await op.waitForTimeout(1500); await op.locator(".concepts").screenshot({ path: SHOTS + "/qa-app-looks.png" }); ok((await op.locator(".concepts input[name=concept]").count()) === 10, "ten Studio looks expected");
     ok((await op.content()).includes("Studio · 3 credits"), "credit wording missing");
     await op.fill("input[name=businessName]", "Dummy Studio Roofing"); await op.fill("input[name=city]", "105 Court St, Cynthiana, KY 41031, United States");
     await op.click("label.choice:has(input[name=style][value=studio])"); ok(await op.isChecked("input[name=style][value=studio]"), "Studio not selected");

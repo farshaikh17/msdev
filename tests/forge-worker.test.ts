@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { Intake } from "@/forge/schema";
-import { costOf, CREDIT_MARKER, factsBlock, mapEmbed, parseParts, sitemapFor, tidyCss, type Kit } from "../cloudflare/forge/src/designer";
+import { profileFor } from "../cloudflare/forge/src/profiles";
+import { costOf, CREDIT_MARKER, factsBlock, mapEmbed, parseParts, profileNote, sitemapFor, tidyCss, type Kit } from "../cloudflare/forge/src/designer";
 import { clearAttempts, makeSlug, pruneThrottle, recordAttempt, throttled } from "../cloudflare/forge/src/db";
 import { formatPhone, mergeIntake, parseMapsUrl, pickBusiness } from "../cloudflare/forge/src/places";
 import { folderId, parseFolder, serveVideo } from "../cloudflare/forge/src/drive";
@@ -25,6 +26,36 @@ describe("Forge worker — multi-page sites", () => {
     expect(services.length).toBeGreaterThanOrEqual(4);
     expect(services.map((p) => p.path)).toContain("/services/drain-cleaning");
     expect(pages.filter((p) => p.kind === "legal").map((p) => p.path)).toEqual(["/privacy", "/terms"]);
+  });
+
+  it("gives a bar and grill a restaurant's pages, not a contractor's", () => {
+    const i = Intake.parse({ businessName: "Winnett Bar & Grill" });
+    const pages = sitemapFor(i, ["Burgers & Sandwiches", "Steaks", "Starters", "Drinks"]);
+    const paths = pages.map((p) => p.path);
+    expect(paths).toEqual(expect.arrayContaining(["/", "/menu", "/menu/steaks", "/events", "/gallery", "/visit", "/reserve", "/privacy", "/terms"]));
+    expect(paths.some((x) => /^\/(services|quote|areas|process)/.test(x))).toBe(false);
+    expect(pages.length).toBeGreaterThanOrEqual(15);
+    expect(pages.find((p) => p.path === "/reserve")!.name).toBe("Reserve a Table");
+    expect(pages[0]!.brief).not.toMatch(/\{items|\{stepsPath|\{visitPath|\{itemsPath/);
+    expect(pages[0]!.brief).toContain("/menu/steaks");
+    expect(profileNote(i)).toContain("Reserve a Table");
+    // With nothing planned, it falls back to menu sections, never to home services.
+    expect(sitemapFor(i).filter((p) => p.role === "item").map((p) => p.name)).toContain("Steaks");
+  });
+
+  it("picks the kind of business from the trade first, then the name", () => {
+    const kind = (businessName: string, industry = "") => profileFor({ businessName, industry }).id;
+    expect(kind("Acme Plumbing")).toBe("contractor");
+    expect(kind("Smith & Sons")).toBe("contractor");
+    expect(kind("Blue Lagoon Spa Repair")).toBe("contractor");
+    expect(kind("Olvin's Landscaping Co.")).toBe("contractor");
+    expect(kind("Bright Smile", "Family Dentist")).toBe("health");
+    expect(kind("Luxe", "Hair Salon")).toBe("beauty");
+    expect(kind("Iron Works", "Gym")).toBe("fitness");
+    expect(kind("Harper & Lane", "Law Firm")).toBe("professional");
+    expect(kind("Petal & Stem Florist")).toBe("retail");
+    expect(kind("The Grill", "Roofing")).toBe("contractor");
+    expect(profileNote(Intake.parse({ businessName: "Acme Plumbing" }))).toBe("");
   });
 
   it("caps service pages at six", () => {

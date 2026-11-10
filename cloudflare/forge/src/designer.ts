@@ -7,6 +7,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { splitList, parseReviews } from "../../../src/forge/copy";
 import { GENERIC, presetFor } from "../../../src/forge/presets";
+import { profileFor, type Profile } from "./profiles";
 import type { Intake } from "../../../src/forge/schema";
 import type { Env } from "./env";
 import { conceptById } from "./concepts";
@@ -56,6 +57,8 @@ export interface PageSpec {
   name: string;
   brief: string;
   kind: "ai" | "legal";
+  /** What the page is for on a non-contractor site (see profiles.ts): the offer index, one offer, the main action, or where to find the business. */
+  role?: "index" | "item" | "cta" | "visit" | "steps";
 }
 
 /** The footer credit the SOP requires on every page, exactly. Kit footers carry the marker; assemble() swaps this in. */
@@ -73,23 +76,75 @@ const slugify = (s: string) =>
     .replace(/-+$/, "");
 
 /** The services that get their own page: the ones typed in (or the trade's usual ones), four to six of them. */
-export function servicePages(i: Intake, suggested: string[] = []): { name: string; path: string }[] {
+export function servicePages(i: Intake, suggested: string[] = [], profile: Profile = profileFor(i)): { name: string; path: string }[] {
   const given = splitList(i.services).length ? splitList(i.services) : suggested;
-  const preset = presetFor(i.industry, i.businessName, i.services).services.map((s) => s.title);
+  const found = presetFor(i.industry, i.businessName, i.services);
+  // A contractor falls back to the trade's usual services; other kinds of business to their own examples, never to home-service ones.
+  const preset = profile.id === "contractor" || found !== GENERIC ? found.services.map((s) => s.title) : profile.items.example.split(", ");
+  const base = profile.id === "contractor" ? "/services" : profile.items.path;
   const names = [...given, ...preset.filter((p) => !given.some((g) => g.toLowerCase() === p.toLowerCase()))].slice(0, Math.max(4, Math.min(6, given.length)));
   const seen = new Set<string>();
   return names.flatMap((name) => {
     const slug = slugify(name);
     if (!slug || seen.has(slug)) return [];
     seen.add(slug);
-    return [{ name, path: `/services/${slug}` }];
+    return [{ name, path: `${base}/${slug}` }];
   });
 }
 
 /** The site's pages (at least 15, per the design SOP). Paths are what every link uses. */
 export function sitemapFor(i: Intake, suggested: string[] = []): PageSpec[] {
-  const services = servicePages(i, suggested);
-  const ai = (path: string, name: string, brief: string): PageSpec => ({ path, name, brief, kind: "ai" });
+  const profile = profileFor(i);
+  const services = servicePages(i, suggested, profile);
+  const ai = (path: string, name: string, brief: string, role?: PageSpec["role"]): PageSpec => ({ path, name, brief, kind: "ai", ...(role ? { role } : {}) });
+  if (profile.id !== "contractor") {
+    const p = profile;
+    const fill = (t: string) =>
+      t
+        .replaceAll("{items}", services.map((s) => `${s.name} → ${s.path}`).join("; "))
+        .replaceAll("{itemsPath}", p.items.path)
+        .replaceAll("{stepsPath}", p.steps.path)
+        .replaceAll("{visitPath}", p.visit.path);
+    return [
+      ai(
+        "/",
+        "Home",
+        `At least 12 substantive sections between the header and footer, in this order:
+1. Hero: full-bleed, with the motion layer described in the design system as its background (not a photo beside the text): a headline specific to this business with an accent phrase, a one-paragraph promise, primary and secondary buttons (${p.cta.name} → ${p.cta.path}, and ${p.items.name} → ${p.items.path} or the phone), trust points.
+2. Trust strip: only verified facts given to you; otherwise qualitative points without numbers. The marquee ticker may sit here.
+${p.home.map((h, n) => `${n + 3}. ${fill(h)}`).join("\n")}
+${p.home.length + 3}. Reviews: real reviews, or clearly-labelled sample reviews; link to /reviews.
+${p.home.length + 4}. FAQs: 5–6 practical questions (${p.faq}) as an accordion; link to /faq.
+${p.home.length + 5}. A visible "${p.cta.name}" form (${p.cta.form}) with the privacy note, placed before the final CTA.
+${p.home.length + 6}. Final call to action band.`,
+      ),
+      ai("/about", "About", p.about),
+      ai(
+        p.items.path,
+        p.items.name,
+        `Page hero; every ${p.items.one} page (${services.map((s) => `${s.name} → ${s.path}`).join("; ")}) presented in a way that suits this kind of business, each with a short description and a link; how to choose; FAQs; closing CTA to ${p.cta.path}.`,
+        "index",
+      ),
+      ...services.map((s) => ai(s.path, s.name, p.item.replaceAll("{name}", s.name), "item")),
+      ai(p.steps.path, p.steps.name, p.steps.brief, "steps"),
+      ai("/gallery", p.gallery.name, p.gallery.brief),
+      ai(
+        "/reviews",
+        "Reviews",
+        "Page hero; featured review; a grid of reviews (real ones with name and context; without real reviews, 4–6 clearly-labelled sample reviews and the note 'Sample reviews — your Google reviews appear here at launch'); never a star rating or review count unless given; what people value most (themes); invitation to leave a review or call; closing CTA.",
+      ),
+      ai("/faq", "FAQs", `Page hero; 12–16 practical questions grouped under 3–4 headings (${p.faq}) as accordions; a 'still have a question?' contact panel; closing CTA.`),
+      ai(p.visit.path, p.visit.name, p.visit.brief, "visit"),
+      ai(
+        "/contact",
+        "Contact",
+        "Page hero; contact cards (phone as a tel: link, email only if given, address, hours if known); a general message form (name, phone, email, message) with the privacy note; what happens after you get in touch (3 steps); the map embed; a short FAQ.",
+      ),
+      ai(p.cta.path, p.cta.name, `Page hero focused on this one action; the form (${p.cta.form}) with the privacy note; ${p.cta.about}; why people choose us (short); a review; FAQs.`, "cta"),
+      { path: "/privacy", name: "Privacy Policy", brief: "", kind: "legal" },
+      { path: "/terms", name: "Terms and Conditions", brief: "", kind: "legal" },
+    ];
+  }
   return [
     ai(
       "/",
@@ -211,7 +266,7 @@ export async function planSite(env: Env, i: Intake, site: SiteFacts | null): Pro
 @@@ TRADE
 What kind of business this is, in 1 to 3 words, title case (e.g. Restaurant, Plumbing, Hair Salon, Family Dentist). Judge from the name, niche, services and website.
 @@@ SERVICES
-4 to 6 services this business offers, one per line (2–4 words each, title case). Use the services given or on their website when there are any; otherwise the main services a business in this niche typically offers.
+4 to 6 things this business offers, one per line (2–4 words each, title case). For a trade or service business these are its services; for a restaurant, bar or cafe its menu sections (e.g. Burgers & Sandwiches, Steaks, Starters, Drinks); for a gym or studio its classes; for a shop its product ranges; for a clinic its treatments. Use the ones given or on their website when there are any; otherwise what a business of this kind typically offers.
 @@@ PHOTOS
 6 photo descriptions for an image generator, one per line (15–30 words each): realistic scenes for this business's website. The first is a wide hero shot; the rest show the main services, the work in progress, the setting and a happy customer moment. Concrete and visual (subject, setting, light), e.g. "A wildlife technician in uniform inspecting a roof vent on a Florida home at golden hour, ladder against the wall". No text, signs or brand names in the scene.
 ${PAIRS_PROMPT}
@@ -250,6 +305,13 @@ export async function planPairs(env: Env, i: Intake): Promise<{ pairs: { before:
     .flatMap((m) => (m ? [{ before: m[1]!.slice(0, 300), after: m[2]!.slice(0, 300) }] : []))
     .slice(0, 2);
   return { pairs, cost: Number(usage.cost_usd) || 0 };
+}
+
+/** Told to the designer and every page writer when the site isn't a contractor's: use its own words and pages. */
+export function profileNote(i: Intake): string {
+  const p = profileFor(i);
+  if (p.id === "contractor") return "";
+  return `\n\nThis is not a home-service contractor. Wherever the design brief says "services", "service area", "quote", "estimate", "job" or "project", use this business's own equivalent and never those words: what it offers is its ${p.items.many} (${p.items.name} → ${p.items.path}); the main action is "${p.cta.name}" → ${p.cta.path}; people find it under "${p.visit.name}" → ${p.visit.path}. Every button, form, heading and menu label must read naturally for this kind of business.`;
 }
 
 /** What a page writer is told about before/after pairs (shared by new builds and the add-pairs button). */
@@ -364,7 +426,14 @@ export const systemFor = (style: Style, concept?: string) =>
 const sitemapText = (pages: PageSpec[]) => pages.map((p) => `${p.path} — ${p.name}`).join("\n");
 
 function kitTask(pages: PageSpec[], style: Style = "standard"): string {
-  const services = pages.filter((p) => p.path.startsWith("/services/"));
+  const index = pages.find((p) => p.role === "index");
+  const services = pages.filter((p) => (index ? p.role === "item" : p.path.startsWith("/services/")));
+  const cta = pages.find((p) => p.role === "cta");
+  const drop = index?.name ?? "Services";
+  // A site that isn't a contractor's has its own pages: the nav follows them.
+  const nav = index
+    ? `${drop} as a dropdown listing ${index.path} and ${services.map((s) => s.path).join(", ")}; ${pages.filter((p) => p.kind === "ai" && p.path !== "/" && !p.role?.match(/index|item|cta/) && p.path !== "/faq").map((p) => `${p.name} → ${p.path}`).join("; ")}`
+    : `Services as a dropdown listing /services and ${services.map((s) => s.path).join(", ")}; About Us; Our Work; Reviews; Service Areas; Contact`;
   return `Design this business's website: its design system, header and footer. The pages are written next, one at a time, from what you make here.
 
 The site's pages:
@@ -379,14 +448,14 @@ the primary colour as #rrggbb
 @@@ FONTS
 the Google Fonts <link> tags (preconnects + one stylesheet)
 @@@ CSS
-the whole site's stylesheet (no <style> tag): tokens for both modes, base, header (with a Services dropdown that works on hover, keyboard focus and tap), footer, buttons, eyebrows, and every component the pages will use — home hero (with the motion layer and overlay described above), page hero with breadcrumb, marquee ticker, service cards, feature/why-us cards, process timeline, before/after and gallery tiles (including the labelled photo-space tile), map embed frame with place list, review cards, area cards, checklists, contact cards, forms (with .form-thanks, .form-error and the privacy note), FAQ accordion, CTA band, and legal pages (.legal: a readable article up to 760px wide with h1, h2, p, ul and a .legal-note callout).${style === "studio" ? " Also the Studio components: display type scale, numbered section labels, marquee rows, the services index with its floating preview, horizontal gallery panels, stacked cards, the full-screen menu overlay and the footer wordmark. Under about 60 KB." : " Under about 45 KB."}
+the whole site's stylesheet (no <style> tag): tokens for both modes, base, header (with a ${drop} dropdown that works on hover, keyboard focus and tap), footer, buttons, eyebrows, and every component the pages will use — home hero (with the motion layer and overlay described above), page hero with breadcrumb, marquee ticker, service cards, feature/why-us cards, process timeline, before/after and gallery tiles (including the labelled photo-space tile), map embed frame with place list, review cards, area cards, checklists, contact cards, forms (with .form-thanks, .form-error and the privacy note), FAQ accordion, CTA band, and legal pages (.legal: a readable article up to 760px wide with h1, h2, p, ul and a .legal-note callout).${index ? " Also what this kind of business needs: an opening-hours table, and a designed list for its offer (for a menu: rows of dish name, short description and an optional price slot, grouped under headings)." : ""}${style === "studio" ? " Also the Studio components: display type scale, numbered section labels, marquee rows, the services index with its floating preview, horizontal gallery panels, stacked cards, the full-screen menu overlay and the footer wordmark. Under about 60 KB." : " Under about 45 KB."}
 @@@ HEADER
-the <header> element: logo/name linking to /, the main nav (Services as a dropdown listing /services and ${services.map((s) => s.path).join(", ")}; About Us; Our Work; Reviews; Service Areas; Contact), a phone link, a "Get a Quote" button to /quote, the theme toggle, and the mobile menu (which lists every page above except the legal ones).
+the <header> element: logo/name linking to /, the main nav (${nav}), a phone link, a "${cta?.name ?? "Get a Quote"}" button to ${cta?.path ?? "/quote"}, the theme toggle, and the mobile menu (which lists every page above except the legal ones).
 @@@ FOOTER
-the <footer> element: logo/name + one-line description, columns for Pages, Services (each service page) and Contact (phone, area, hours if known), links to /privacy and /terms, the copyright line, and exactly this marker on its own where the credit line goes: ${CREDIT_MARKER}
+the <footer> element: logo/name + one-line description, columns for Pages, ${drop} (each of its pages) and Contact (phone, area, hours if known), links to /privacy and /terms, the copyright line, and exactly this marker on its own where the credit line goes: ${CREDIT_MARKER}
 Our system replaces the marker with the credit "Made with ♥ by Mianro Systems" (red heart, "Mianro Systems" linked to mianrosystems.com); don't write the credit yourself. Also the phone-only sticky Call button (bottom-left), if there is a phone number.
 @@@ SCRIPT
-one small script (no <script> tag) shared by every page: theme toggle, mobile menu, Services dropdown on tap${style === "studio" ? " (the motion engine does every animation: don't write reveal, scroll or cursor code)" : ", ticker/reveal niceties"}. No form submit handling. It must not fail on pages without some elements.
+one small script (no <script> tag) shared by every page: theme toggle, mobile menu, ${drop} dropdown on tap${style === "studio" ? " (the motion engine does every animation: don't write reveal, scroll or cursor code)" : ", ticker/reveal niceties"}. No form submit handling. It must not fail on pages without some elements.
 @@@ COMPONENTS
 a short reference for the page writers: each component's class names and markup pattern (a line or two each, no full examples).${style === "studio" ? " Start with the art-direction concept in two sentences, and say which motion attributes each component uses." : ""}`;
 }

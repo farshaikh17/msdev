@@ -26,7 +26,7 @@ import {
   updateIntake,
 } from "./db";
 import type { Kit } from "./designer";
-import { adaptKit, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, planSite, sitemapFor, TryLater, type Plan } from "./designer";
+import { adaptKit, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, TryLater, type Plan } from "./designer";
 import type { BuildJob, Env } from "./env";
 import { beforeAfterImages, previewImages } from "./images";
 import { privacyPage, termsPage } from "./legal";
@@ -181,7 +181,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
         return b && a ? [{ beforeUrl: `${imgBase}ba-${n}-before.jpg`, afterUrl: `${imgBase}ba-${n}-after.jpg`, before: b.description.replace(/^Before: /, ""), after: a.description.replace(/^After: /, "") }] : [];
       });
       const pages = sitemapFor(intake, plan?.services);
-      const facts = factsBlock(intake, site, slug, plan, previews, pairs);
+      const facts = factsBlock(intake, site, slug, plan, previews, pairs) + profileNote(intake);
       // Built on another of the account's finished sites: reuse its design (far cheaper than a new one).
       let base: { slug: string; version: string; kit: Kit } | null = null;
       if (intake.reuseFrom && intake.reuseFrom !== slug) {

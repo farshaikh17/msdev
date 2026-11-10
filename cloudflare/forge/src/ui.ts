@@ -95,6 +95,7 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 .design input{position:absolute;opacity:0;pointer-events:none}.design:has(input:checked){border-color:var(--steel);box-shadow:0 0 0 2px var(--steel-soft)}.design:has(input:focus-visible){outline:2px solid var(--steel)}
 .design b{font-size:.9rem}.design small{color:var(--muted);font-size:.78rem}
 .design-pic{display:grid;place-items:center;aspect-ratio:16/10;border-radius:8px;overflow:hidden;background:var(--chrome);font:800 1.8rem var(--display);color:var(--muted)}.design-pic img{width:100%;height:100%;object-fit:cover;object-position:top}
+.design-pic.look{position:relative;font-size:16px}.design-pic.look u{text-decoration:none}
 .score{font:800 2.2rem var(--display);color:var(--steel);line-height:1}.score small{font-size:1rem;color:var(--muted)}
 .mono{font:.8rem var(--mono)}
 `;
@@ -129,7 +130,7 @@ ${toggle()}<form method="post" action="/logout"><button class="linkbtn">Sign out
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><script>${THEME_BOOT}</script>
 <title>${esc(title)} · Forge Demo</title><meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;600;700&family=JetBrains+Mono&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;600;700&family=JetBrains+Mono&display=swap">${opts.session ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Anton&family=Archivo+Black&family=Cormorant+Garamond:wght@300&family=Fraunces:wght@600&family=Fredoka:wght@700&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@600;700&family=Space+Mono:wght@700&family=Syne:wght@500&display=swap" media="print" onload="this.media='all'">` : ""}
 <style>${CSS}</style></head><body>${nav}${body}<script>${COPY_JS}${THEME_JS}</script></body></html>`;
   return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "SAMEORIGIN", "x-content-type-options": "nosniff", "referrer-policy": "same-origin" } });
 }
@@ -184,6 +185,24 @@ ${invite ? `<label>Email<input value="${esc(info.email)}" disabled></label>` : "
   );
 }
 
+/** A small drawn sample of each Studio art direction, in its own type and colours (no images). */
+const LOOKS: Record<string, { box: string; head: string; word: string; extra?: string }> = {
+  auto: { box: "background:conic-gradient(from 200deg,#e3a92b,#e2622b,#c8323c,#7652d6,#2f5fd0,#11968a,#2f8a4f,#e3a92b);color:#fff", head: "font:800 1.5rem var(--display);text-shadow:0 1px 8px rgba(0,0,0,.35)", word: "Auto" },
+  editorial: { box: "background:#f4efe6;color:#1b1b1b;align-content:end;justify-items:start;padding:10px 12px", head: "font:400 1.9rem/0.95 'Instrument Serif',Georgia,serif;letter-spacing:-.02em", word: "Quiet <i>craft</i>", extra: `<u style="position:absolute;left:12px;right:12px;top:12px;border-top:1px solid #1b1b1b;font:600 .5rem var(--body);letter-spacing:.14em;text-decoration:none;padding-top:4px">ISSUE N°1</u>` },
+  kinetic: { box: "background:#ff4d00;color:#111;align-content:center;justify-items:start;padding:0 8px;overflow:hidden", head: "font:400 3.1rem/0.82 'Anton',Impact,sans-serif;text-transform:uppercase;white-space:nowrap", word: "BUILT<br>LOUD", extra: `<u style="position:absolute;right:8px;top:8px;background:#111;color:#ff4d00;font:700 .5rem var(--body);padding:3px 6px;transform:rotate(6deg);text-decoration:none">NEW</u>` },
+  cinematic: { box: "background:radial-gradient(120% 90% at 70% 20%,#3a4a55,#0b0f14 70%);color:#e9e3d6;align-content:center", head: "font:500 .78rem 'Syne',sans-serif;letter-spacing:.42em;text-transform:uppercase", word: "After dark", extra: `<u style="position:absolute;inset:0 0 auto 0;height:14%;background:#000"></u><u style="position:absolute;inset:auto 0 0 0;height:14%;background:#000"></u>` },
+  brutalist: { box: "background:#f2f2ee;color:#000;align-content:center;justify-items:start;padding:10px", head: "font:400 1.15rem 'Archivo Black',Arial Black,sans-serif;background:#ffe14d;border:3px solid #000;box-shadow:5px 5px 0 #000;padding:6px 9px", word: "No fluff.", extra: `<u style="position:absolute;right:10px;bottom:8px;font:700 .55rem 'Space Mono',monospace;text-decoration:none">[ 01 / 09 ]</u>` },
+  swiss: { box: "background:#fff;color:#111;align-content:end;justify-items:start;padding:10px 12px", head: "font:600 1rem/1.05 'Inter Tight',Helvetica,Arial,sans-serif;letter-spacing:-.02em", word: "Order,<br>then form.", extra: `<u style="position:absolute;left:12px;top:6px;font:700 2.2rem/1 'Inter Tight',Helvetica,sans-serif;color:#e10600;text-decoration:none">01</u><u style="position:absolute;left:12px;right:12px;top:50%;border-top:1px solid #111"></u>` },
+  organic: { box: "background:#ebe5d5;color:#2f3a2c;align-content:end;justify-items:start;padding:10px 12px", head: "font:600 1.25rem/1 'Fraunces',Georgia,serif", word: "Grown with care", extra: `<u style="position:absolute;right:12px;top:10px;width:44%;height:62%;background:#8fa07c;border-radius:999px 999px 10px 10px"></u><u style="position:absolute;right:38%;top:44%;width:18%;aspect-ratio:1;background:#c97b5a;border-radius:50%"></u>` },
+  americana: { box: "background:#f3e7cf;color:#7a1f1f;align-content:center", head: "font:400 1.25rem/1 'Alfa Slab One',Georgia,serif", word: "Est. Local", extra: `<u style="position:absolute;inset:8px;border:2px solid #7a1f1f;outline:1px solid #c8922b;outline-offset:-5px"></u><u style="position:absolute;right:14px;top:12px;width:30px;height:30px;border-radius:50%;background:#c8922b;color:#f3e7cf;font:400 .7rem 'Alfa Slab One',serif;display:grid;place-items:center;text-decoration:none">★</u>` },
+  playful: { box: "background:#6c3bff;color:#fff;align-content:center", head: "font:700 1.5rem/1 'Fredoka',system-ui,sans-serif;background:#ffd84d;color:#2a1570;padding:6px 14px;border-radius:999px;transform:rotate(-4deg)", word: "Hello!", extra: `<u style="position:absolute;left:12px;top:10px;width:22px;height:22px;background:#ff7ac0;border-radius:50%"></u><u style="position:absolute;right:14px;bottom:10px;width:30px;height:16px;background:#3be0b0;border-radius:999px"></u>` },
+  luxe: { box: "background:#0e0e0e;color:#d9c7a3;align-content:center", head: "font:300 1.35rem 'Cormorant Garamond',Georgia,serif;letter-spacing:.3em;text-transform:uppercase", word: "Maison", extra: `<u style="position:absolute;inset:9px;border:1px solid rgba(217,199,163,.55)"></u>` },
+};
+const conceptPick = (id: string, checked: boolean, name: string, blurb: string) => {
+  const l = LOOKS[id] ?? LOOKS.auto!;
+  return `<label class="design"><input type="radio" name="concept" value="${esc(id)}"${checked ? " checked" : ""}><span class="design-pic look" style="${l.box}">${l.extra ?? ""}<span style="position:relative;${l.head}">${l.word}</span></span><b>${esc(name)}</b><small>${esc(blurb)}</small></label>`;
+};
+
 export interface ReuseChoice {
   slug: string;
   /** The business the design was made for. */
@@ -207,8 +226,8 @@ export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = []): string {
   const style = v?.style ?? "standard";
   const tier = `<fieldset class="look" style="border:0;padding:0;margin:0"><legend class="note" style="font-weight:600;margin-bottom:8px">Style</legend>
 <div class="look-row">${radio("style", "standard", style !== "studio", "Standard · 1 credit")}${radio("style", "studio", style === "studio", `Studio · ${STUDIO_CREDITS} credits`)}</div>
-<label for="f-concept" style="max-width:420px">Studio art direction<select id="f-concept" name="concept"><option value="auto"${(v?.concept ?? "auto") === "auto" ? " selected" : ""}>Auto: the best fit for the trade, different each time</option>${CONCEPTS.map((c) => `<option value="${esc(c.id)}"${v?.concept === c.id ? " selected" : ""}>${esc(c.name)}: ${esc(c.blurb)}</option>`).join("")}</select></label>
-<p class="note" style="margin:0"><b>Standard</b>: a polished, fast multi-page site. <b>Studio</b>: an award-style, art-directed site with kinetic type, smooth scrolling, WebGL backgrounds, a custom cursor and page transitions, held to one of nine distinct art directions (the choice above only applies to Studio). It takes longer and uses the larger models.</p></fieldset>`;
+<div><div class="note" style="font-weight:600;margin-bottom:8px">Studio look (only used for Studio)</div><div class="designs concepts">${conceptPick("auto", (v?.concept ?? "auto") === "auto" || !CONCEPTS.some((c) => c.id === v?.concept), "Let Forge choose", "The best fit for the trade, different each time")}${CONCEPTS.map((c) => conceptPick(c.id, v?.concept === c.id, c.name, c.blurb)).join("")}</div></div>
+<p class="note" style="margin:0"><b>Standard</b>: a polished, fast multi-page site. <b>Studio</b>: an award-style, art-directed site with kinetic type, smooth scrolling, WebGL backgrounds, a custom cursor and page transitions, held to one of nine distinct looks (pick one below, or let Forge choose). It takes longer and uses the larger models.</p></fieldset>`;
   const pick = (value: string, checked: boolean, inner: string) => `<label class="design"><input type="radio" name="reuseFrom" value="${esc(value)}"${checked ? " checked" : ""}>${inner}</label>`;
   const reuseSel = reuse.length
     ? `<fieldset class="look" style="border:0;padding:0;margin:0"><legend class="note" style="font-weight:600;margin-bottom:8px">Design</legend>

@@ -73,6 +73,8 @@ interface PageFacts {
   h1: number;
   noAlt: number;
   brokenImgs: number;
+  /** Tall sections with nothing in them (no words, pictures, video or drawing). */
+  emptyBlocks?: number;
   links: string[];
   hasViewport: boolean;
   tel: boolean;
@@ -88,6 +90,7 @@ export const FACTS = `(() => ({
   h1: document.querySelectorAll("h1").length,
   noAlt: Array.from(document.images).filter((i) => !i.hasAttribute("alt")).length,
   brokenImgs: Array.from(document.images).filter((i) => i.src && i.complete && !i.naturalWidth).length,
+  emptyBlocks: Array.from(document.querySelectorAll("main section, main > div")).filter((e) => e.offsetHeight >= 480 && !(e.innerText || "").trim() && !e.querySelector("img,picture,video,canvas,svg,iframe")).length,
   links: Array.from(document.querySelectorAll("a[href]")).map((a) => a.getAttribute("href") || "").slice(0, 400),
   hasViewport: !!document.querySelector('meta[name="viewport"]'),
   tel: !!document.querySelector('a[href^="tel:"]'),
@@ -212,6 +215,7 @@ function checksFor(desktop: PageFacts, phone: PageFacts, paths: string[], prefix
     { id: "h1", label: "Exactly one main heading", ok: desktop.h1 === 1, detail: `${desktop.h1} found` },
     { id: "alt", label: "Every image has alt text", ok: desktop.noAlt === 0, detail: desktop.noAlt ? `${desktop.noAlt} without` : undefined },
     { id: "images", label: "No broken images", ok: desktop.brokenImgs === 0, detail: desktop.brokenImgs ? `${desktop.brokenImgs} broken` : undefined },
+    { id: "empty", label: "No empty sections", ok: !desktop.emptyBlocks, detail: desktop.emptyBlocks ? `${desktop.emptyBlocks} blank block${desktop.emptyBlocks === 1 ? "" : "s"}` : undefined },
     { id: "links", label: "Every link goes to a real page", ok: broken.length === 0, detail: broken.length ? `${broken.length} dead: ${[...new Set(broken)].slice(0, 4).join(", ")}` : undefined },
     { id: "console", label: "No script errors", ok: consoleErrors.length === 0, detail: consoleErrors.length ? consoleErrors[0]!.slice(0, 120) : undefined },
     { id: "tel", label: "Tap-to-call phone link", ok: desktop.tel },
