@@ -90,6 +90,11 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 .stepn{width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--surface);display:inline-grid;place-items:center;font:700 .95rem var(--body);flex:none}
 .next{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;padding:18px;border-radius:12px;background:var(--ember-soft);border:1px solid var(--ember)}
 .issue{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:12px 14px;border:1px solid var(--line);border-radius:10px}.issue>div{min-width:0}
+.designs{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.design{position:relative;display:grid;gap:4px;border:1px solid var(--line);border-radius:12px;padding:8px;cursor:pointer;background:var(--surface);font-weight:400}
+.design input{position:absolute;opacity:0;pointer-events:none}.design:has(input:checked){border-color:var(--steel);box-shadow:0 0 0 2px var(--steel-soft)}.design:has(input:focus-visible){outline:2px solid var(--steel)}
+.design b{font-size:.9rem}.design small{color:var(--muted);font-size:.78rem}
+.design-pic{display:grid;place-items:center;aspect-ratio:16/10;border-radius:8px;overflow:hidden;background:var(--chrome);font:800 1.8rem var(--display);color:var(--muted)}.design-pic img{width:100%;height:100%;object-fit:cover;object-position:top}
 .score{font:800 2.2rem var(--display);color:var(--steel);line-height:1}.score small{font-size:1rem;color:var(--muted)}
 .mono{font:.8rem var(--mono)}
 `;
@@ -178,7 +183,17 @@ ${invite ? `<label>Email<input value="${esc(info.email)}" disabled></label>` : "
   );
 }
 
-export function fields(v?: Partial<Intake>, reuse: { slug: string; name: string }[] = []): string {
+export interface ReuseChoice {
+  slug: string;
+  /** The business the design was made for. */
+  name: string;
+  /** Its trade, e.g. "Landscaping". */
+  trade: string;
+  /** A picture of the site, when there is one. */
+  thumb?: string;
+}
+
+export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = []): string {
   const t = (name: keyof Intake, label: string, ph: string, required = false, type = "text") =>
     `<label for="f-${name}">${label}<input id="f-${name}" name="${name}" type="${type}" value="${esc((v?.[name] as string) ?? "")}" placeholder="${esc(ph)}"${required ? " required" : ""}></label>`;
   const a = (name: keyof Intake, label: string, ph: string) =>
@@ -193,8 +208,19 @@ export function fields(v?: Partial<Intake>, reuse: { slug: string; name: string 
 <div class="look-row">${radio("style", "standard", style !== "studio", "Standard · 1 credit")}${radio("style", "studio", style === "studio", `Studio · ${STUDIO_CREDITS} credits`)}</div>
 <label for="f-concept" style="max-width:420px">Studio art direction<select id="f-concept" name="concept"><option value="auto"${(v?.concept ?? "auto") === "auto" ? " selected" : ""}>Auto: the best fit for the trade, different each time</option>${CONCEPTS.map((c) => `<option value="${esc(c.id)}"${v?.concept === c.id ? " selected" : ""}>${esc(c.name)}: ${esc(c.blurb)}</option>`).join("")}</select></label>
 <p class="note" style="margin:0"><b>Standard</b>: a polished, fast multi-page site. <b>Studio</b>: an award-style, art-directed site with kinetic type, smooth scrolling, WebGL backgrounds, a custom cursor and page transitions, held to one of nine distinct art directions (the choice above only applies to Studio). It takes longer and uses the larger models.</p></fieldset>`;
+  const pick = (value: string, checked: boolean, inner: string) => `<label class="design"><input type="radio" name="reuseFrom" value="${esc(value)}"${checked ? " checked" : ""}>${inner}</label>`;
   const reuseSel = reuse.length
-    ? `<label for="f-reuse" style="max-width:520px">Build on the design of an existing site (cheaper: 1 credit, much faster)<select id="f-reuse" name="reuseFrom"><option value="">No: design a fresh look</option>${reuse.map((r) => `<option value="${esc(r.slug)}"${v?.reuseFrom === r.slug ? " selected" : ""}>${esc(r.name)}</option>`).join("")}</select></label>`
+    ? `<fieldset class="look" style="border:0;padding:0;margin:0"><legend class="note" style="font-weight:600;margin-bottom:8px">Design</legend>
+<div class="designs">${pick("", !reuse.some((r) => r.slug === v?.reuseFrom), `<span class="design-pic new">+</span><b>A brand-new design</b><small>Made from scratch for this business</small>`)}${reuse
+        .map((r) =>
+          pick(
+            r.slug,
+            v?.reuseFrom === r.slug,
+            `<span class="design-pic">${r.thumb ? `<img loading="lazy" src="${esc(r.thumb)}" alt="">` : esc((r.trade || r.name).slice(0, 1).toUpperCase())}</span><b>${esc(r.trade ? `${r.trade} website` : "Website")}</b><small>The look of ${esc(r.name)} · 1 credit, faster</small>`,
+          ),
+        )
+        .join("")}</div>
+<p class="note" style="margin:0">Pick a look you already like and the new site gets the same design with this business's own words, photos and details. Best when the trade is the same or close.</p></fieldset>`
     : "";
   const look = `<fieldset class="look" style="border:0;padding:0;margin:0"><legend class="note" style="font-weight:600;margin-bottom:8px">Look</legend>
 <div class="look-row">${radio("mode", "auto", mode === "auto", "✨ Let the AI choose")}${radio("mode", "dark", mode === "dark", "🌙 Dark")}${radio("mode", "light", mode === "light", "☀️ Light")}</div>
@@ -241,7 +267,10 @@ function siteCard(d: Listed, url: string): string {
 
 export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string): Response {
   const out = !s.tenant.unlimited && s.tenant.credits < 1;
-  const reuse = demos.filter((d) => d.buildStatus === "ready").map((d) => ({ slug: d.slug, name: `${d.businessName}${d.city ? ` (${d.city})` : ""}` }));
+  const reuse: ReuseChoice[] = demos
+    .filter((d) => d.buildStatus === "ready" && d.shot)
+    .slice(0, 12)
+    .map((d) => ({ slug: d.slug, name: d.businessName, trade: d.industry, thumb: `${siteUrl(d.slug)}/_img/${d.shot}/shot-desktop.jpg` }));
   const list = demos.length
     ? `<div class="cards">${demos.map((d) => siteCard(d, siteUrl(d.slug))).join("")}</div>`
     : `<div class="card empty">Your websites will appear here. Build the first one above: it takes one line.</div>`;

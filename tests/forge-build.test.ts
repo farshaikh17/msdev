@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../cloudflare/forge/src/index";
 import { adaptKit, designKit, designSitePage, planSite, systemFor, Fatal, TryLater } from "../cloudflare/forge/src/designer";
 import { MOTION_LIBS } from "../cloudflare/forge/src/motion";
-import { getDemo, getKit, getPage, pagesDone } from "../cloudflare/forge/src/db";
+import { getDemo, getKit, getPage, pagesDone, saveReview } from "../cloudflare/forge/src/db";
 import { assemble } from "../cloudflare/forge/src/site";
 import type { BuildJob, Env, VideoJob } from "../cloudflare/forge/src/env";
 import { readWebsite } from "../cloudflare/forge/src/scrape";
@@ -345,6 +345,21 @@ describe("Studio builds", () => {
     expect(withRef).toHaveLength(1);
     expect(withRef[0][2].path).toBe("/");
     expect(await site(second)).toContain(MOTION_LIBS[0]);
+  });
+
+  it("offers finished designs as pictures named by trade, once they have a screenshot", async () => {
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 5);
+    const slug = slugOf(await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Green Thumb", industry: "Landscaping", city: "Orlando, FL" } }));
+    await drain(h);
+    expect(await html(await call(h, "/", { cookie: b.cookie }))).not.toContain('name="reuseFrom"');
+    const demo = (await getDemo(h.env, slug))!;
+    await saveReview(h.env, slug, demo.liveVersion!, { at: new Date().toISOString(), score: 8, shots: ["shot-desktop.jpg"] });
+    const home = await html(await call(h, "/", { cookie: b.cookie }));
+    expect(home).toContain("A brand-new design");
+    expect(home).toContain("Landscaping website");
+    expect(home).toContain(`/_img/${demo.liveVersion}/shot-desktop.jpg`);
+    expect(home).toContain(`value="${slug}"`);
   });
 
   it("won't reuse another account's design", async () => {
