@@ -101,8 +101,8 @@ export function page(title: string, body: string, opts: PageOpts = {}): Response
   const s = opts.session;
   const link = (id: NavItem, href: string, label: string) => `<a href="${href}" class="${opts.nav === id ? "on" : ""}">${label}</a>`;
   const nav = s
-    ? `<header class="top"><div class="top-in"><a class="brand" href="/"><i></i>Forge Demo</a><nav class="nav">
-${link("demos", "/", "Demos")}${isOwner(s) ? `${link("team", "/team", "Team")}${link("api", "/api", "API")}${link("settings", "/settings", "Settings")}` : ""}${s.user.role === "admin" ? link("admin", "/admin", "Admin") : ""}
+    ? `<header class="top"><div class="top-in"><a class="brand" href="/"><i></i>Forge <span style="font-weight:600;opacity:.6">Websites</span></a><nav class="nav">
+${link("demos", "/", "Websites")}${isOwner(s) ? link("settings", "/settings", "Settings") : ""}${s.user.role === "admin" ? link("admin", "/admin", "Admin") : ""}
 <span class="credits" title="${esc(s.user.email)}">${esc(s.tenant.name)} · ${esc(creditsText(s))}</span>
 ${toggle()}<form method="post" action="/logout"><button class="linkbtn">Sign out</button></form></nav></div></header>`
     : `<div class="tcorner">${toggle()}</div>`;
@@ -188,8 +188,7 @@ export function fields(v?: Partial<Intake>): string {
 <p class="note" style="margin:0">Every site gets a light/dark switch; this sets which one it opens in.</p></fieldset>`;
   return `<div class="grid">${t("businessName", "Business name", "e.g. Vanguard Pipe & Water")}${t("googleUrl", "or a Google Maps link to the business", "https://maps.app.goo.gl/…", false, "url")}${t("industry", "Trade", "e.g. Plumbing, HVAC, Roofing")}${t("city", "City", "e.g. Myrtle Beach, SC (gives the site a map)")}${t("phone", "Phone", "e.g. (646) 594-9379")}</div>
 <p class="note" style="margin:-6px 0 0">Type the name, or paste a Google Maps link and we read the name and location from it. A website address under "More details" fills in the phone, address and hours the business publishes.</p>
-${tier}
-${look}
+<details><summary>Options: style and look</summary><div style="display:grid;gap:16px;margin-top:12px">${tier}${look}</div></details>
 <details><summary>More details (optional; the more you add, the more tailored the site)</summary><div class="grid">
 ${t("websiteUrl", "Their current website (we read it for facts, photos and contact details)", "https://…", false, "url")}
 ${a("services", "Services", "Comma or line separated, e.g. Drain cleaning, Water heaters")}
@@ -208,26 +207,25 @@ const stat = (label: string, value: string | number) => `<div class="card" style
 export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string): Response {
   const out = !s.tenant.unlimited && s.tenant.credits < 1;
   const rows = demos.length
-    ? `<div class="table"><table><thead><tr><th>Business</th><th>Trade</th><th>City</th><th>Views (7 days)</th><th>Made</th><th></th></tr></thead><tbody>${demos
+    ? `<div class="table"><table><thead><tr><th>Business</th><th>City</th><th>Made</th><th></th></tr></thead><tbody>${demos
         .map(
           (d) =>
-            `<tr><td><a href="/demos/${esc(d.slug)}">${esc(d.businessName)}</a> ${d.buildStatus === "building" ? `<span class="tag">Building…</span>` : d.buildStatus === "queued" ? `<span class="tag">Queued</span>` : d.buildStatus === "failed" ? `<span class="tag bad">Build failed</span>` : ""}</td><td>${esc(d.industry)}</td><td>${esc(d.city)}</td><td>${d.views ? `<b>${d.views.week}</b>${d.views.today ? ` <span class="tag ok">${d.views.today} today</span>` : ""}` : `<span class="note">none yet</span>`}</td><td class="note">${esc(d.createdAt.slice(0, 10))}</td><td><a href="${esc(siteUrl(d.slug))}" target="_blank" rel="noreferrer">Open ↗</a> &nbsp;<button class="btn ghost" data-copy="${esc(siteUrl(d.slug))}">Copy</button></td></tr>`,
+            `<tr><td><a href="/demos/${esc(d.slug)}">${esc(d.businessName)}</a> ${d.buildStatus === "building" ? `<span class="tag">Building…</span>` : d.buildStatus === "queued" ? `<span class="tag">Queued</span>` : d.buildStatus === "failed" ? `<span class="tag bad">Build failed</span>` : ""}</td><td>${esc(d.city)}</td><td class="note">${esc(d.createdAt.slice(0, 10))}</td><td><a href="${esc(siteUrl(d.slug))}" target="_blank" rel="noreferrer">Open ↗</a> &nbsp;<button class="btn ghost" data-copy="${esc(siteUrl(d.slug))}">Copy</button></td></tr>`,
         )
         .join("")}</tbody></table></div>`
-    : `<div class="card empty">No demos yet. Build the first one above.</div>`;
+    : `<div class="card empty">Nothing here yet. Build your first website above.</div>`;
   return page(
     "Demos",
     `<main class="main">${flash(ok, err)}
-<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${stat("Build credits", s.tenant.unlimited ? "Unlimited" : s.tenant.credits)}${stat("Demos", usage.demos)}${stat("Built this month", usage.buildsMonth)}${stat("Form submissions", usage.leads)}</div>
 ${out ? `<div class="flash bad" role="alert">This account has no build credits left. Ask your Forge administrator to add more; sites you've already built keep working.</div>` : ""}
-<div><h1>New demo website</h1><p class="lead">Type in a business (or paste its Google Maps link) and Forge designs a custom website of 15+ pages for it, with working forms and a chat widget in the site's colour. It takes about 7–20 minutes and builds in the background, so you can keep working.${s.tenant.unlimited ? "" : ` A Standard build uses 1 credit and a Studio build ${STUDIO_CREDITS}; a build that fails is refunded.`}${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template and no credit is used.)"}</p></div>
-<form method="post" action="/demos" class="card">${fields()}<div><button class="btn ember" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build demo website</button></div></form>
-<details class="card"><summary>Build several at once</summary><form method="post" action="/demos/bulk" style="display:grid;gap:14px">
+<div><h1>Build a website</h1><p class="lead">Type a business name (or paste its Google Maps link). Forge designs a full website and gives you a link to share. It takes about 10–20 minutes and builds in the background.${s.tenant.unlimited ? "" : ` A Standard build uses 1 credit and a Studio build ${STUDIO_CREDITS}; a build that fails is refunded.`}${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template and no credit is used.)"}</p></div>
+<form method="post" action="/demos" class="card">${fields()}<div><button class="btn ember" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build website</button></div></form>
+<details class="card"><summary>Advanced: build several at once</summary><form method="post" action="/demos/bulk" style="display:grid;gap:14px">
 <label for="bulk">One business per line: a name, <b>name | city</b>, or a Google Maps link (up to 25)<textarea id="bulk" name="bulk" rows="6" placeholder="Joe's Plumbing | Tampa, FL&#10;https://maps.app.goo.gl/…&#10;Bright Smile Dental | Austin, TX"></textarea></label>
 <div class="look-row"><label class="choice"><input type="radio" name="style" value="standard" checked><span>Standard · 1 credit each</span></label><label class="choice"><input type="radio" name="style" value="studio"><span>Studio · ${STUDIO_CREDITS} credits each</span></label></div>
 <p class="note" style="margin:0">Three builds run at a time; the rest wait in a queue and start by themselves. Credits for the whole batch are checked before anything starts.</p>
 <div><button class="btn" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build them all</button></div></form></details>
-<section style="display:grid;gap:14px"><h2>All demos (${demos.length})</h2>${rows}</section></main>`,
+<section style="display:grid;gap:14px"><h2>Your websites (${demos.length})</h2>${rows}</section></main>`,
     { nav: "demos", session: s },
   );
 }
@@ -345,10 +343,14 @@ ${
 <section class="card"><h2>Share it</h2><div class="share">
 ${row("Website link", links.site, links.site)}
 ${links.pages.length ? `<div class="row note">Pages: ${links.pages.map((p) => `<a href="${esc(p.url)}" target="_blank" rel="noreferrer">${esc(p.name)}</a>`).join(" · ")}</div>` : ""}
+</div>
+<details><summary>More ways to share</summary><div class="share" style="margin-top:12px">
 ${links.ghl ? row("On your GoHighLevel page", links.ghl, links.ghl) : row("On your GoHighLevel page", isOwner(s) ? "Set up your GoHighLevel page first (Settings, top menu)." : "Ask your account owner to set up the GoHighLevel page.", "")}
-${row("Google Chat message", chat, chat)}
+${row("Chat message", chat, chat)}
 ${row("Sheet row (date · business · trade · city · phone · link)", sheet.replace(/\t/g, " · "), sheet)}
-</div></section>
+</div></details></section>
+<iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(i.businessName)}"></iframe>
+<details class="card"><summary>More tools: quality check, views, outreach, changes, form messages</summary><div style="display:grid;gap:16px;margin-top:12px">
 <section class="card"><h2>Form submissions (${leads.length}${leads.length === 50 ? "+" : ""})</h2>${
       leads.length
         ? `<div class="share">${leads
@@ -367,8 +369,8 @@ ${qualityCard(d, extra.review, links, extra.pitch ?? "")}
 ${viewsCard(extra.views)}
 ${outreachCard(d, links, extra.qr ?? "", true)}
 ${changeCard(d, links.pages.filter((p): p is { name: string; path: string; url: string } => !!p.path), true)}
-<iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(i.businessName)}"></iframe>
-<form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Edit &amp; redesign</h2><p class="note">Change the details (or just press the button for a fresh design). Claude rebuilds it in the background; the links stay the same.${s.tenant.unlimited ? "" : ` A redesign uses 1 credit (Studio: ${STUDIO_CREDITS}).`}</p>${fields(i)}
+</div></details>
+<form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Edit details &amp; redesign</h2><p class="note">Change the details (or just press the button for a fresh design). Claude rebuilds it in the background; the links stay the same.${s.tenant.unlimited ? "" : ` A redesign uses 1 credit (Studio: ${STUDIO_CREDITS}).`}</p>${fields(i)}
 <div><button class="btn" type="submit" data-busy="Starting…"${busy || out ? " disabled" : ""}>Redesign site</button>${out ? ` <span class="note">No credits left.</span>` : ""}</div></form>
 <form method="post" action="/demos/${esc(d.slug)}/archive"><button class="btn danger" type="submit">Archive demo (its links stop working)</button></form>
 </main>`,

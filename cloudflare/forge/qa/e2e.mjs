@@ -150,7 +150,7 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
     slug = op.url().match(/\/demos\/([a-z0-9-]+)/)[1]; log("      slug " + slug);
   });
   await step("owner can choose Studio, and the demo is labelled Studio", async () => {
-    await op.goto(BASE + "/"); ok(await op.isVisible("text=Studio · 3 credits"), "no Studio choice");
+    await op.goto(BASE + "/"); await op.click("summary:has-text('Options')"); ok(await op.isVisible("text=Studio · 3 credits"), "no Studio choice");
     ok((await op.content()).includes("a Studio build 3"), "credit wording missing");
     await op.fill("input[name=businessName]", "Dummy Studio Roofing"); await op.fill("input[name=city]", "105 Court St, Cynthiana, KY 41031, United States");
     await op.click("label.choice:has(input[name=style][value=studio])"); ok(await op.isChecked("input[name=style][value=studio]"), "Studio not selected");
@@ -176,7 +176,7 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
   await step("a real visitor is counted; a headless bot is not", async () => {
     const c = await browser.newContext({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", viewport: { width: 390, height: 844 } });
     const v = await c.newPage(); await v.goto(`${BASE}/s/${slug}`); await v.waitForTimeout(800); await c.close();
-    await op.goto(`${BASE}/`); ok(await op.locator("tr", { hasText: "Dummy Plumbing Co" }).first().locator("text=1 today").isVisible(), "view not counted on the dashboard");
+    await op.goto(`${BASE}/demos/${slug}`); await op.click("summary:has-text('More tools')"); ok(await op.isVisible("text=1 today") || (await op.content()).includes(">1<"), "view not counted on the demo page");
   });
   await step("quick text fix changes the live site", async () => {
     await op.goto(`${BASE}/demos/${slug}`);
@@ -185,10 +185,10 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
     await op.waitForURL(/demos\//); ok((await op.content()).includes("wasn't found") || (await op.content()).includes("Replaced"), "no result message");
   });
   await step("bulk build queues beyond three at a time", async () => {
-    await op.goto(`${BASE}/`); await op.click("summary:has-text('Build several at once')"); await op.fill("textarea[name=bulk]", "Bulk One | Tampa, FL\nBulk Two | Austin, TX\nBulk Three\nBulk Four");
+    await op.goto(`${BASE}/`); await op.click("summary:has-text('build several at once')"); await op.fill("textarea[name=bulk]", "Bulk One | Tampa, FL\nBulk Two | Austin, TX\nBulk Three\nBulk Four");
     await op.click("button:has-text('Build them all')"); await op.waitForURL(/\/\?/); const t = await op.content(); ok(/Started \d+ build/.test(t), "no bulk message: " + (t.match(/flash[^<]*<[^>]*>([^<]*)/) || [])[1]);
   });
-  await step("the submission appears on the demo page for the owner", async () => { await op.goto(`${BASE}/demos/${slug}`); ok(await op.isVisible("text=Visitor Vee"), "lead not shown"); });
+  await step("the submission appears on the demo page for the owner", async () => { await op.goto(`${BASE}/demos/${slug}`); await op.click("summary:has-text('More tools')"); ok(await op.isVisible("text=Visitor Vee"), "lead not shown"); });
   await step("owner team page: invite a member", async () => {
     await op.goto(BASE + "/team"); await op.fill("input[name=email]", "member@dummy-agency.test"); await op.click("button:has-text('invite'), button:has-text('Invite'), button:has-text('Create')");
     ok(await op.isVisible("[data-copy]"), "no invite link");

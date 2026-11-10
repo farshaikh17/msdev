@@ -179,8 +179,6 @@ describe("who looked at a demo", () => {
     const st = (await viewStats(h.env, { tenantId: b.id })).get(slug)!;
     expect(st).toMatchObject({ today: 3, week: 3, month: 3, visitorsWeek: 2 });
     expect(st.days).toHaveLength(1);
-    const home = await html(await call(h, "/", { cookie: b.cookie }));
-    expect(home).toContain("3 today");
     const page = await html(await call(h, `/demos/${slug}`, { cookie: b.cookie }));
     expect(page).toContain("Who's looked");
     expect(page).toContain(">3<");

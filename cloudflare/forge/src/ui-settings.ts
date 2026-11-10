@@ -51,6 +51,7 @@ export function settingsPage(s: Session, d: SettingsData, ok?: string, err?: str
     "Settings",
     `<main class="main">${flash(ok, err)}
 <div><h1>Settings</h1><p class="lead">${esc(t.name)}: GoHighLevel page, chat widget, notifications, hero videos and your password.</p></div>
+<section class="card"><h2>Team &amp; developers</h2><div class="row"><a class="btn ghost" href="/team">Team members</a><a class="btn ghost" href="/api">API &amp; webhooks</a></div></section>
 <section class="card"><h2>Show demos on your GoHighLevel page</h2><p class="note" style="margin:0">Set this up once. After that every demo also opens on your own domain at <span class="pill">your-page?d=demo-name</span>.</p>
 <ol class="note" style="margin:0;padding-left:1.2rem;display:grid;gap:6px"><li>In your GoHighLevel account, create a blank funnel or website page with no header or footer, e.g. <b>/demo</b>.</li>
 <li>Add one full-width <b>Custom JS/HTML</b> element and paste the code below. Save and publish.</li></ol>
