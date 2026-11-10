@@ -108,7 +108,7 @@ describe("Forge demo — template", () => {
   it("renders a full page with title and noindex", () => {
     const page = renderPage(demoOf(Intake.parse({ businessName: "Acme", city: "Conway" })));
     expect(page).toMatch(/^<!doctype html>/);
-    expect(page).toContain("<title>Acme | Home Services in Conway</title>");
+    expect(page).toContain("<title>Acme | Local Business in Conway</title>");
     expect(page).toContain('name="robots" content="noindex"');
   });
 

@@ -170,6 +170,11 @@ export async function saveDemo(env: Env, d: Demo, tenantId: number): Promise<voi
 }
 
 /** Save the intake with details filled in from the business's website or Google link. */
+/** Set the trade the planner worked out, on the intake and on the label shown in the app. */
+export async function setTrade(env: Env, slug: string, trade: string): Promise<void> {
+  await env.DB.prepare("UPDATE demos SET intake = json_set(intake, '$.industry', ?1), content = json_set(content, '$.industry', ?1) WHERE slug = ?2").bind(trade, slug).run();
+}
+
 export async function updateIntake(env: Env, slug: string, intake: Demo["intake"]): Promise<void> {
   await env.DB.prepare("UPDATE demos SET intake = ? WHERE slug = ?").bind(JSON.stringify(intake), slug).run();
 }

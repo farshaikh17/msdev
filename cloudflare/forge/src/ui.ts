@@ -42,7 +42,7 @@ input:focus,textarea:focus{outline:2px solid var(--steel-soft);border-color:var(
 .full{grid-column:1/-1}
 details summary{cursor:pointer;color:var(--steel);font-size:.92rem;font-weight:600}
 details[open] summary{margin-bottom:14px}
-.btn{display:inline-flex;align-items:center;gap:8px;background:var(--steel);color:#fff;border:0;border-radius:9px;padding:11px 18px;font:600 .95rem var(--body);cursor:pointer;text-decoration:none}
+.btn{white-space:nowrap;display:inline-flex;align-items:center;gap:8px;background:var(--steel);color:#fff;border:0;border-radius:9px;padding:11px 18px;font:600 .95rem var(--body);cursor:pointer;text-decoration:none}
 .btn:hover{filter:brightness(1.1)}.btn:disabled{opacity:.6;cursor:wait}
 .btn.ember{background:var(--ember)}.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);padding:7px 12px;font-size:.85rem}
 .btn.danger{background:transparent;color:var(--bad);border:1px solid var(--line);font-size:.85rem;padding:7px 12px}
@@ -99,7 +99,8 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 .mono{font:.8rem var(--mono)}
 `;
 
-const COPY_JS = `document.addEventListener("click",async e=>{const b=e.target.closest("[data-copy]");if(!b)return;const t=b.getAttribute("data-copy");try{await navigator.clipboard.writeText(t);b.textContent="Copied";setTimeout(()=>b.textContent="Copy",1500)}catch{prompt("Copy this:",t)}});
+const COPY_JS = `if(/[?&](ok|error)=/.test(location.search))history.replaceState(null,"",location.pathname);
+document.addEventListener("click",async e=>{const b=e.target.closest("[data-copy]");if(!b)return;const t=b.getAttribute("data-copy");try{await navigator.clipboard.writeText(t);b.textContent="Copied";setTimeout(()=>b.textContent="Copy",1500)}catch{prompt("Copy this:",t)}});
 document.addEventListener("submit",e=>{const b=e.target.querySelector("button[data-busy]");if(b){b.disabled=true;b.textContent=b.getAttribute("data-busy")}});`;
 
 export type NavItem = "demos" | "team" | "api" | "settings" | "admin";

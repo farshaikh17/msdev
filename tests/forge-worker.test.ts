@@ -319,6 +319,7 @@ describe("details people type in the wrong box", () => {
     const { Intake } = await import("../src/forge/schema");
     expect(draftContent(Intake.parse({ businessName: "Bob's Garage", industry: "auto repair shop" })).industry).toBe("Auto Repair Shop");
     expect(draftContent(Intake.parse({ businessName: "Acme", industry: "Plumbing" })).industry).toBe("Plumbing");
-    expect(draftContent(Intake.parse({ businessName: "Acme" })).industry).toBe("Home Services");
+    expect(draftContent(Intake.parse({ businessName: "Acme" })).industry).toBe("Local Business");
+    expect(draftContent(Intake.parse({ businessName: "Winnett Bar & Grill" })).industry).toBe("Restaurant");
   });
 });

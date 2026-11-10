@@ -39,10 +39,27 @@ const titleCase = (s: string) =>
     .toLowerCase()
     .replace(/\b([a-z])([a-z]*)/g, (w, a: string, b: string, at: number) => (at > 0 && /^(and|or|of|the|a|an|in|for|&)$/.test(w) ? w : a.toUpperCase() + b));
 
+/** A label for a business we have no preset for and no trade typed, from its name ("Local Business" when unsure). */
+const TRADE_WORDS: [RegExp, string][] = [
+  [/\b(bar|grill|pub|tavern|saloon|brewery|brewing|taproom|steakhouse|bbq|barbecue|diner|restaurant|kitchen|eatery|bistro|cantina|taqueria|pizza|pizzeria|sushi|burger|wings)\b/i, "Restaurant"],
+  [/\b(cafe|café|coffee|bakery|donut|bagel|tea house|creamery|ice cream)\b/i, "Cafe"],
+  [/\b(salon|barber|hair|nails?|lash|brow|spa|beauty)\b/i, "Salon"],
+  [/\b(dental|dentist|orthodont)/i, "Dental"],
+  [/\b(law|attorney|legal)\b/i, "Law Firm"],
+  [/\b(gym|fitness|yoga|pilates|crossfit|martial arts)\b/i, "Fitness"],
+  [/\b(auto|automotive|tire|collision|body shop|mechanic|towing)\b/i, "Auto Service"],
+  [/\b(vet|veterinary|animal hospital|grooming|kennel)\b/i, "Pet Care"],
+  [/\b(realty|real estate|realtor)\b/i, "Real Estate"],
+  [/\b(clinic|medical|chiropract|physio|therapy|wellness)\b/i, "Health"],
+  [/\b(hotel|motel|inn|lodge|resort)\b/i, "Lodging"],
+  [/\b(boutique|store|shop|market|florist|flowers)\b/i, "Shop"],
+];
+const guessTrade = (name: string) => TRADE_WORDS.find(([re]) => re.test(name))?.[1] ?? "Local Business";
+
 export function draftContent(i: Intake): SiteContent {
   // A trade we have no preset for keeps its own name rather than becoming "Home Services".
   const found = presetFor(i.industry, i.businessName, i.services);
-  const p = found === GENERIC && i.industry.trim() ? { ...found, industry: titleCase(i.industry).slice(0, 60) } : found;
+  const p = found === GENERIC ? { ...found, industry: i.industry.trim() ? titleCase(i.industry).slice(0, 60) : guessTrade(i.businessName) } : found;
   const name = i.businessName;
   const where = place(i);
   const services = splitList(i.services);

@@ -183,6 +183,8 @@ export interface Plan {
   imagePrompts: string[];
   /** 0 or 2 illustrative before/after scenes, for trades where the work visibly transforms something. */
   pairs?: { before: string; after: string }[];
+  /** The business's trade in a word or two (used when none was typed). */
+  trade?: string;
   /** What the planning call cost (US$). */
   cost: number;
 }
@@ -204,8 +206,10 @@ export async function planSite(env: Env, i: Intake, site: SiteFacts | null): Pro
     .join("\n");
   const { text, usage } = await ask(
     env,
-    `You're planning a website for a local business. Reply with exactly these two parts and nothing else.
+    `You're planning a website for a local business. Reply with exactly these parts and nothing else.
 
+@@@ TRADE
+What kind of business this is, in 1 to 3 words, title case (e.g. Restaurant, Plumbing, Hair Salon, Family Dentist). Judge from the name, niche, services and website.
 @@@ SERVICES
 4 to 6 services this business offers, one per line (2–4 words each, title case). Use the services given or on their website when there are any; otherwise the main services a business in this niche typically offers.
 @@@ PHOTOS
@@ -228,7 +232,8 @@ ${facts}`,
     .map((l) => l.match(/^BEFORE:\s*(.+?)\s*\|\|\s*AFTER:\s*(.+)$/i))
     .flatMap((m) => (m ? [{ before: m[1]!.slice(0, 300), after: m[2]!.slice(0, 300) }] : []))
     .slice(0, 2);
-  return { services: lines(p.SERVICES).filter((l) => l.length <= 60).slice(0, 6), imagePrompts: lines(p.PHOTOS).slice(0, 6), pairs, cost: Number(usage.cost_usd) || 0 };
+  const trade = lines(p.TRADE)[0]?.replace(/[^\p{L}\p{N} &\-/']/gu, "").trim().slice(0, 40);
+  return { services: lines(p.SERVICES).filter((l) => l.length <= 60).slice(0, 6), imagePrompts: lines(p.PHOTOS).slice(0, 6), pairs, ...(trade ? { trade } : {}), cost: Number(usage.cost_usd) || 0 };
 }
 
 const PAIRS_PROMPT = `@@@ PAIRS
@@ -620,8 +625,16 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[], styl
   // Low effort: the brief already makes the design decisions explicit, and thinking is the costliest part.
   // A Studio site thinks harder about its art direction: that is where the budget goes.
   const studio = style === "studio";
-  const { text, usage, cut } = await ask(env, `${kitTask(pages, style)}\n\n## The business\n${brief}`, 64000, env.CLAUDE_MODEL || MODEL, studio ? "medium" : effortOf(env, "low"), systemFor(style, concept));
-  if (cut) throw new Error("The site's design came back incomplete (too long). Try again.");
+  const prompt = `${kitTask(pages, style)}\n\n## The business\n${brief}`;
+  let { text, usage, cut } = await ask(env, prompt, 64000, env.CLAUDE_MODEL || MODEL, studio ? "medium" : effortOf(env, "low"), systemFor(style, concept));
+  if (cut) {
+    // Ran out of room (thinking counts toward the limit): once more, thinking less and writing tighter.
+    console.log("kit cut off, retrying tighter");
+    const first = Number(usage.cost_usd) || 0;
+    ({ text, usage, cut } = await ask(env, `${prompt}\n\n## Length\nYour whole reply must fit in about 30,000 tokens. Keep the stylesheet lean: no duplicate rules, no unused components, no long comments.`, 64000, env.CLAUDE_MODEL || MODEL, "low", systemFor(style, concept)));
+    usage = { ...usage, cost_usd: (Number(usage.cost_usd) || 0) + first };
+    if (cut) throw new Error("The site's design came back incomplete twice. Try again; if it keeps happening, build it as Standard.");
+  }
   const p = parseParts(text);
   need(p, ["CSS", "HEADER", "FOOTER"]);
   // The credit must be on every page: if the marker went missing, put it at the end of the footer.

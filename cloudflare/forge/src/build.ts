@@ -10,6 +10,7 @@ import {
   getKit,
   getPage,
   pairsDue,
+  setTrade,
   PAIRS_NOTE,
   goLive,
   markBuilding,
@@ -164,6 +165,11 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       // A cheap planning step picks niche-fitting services and describes the preview photos,
       // which Workers AI then generates (free) and the site serves from its own address.
       const plan: Plan | null = await planSite(env, intake, site).catch((e) => (console.log("plan failed", errText(e)), null));
+      // No trade was typed: use the one the planner worked out (so a bar isn't called "Home Services").
+      if (!intake.industry && plan?.trade) {
+        intake.industry = plan.trade;
+        await setTrade(env, slug, plan.trade);
+      }
       const [images, pairImages] = await Promise.all([previewImages(env, plan?.imagePrompts ?? []), beforeAfterImages(env, plan?.pairs ?? []).catch(() => [])]);
       await Promise.all([...images, ...pairImages].map((img) => saveImage(env, slug, version, img.name, img.description, img.bytes)));
       const imgBase = `${env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : ""}/${slug}/_img/${version}/`;
