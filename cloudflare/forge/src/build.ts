@@ -22,7 +22,8 @@ import {
   touchBuild,
   updateIntake,
 } from "./db";
-import { designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, planSite, sitemapFor, TryLater, type Plan } from "./designer";
+import type { Kit } from "./designer";
+import { adaptKit, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, planSite, sitemapFor, TryLater, type Plan } from "./designer";
 import type { BuildJob, Env } from "./env";
 import { beforeAfterImages, previewImages } from "./images";
 import { privacyPage, termsPage } from "./legal";
@@ -160,7 +161,17 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
         return b && a ? [{ beforeUrl: `${imgBase}ba-${n}-before.jpg`, afterUrl: `${imgBase}ba-${n}-after.jpg`, before: b.description.replace(/^Before: /, ""), after: a.description.replace(/^After: /, "") }] : [];
       });
       const pages = sitemapFor(intake, plan?.services);
-      const { kit, usage } = await designKit(env, factsBlock(intake, site, slug, plan, previews, pairs), pages, intake.style, intake.style === "studio" ? pickConcept(intake, slug).id : undefined);
+      const facts = factsBlock(intake, site, slug, plan, previews, pairs);
+      // Built on another of the account's finished sites: reuse its design (far cheaper than a new one).
+      let base: { slug: string; version: string; kit: Kit } | null = null;
+      if (intake.reuseFrom && intake.reuseFrom !== slug) {
+        const src = await getDemo(env, intake.reuseFrom);
+        const srcKit = src && src.tenantId === demo.tenantId && src.liveVersion ? await getKit(env, src.slug, src.liveVersion) : null;
+        if (src && srcKit && src.liveVersion) base = { slug: src.slug, version: src.liveVersion, kit: srcKit };
+      }
+      const { kit, usage } = base
+        ? await adaptKit(env, base.kit, { slug: base.slug, version: base.version }, facts, pages)
+        : await designKit(env, facts, pages, intake.style, intake.style === "studio" ? pickConcept(intake, slug).id : undefined);
       // The planning call is counted with the design.
       const u = usage as Record<string, unknown>;
       await saveKit(env, slug, version, kit, { ...u, cost_usd: (Number(u.cost_usd) || 0) + (plan?.cost ?? 0) });
@@ -182,7 +193,9 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
     const spec = pagesOf(kit).find((p) => p.path === job.path);
     if (!spec) return "done";
     if (!(await pagesDone(env, slug, version)).includes(spec.path)) {
-      const { page, usage } = await designSitePage(env, kit, spec);
+      // The home page of a reused design follows the sister site's home page.
+      const adaptFrom = kit.reuse && spec.path === "/" ? await getPage(env, kit.reuse.slug, kit.reuse.version, "/") : null;
+      const { page, usage } = await designSitePage(env, kit, spec, adaptFrom ? { adaptFrom } : {});
       await savePage(env, slug, version, spec.path, page, usage);
       await touchBuild(env, slug, version, "pages");
     }

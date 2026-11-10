@@ -370,7 +370,8 @@ async function ledger(env: Env, tenantId: number, delta: number, reason: string,
  */
 /** Credits a build takes: a Studio site costs more (it uses the larger models for longer). */
 export const STUDIO_CREDITS = 3;
-export const buildCost = (i: { style?: string }) => (i.style === "studio" ? STUDIO_CREDITS : 1);
+/** A site built on a finished site's design skips the costly design step, so it costs a Standard build. */
+export const buildCost = (i: { style?: string; reuseFrom?: string }) => (i.style === "studio" && !i.reuseFrom ? STUDIO_CREDITS : 1);
 
 export async function chargeBuild(env: Env, tenant: Tenant, slug: string, version: string, userId: number | null, cost = 1): Promise<boolean> {
   if (tenant.unlimited) return true;

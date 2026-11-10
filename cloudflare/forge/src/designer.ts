@@ -522,6 +522,8 @@ export interface Kit {
   style?: Style;
   /** The art direction a Studio site is held to (see concepts.ts). */
   concept?: string;
+  /** Built on another finished site's design (its slug and version) instead of a fresh one. */
+  reuse?: { slug: string; version: string };
 }
 export interface PageDraft {
   title: string;
@@ -644,6 +646,26 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[], styl
 }
 
 /**
+ * A new site on the design of a finished one: keep its stylesheet, components, script and look, and
+ * have the mid-priced model rewrite only the header and footer for this business. Far cheaper than
+ * a fresh design, which is the biggest cost in a Studio build.
+ */
+export async function adaptKit(env: Env, src: Kit, from: { slug: string; version: string }, brief: string, pages: PageSpec[]): Promise<{ kit: Kit; usage: unknown }> {
+  const { text, usage } = await ask(
+    env,
+    `Here is the header and footer of a finished website, and the facts for a DIFFERENT business that will use the same design.\n\n## Header\n${src.header}\n\n## Footer\n${src.footer}\n\n## Pages of the new site\n${sitemapText(pages)}\n\n## The new business\n${brief}\n\nRewrite the header and footer for the new business: keep the markup, CSS classes, structure and any script hooks exactly, but change the name, logo text, phone, address, hours, links and menu to the new business and its pages. Keep the ${CREDIT_MARKER} marker in the footer. Never keep the old business's details. Reply with two parts:\n@@@ HEADER\nthe header HTML\n@@@ FOOTER\nthe footer HTML`,
+    8000,
+    STUDIO_PAGE_MODEL,
+    "low",
+  );
+  const p = parseParts(text);
+  need(p, ["HEADER", "FOOTER"]);
+  let footer = p.FOOTER;
+  if (!footer.includes(CREDIT_MARKER)) footer = /<\/footer>/i.test(footer) ? footer.replace(/<\/footer>(?![\s\S]*<\/footer>)/i, `<p>${CREDIT_MARKER}</p></footer>`) : `${footer}${CREDIT_MARKER}`;
+  return { kit: { ...src, header: p.HEADER, footer, brief, pages, reuse: from }, usage };
+}
+
+/**
  * Stage 2: one page, written against the kit so every page matches. Everything but the page's
  * own task is identical across a site's inner pages and cached, so later pages pay a tenth for it.
  */
@@ -652,6 +674,8 @@ export interface PageRevision {
   notes?: string[];
   instruction?: string;
   current?: PageDraft;
+  /** The same page from a finished sister site: keep its layout and style, write all-new content. */
+  adaptFrom?: PageDraft;
 }
 
 export async function designSitePage(env: Env, kit: Kit, page: PageSpec, rev: PageRevision = {}): Promise<{ page: PageDraft; usage: unknown }> {
@@ -685,12 +709,15 @@ ${PAGE_TASK}`;
   const change = rev.instruction
     ? `\n\n## Requested change\n${rev.instruction}\n\nApply only this change. Keep everything else exactly as it is (same copy, same sections, same components), and reply with the whole page.`
     : "";
+  const adapt = rev.adaptFrom
+    ? `\n\n## The same page on a finished sister site (same design system)\nCSS:\n${rev.adaptFrom.css || "(none)"}\n\nMAIN:\n${rev.adaptFrom.body}\n\nWrite THIS business's page with the same layout, sections, components, spacing, motion and visual style as the sister page above, but with entirely new copy, facts, numbers, names and photos taken only from the business facts and photos given earlier. Never carry over the sister site's business name, phone, address, reviews, photo links or any claim; use only this business's own.`
+    : "";
   const task = `## ${rev.instruction ? "Change" : rev.notes?.length ? "Improve" : "Write"} this page: ${page.name} (${page.path})
-${page.brief}${current}${notes}${change}`;
+${page.brief}${current}${notes}${change}${adapt}`;
   // The home page is the showcase, so it gets the design model; the rest follow the kit on the cheaper one.
   const home = page.path === "/";
   const studio = kit.style === "studio";
-  const model = home ? env.CLAUDE_MODEL || MODEL : studio ? STUDIO_PAGE_MODEL : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
+  const model = home && !kit.reuse ? env.CLAUDE_MODEL || MODEL : home ? STUDIO_PAGE_MODEL : studio ? STUDIO_PAGE_MODEL : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
   const { text, usage, cut } = await ask(
     env,
     [

@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../cloudflare/forge/src/index";
-import { designKit, designSitePage, planSite, systemFor, Fatal, TryLater } from "../cloudflare/forge/src/designer";
+import { adaptKit, designKit, designSitePage, planSite, systemFor, Fatal, TryLater } from "../cloudflare/forge/src/designer";
 import { MOTION_LIBS } from "../cloudflare/forge/src/motion";
 import { getDemo, getKit, getPage, pagesDone } from "../cloudflare/forge/src/db";
 import { assemble } from "../cloudflare/forge/src/site";
@@ -17,7 +17,7 @@ import { build, call, cookieOf, html, loc, makeAccount, makeHarness, setupAdmin,
 
 vi.mock("../cloudflare/forge/src/designer", async (orig) => {
   const real = await orig<typeof import("../cloudflare/forge/src/designer")>();
-  return { ...real, planSite: vi.fn(), designKit: vi.fn(), designSitePage: vi.fn() };
+  return { ...real, planSite: vi.fn(), designKit: vi.fn(), designSitePage: vi.fn(), adaptKit: vi.fn() };
 });
 vi.mock("../cloudflare/forge/src/images", () => ({
   beforeAfterImages: vi.fn(async () => []),
@@ -76,6 +76,7 @@ beforeEach(() => {
   vi.mocked(planSite).mockResolvedValue({ services: ["Haircuts", "Beard Trims", "Hot Shaves", "Kids Cuts"], imagePrompts: ["a barber", "a shop"], cost: 0.002 });
   vi.mocked(designKit).mockImplementation(async (env, brief, pages, style) => goodKit(env, brief, pages, style));
   vi.mocked(designSitePage).mockImplementation(async (env, kit, spec) => goodPage(env, kit, spec));
+  vi.mocked(adaptKit).mockImplementation(async (_env, src, from, brief, pages) => ({ kit: { ...src, brief, pages, reuse: from }, usage: { cost_usd: 0.05, calls: 1 } }));
   vi.mocked(readWebsite).mockResolvedValue(null);
 });
 afterEach(() => vi.restoreAllMocks());
@@ -320,6 +321,41 @@ describe("Studio builds", () => {
       expect(page).toContain("--m-accent:#aa3333");
       expect(page).toContain("m-curtain");
     }
+  });
+
+  it("a site built on another site's design costs one credit and skips the fresh design", async () => {
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 5);
+    const first = slugOf(await studio(b.cookie, "Studio Barbers"));
+    await drain(h);
+    expect(vi.mocked(designKit)).toHaveBeenCalledTimes(1);
+    const src = (await getDemo(h.env, first))!;
+    const second = slugOf(await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Second Barbers", city: "Tampa, FL", reuseFrom: first } }));
+    expect((await getTenant(h.env, b.id))!.credits).toBe(1);
+    await drain(h);
+    expect(vi.mocked(designKit)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(adaptKit).mock.calls[0][2]).toEqual({ slug: first, version: src.liveVersion });
+    const demo = (await getDemo(h.env, second))!;
+    expect(demo.buildStatus).toBe("ready");
+    const kit = (await getKit(h.env, second, demo.liveVersion!))!;
+    expect(kit.style).toBe("studio");
+    expect(kit.reuse?.slug).toBe(first);
+    // Only the home page follows the sister site's home page.
+    const withRef = vi.mocked(designSitePage).mock.calls.filter((c) => c[3]?.adaptFrom);
+    expect(withRef).toHaveLength(1);
+    expect(withRef[0][2].path).toBe("/");
+    expect(await site(second)).toContain(MOTION_LIBS[0]);
+  });
+
+  it("won't reuse another account's design", async () => {
+    const admin = await setupAdmin(h);
+    const a = await makeAccount(h, admin, "Account A", "a@a.test", 5);
+    const b = await makeAccount(h, admin, "Account B", "b@b.test", 5);
+    const mine = slugOf(await studio(a.cookie, "A Barbers"));
+    await drain(h);
+    await call(h, "/demos", { cookie: b.cookie, form: { businessName: "B Barbers", city: "Tampa, FL", reuseFrom: mine } });
+    await drain(h);
+    expect(vi.mocked(adaptKit)).not.toHaveBeenCalled();
   });
 
   it("standard sites stay light: no motion engine", async () => {

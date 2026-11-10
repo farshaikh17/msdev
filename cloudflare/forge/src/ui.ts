@@ -164,7 +164,7 @@ ${invite ? `<label>Email<input value="${esc(info.email)}" disabled></label>` : "
   );
 }
 
-export function fields(v?: Partial<Intake>): string {
+export function fields(v?: Partial<Intake>, reuse: { slug: string; name: string }[] = []): string {
   const t = (name: keyof Intake, label: string, ph: string, required = false, type = "text") =>
     `<label for="f-${name}">${label}<input id="f-${name}" name="${name}" type="${type}" value="${esc((v?.[name] as string) ?? "")}" placeholder="${esc(ph)}"${required ? " required" : ""}></label>`;
   const a = (name: keyof Intake, label: string, ph: string) =>
@@ -179,6 +179,9 @@ export function fields(v?: Partial<Intake>): string {
 <div class="look-row">${radio("style", "standard", style !== "studio", "Standard · 1 credit")}${radio("style", "studio", style === "studio", `Studio · ${STUDIO_CREDITS} credits`)}</div>
 <label for="f-concept" style="max-width:420px">Studio art direction<select id="f-concept" name="concept"><option value="auto"${(v?.concept ?? "auto") === "auto" ? " selected" : ""}>Auto: the best fit for the trade, different each time</option>${CONCEPTS.map((c) => `<option value="${esc(c.id)}"${v?.concept === c.id ? " selected" : ""}>${esc(c.name)}: ${esc(c.blurb)}</option>`).join("")}</select></label>
 <p class="note" style="margin:0"><b>Standard</b>: a polished, fast multi-page site. <b>Studio</b>: an award-style, art-directed site with kinetic type, smooth scrolling, WebGL backgrounds, a custom cursor and page transitions, held to one of nine distinct art directions (the choice above only applies to Studio). It takes longer and uses the larger models.</p></fieldset>`;
+  const reuseSel = reuse.length
+    ? `<label for="f-reuse" style="max-width:520px">Build on the design of an existing site (cheaper: 1 credit, much faster)<select id="f-reuse" name="reuseFrom"><option value="">No: design a fresh look</option>${reuse.map((r) => `<option value="${esc(r.slug)}"${v?.reuseFrom === r.slug ? " selected" : ""}>${esc(r.name)}</option>`).join("")}</select></label>`
+    : "";
   const look = `<fieldset class="look" style="border:0;padding:0;margin:0"><legend class="note" style="font-weight:600;margin-bottom:8px">Look</legend>
 <div class="look-row">${radio("mode", "auto", mode === "auto", "✨ Let the AI choose")}${radio("mode", "dark", mode === "dark", "🌙 Dark")}${radio("mode", "light", mode === "light", "☀️ Light")}</div>
 <div class="look-row">${radio("primaryColor", "", !color, `<i class="dot auto"></i>Auto colour`)}${SWATCHES.map((c) =>
@@ -188,7 +191,7 @@ export function fields(v?: Partial<Intake>): string {
 <p class="note" style="margin:0">Every site gets a light/dark switch; this sets which one it opens in.</p></fieldset>`;
   return `<div class="grid">${t("businessName", "Business name", "e.g. Vanguard Pipe & Water")}${t("googleUrl", "or a Google Maps link to the business", "https://maps.app.goo.gl/…", false, "url")}${t("industry", "Trade", "e.g. Plumbing, HVAC, Roofing")}${t("city", "City", "e.g. Myrtle Beach, SC (gives the site a map)")}${t("phone", "Phone", "e.g. (646) 594-9379")}</div>
 <p class="note" style="margin:-6px 0 0">Type the name, or paste a Google Maps link and we read the name and location from it. A website address under "More details" fills in the phone, address and hours the business publishes.</p>
-<details><summary>Options: style and look</summary><div style="display:grid;gap:16px;margin-top:12px">${tier}${look}</div></details>
+<details><summary>Options: style and look</summary><div style="display:grid;gap:16px;margin-top:12px">${reuseSel}${tier}${look}</div></details>
 <details><summary>More details (optional; the more you add, the more tailored the site)</summary><div class="grid">
 ${t("websiteUrl", "Their current website (we read it for facts, photos and contact details)", "https://…", false, "url")}
 ${a("services", "Services", "Comma or line separated, e.g. Drain cleaning, Water heaters")}
@@ -219,7 +222,7 @@ export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) =>
     `<main class="main">${flash(ok, err)}
 ${out ? `<div class="flash bad" role="alert">This account has no build credits left. Ask your Forge administrator to add more; sites you've already built keep working.</div>` : ""}
 <div><h1>Build a website</h1><p class="lead">Type a business name (or paste its Google Maps link). Forge designs a full website and gives you a link to share. It takes about 10–20 minutes and builds in the background.${s.tenant.unlimited ? "" : ` A Standard build uses 1 credit and a Studio build ${STUDIO_CREDITS}; a build that fails is refunded.`}${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template and no credit is used.)"}</p></div>
-<form method="post" action="/demos" class="card">${fields()}<div><button class="btn ember" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build website</button></div></form>
+<form method="post" action="/demos" class="card">${fields(undefined, demos.filter((d) => d.buildStatus === "ready").map((d) => ({ slug: d.slug, name: `${d.businessName}${d.city ? ` (${d.city})` : ""}` })))}<div><button class="btn ember" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build website</button></div></form>
 <details class="card"><summary>Advanced: build several at once</summary><form method="post" action="/demos/bulk" style="display:grid;gap:14px">
 <label for="bulk">One business per line: a name, <b>name | city</b>, or a Google Maps link (up to 25)<textarea id="bulk" name="bulk" rows="6" placeholder="Joe's Plumbing | Tampa, FL&#10;https://maps.app.goo.gl/…&#10;Bright Smile Dental | Austin, TX"></textarea></label>
 <div class="look-row"><label class="choice"><input type="radio" name="style" value="standard" checked><span>Standard · 1 credit each</span></label><label class="choice"><input type="radio" name="style" value="studio"><span>Studio · ${STUDIO_CREDITS} credits each</span></label></div>
