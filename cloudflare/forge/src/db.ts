@@ -548,3 +548,28 @@ export async function replaceText(env: Env, slug: string, version: string, find:
   }
   return count;
 }
+
+/**
+ * Live demos whose review never ran or crashed (and is due another go): the hourly catch-up queues
+ * these, two at a time, so a missed or failed review heals itself. A crashed one is retried at
+ * most 3 times, an hour apart; "no browser" / budget skips are left alone.
+ */
+export async function reviewsDue(env: Env, limit = 2): Promise<{ slug: string; version: string }[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT d.slug, d.live_version version, v.review FROM demos d
+       JOIN site_versions v ON v.slug = d.slug AND v.version = d.live_version
+      WHERE d.status = 'active' AND d.live_version IS NOT NULL AND d.build_status = 'ready'
+        AND d.tenant_id IN (SELECT id FROM tenants WHERE status = 'active')
+        AND d.updated_at > ? AND (v.review IS NULL OR v.review LIKE '%"skipped":"error%')
+      ORDER BY d.updated_at DESC LIMIT 20`,
+  )
+    .bind(new Date(Date.now() - 7 * 86_400_000).toISOString())
+    .all<{ slug: string; version: string; review: string | null }>();
+  const hourAgo = Date.now() - 3_600_000;
+  const due = results.filter((r) => {
+    if (!r.review) return true;
+    const rv = parseJson<Review>(r.review);
+    return !!rv && (rv.tries ?? 0) < 3 && Date.parse(rv.at) < hourAgo;
+  });
+  return due.slice(0, limit).map((r) => ({ slug: r.slug, version: r.version }));
+}

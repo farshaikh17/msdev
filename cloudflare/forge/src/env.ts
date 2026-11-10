@@ -50,6 +50,8 @@ export type BuildJob =
   | { slug: string; version: string; stage: "page"; path: string }
   /** After go-live: screenshot, check and critique the site, and fix the home page if needed. */
   | { slug: string; version: string; stage: "review" }
+  /** Add illustrative before/after photos to a live site (the gallery and home page are rewritten around them). */
+  | { slug: string; version: string; stage: "pairs" }
   /** A change request on one page of the live site. */
   | { slug: string; version: string; stage: "change"; path: string; instruction: string };
 /** Copy one clip from the team's Google Drive folder into the video library. */

@@ -11,7 +11,7 @@
  * extra. Past the cap, sites still go live; they just aren't reviewed.
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { getDemo, getKit, getPage, getSetting, saveImage, savePage, saveReview, setSetting } from "./db";
+import { getDemo, getKit, getPage, getReview, getSetting, saveImage, savePage, saveReview, setSetting } from "./db";
 import { costOf, designSitePage, pagesOf } from "./designer";
 import type { Env } from "./env";
 import { recordBuildCost } from "./tenants";
@@ -22,6 +22,8 @@ export const BROWSER_BUDGET_SECONDS = 5 * 3600;
 export const CRITIQUE_MODEL = "claude-sonnet-5-5";
 /** Below this, or with any failed check, the home page is written again with the notes. */
 const FIX_BELOW = 7;
+/** A Studio site has to be exceptional, so it is rewritten below this. */
+const FIX_BELOW_STUDIO = 8;
 
 export interface Check {
   id: string;
@@ -59,6 +61,8 @@ export interface Review {
   old?: OldSite | null;
   seconds?: number;
   costUsd?: number;
+  /** How many times a failed run was attempted (the hourly catch-up stops after 3). */
+  tries?: number;
   /** Which screenshots were saved (image names under the version). */
   shots?: string[];
 }
@@ -78,7 +82,8 @@ interface PageFacts {
   https: boolean;
 }
 
-const FACTS = `() => ({
+/** Evaluated in the browser: an expression that CALLS the function (a bare function string would just return the function). */
+export const FACTS = `(() => ({
   overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
   h1: document.querySelectorAll("h1").length,
   noAlt: Array.from(document.images).filter((i) => !i.hasAttribute("alt")).length,
@@ -90,7 +95,7 @@ const FACTS = `() => ({
   textPx: parseFloat(getComputedStyle(document.body).fontSize) || 0,
   words: (document.body.innerText || "").split(/\\s+/).filter(Boolean).length,
   https: location.protocol === "https:",
-})`;
+}))()`;
 
 /** The slice of Puppeteer this module uses (so tests can hand in a stand-in). */
 export interface BrowserPage {
@@ -107,7 +112,7 @@ export interface Browser {
 }
 export interface ReviewDeps {
   launch(env: Env): Promise<Browser>;
-  critique(env: Env, shots: { desktop: Uint8Array; phone: Uint8Array }, facts: string): Promise<{ score: number; verdict: string; strengths: string[]; issues: Issue[]; costUsd: number }>;
+  critique(env: Env, shots: { desktop: Uint8Array; phone: Uint8Array }, facts: string, studio?: boolean): Promise<{ score: number; verdict: string; strengths: string[]; issues: Issue[]; costUsd: number }>;
 }
 
 async function launchReal(env: Env): Promise<Browser> {
@@ -128,12 +133,12 @@ Score the page from 1 to 10 overall, weighing: first impression and distinctiven
 
 Reply with JSON only, no markdown: {"score": 1-10, "verdict": "one sentence", "strengths": ["..."], "issues": [{"what": "...", "fix": "a concrete instruction the designer can act on", "severity": "high|medium|low"}]}. At most 8 issues, most important first. If the page is genuinely excellent, say so and keep the issues list short.`;
 
-async function critiqueReal(env: Env, shots: { desktop: Uint8Array; phone: Uint8Array }, facts: string) {
+async function critiqueReal(env: Env, shots: { desktop: Uint8Array; phone: Uint8Array }, facts: string, studio = false) {
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 120_000 });
   const res = await client.messages.create({
     model: CRITIQUE_MODEL,
     max_tokens: 1500,
-    system: CRITIQUE_SYSTEM,
+    system: studio ? `${CRITIQUE_SYSTEM}\n\nThis is a STUDIO-tier site: it is meant to look like an award-winning creative studio built it. Judge it against that bar. A competent, tidy local-business template is a 5 or 6 at most. Look for a bold, specific concept, striking typography at a scale that stops the scroll, a memorable hero, art-directed imagery, confident use of space and motion cues, and details nobody else would think of. Say plainly what would make it unforgettable, as concrete design changes.` : CRITIQUE_SYSTEM,
     messages: [
       {
         role: "user",
@@ -174,6 +179,10 @@ async function addBrowserSeconds(env: Env, seconds: number): Promise<void> {
   const { key, seconds: before } = await browserUsed(env);
   await setSetting(env, key, String(Math.ceil(before + seconds)));
 }
+
+const EMPTY_FACTS: PageFacts = { overflow: false, h1: 0, noAlt: 0, brokenImgs: 0, links: [], hasViewport: false, tel: false, forms: 0, textPx: 0, words: 0, https: false };
+/** Whatever the browser sent back, filled out so one missing field can never crash the checks. */
+export const factsOf = (raw: unknown): PageFacts => ({ ...EMPTY_FACTS, ...(raw && typeof raw === "object" ? (raw as Partial<PageFacts>) : {}), links: Array.isArray((raw as PageFacts | null)?.links) ? (raw as PageFacts).links : [] });
 
 /** Checks on a built page. `paths` are the site's real page paths; `prefix` is where it is served. */
 function checksFor(desktop: PageFacts, phone: PageFacts, paths: string[], prefix: string, consoleErrors: string[]): Check[] {
@@ -218,7 +227,12 @@ export function scoreOld(f: PageFacts | null): { score: number; checks: Check[] 
 /** Run the review for a version that is live. Never throws: whatever happens is recorded on the version. */
 export async function reviewSite(env: Env, slug: string, version: string, deps: ReviewDeps = realDeps): Promise<Review> {
   const at = new Date().toISOString();
-  const done = async (r: Review) => (await saveReview(env, slug, version, r), r);
+  const prev = await getReview(env, slug, version);
+  const done = async (r: Review) => {
+    const out = { ...r, tries: r.skipped?.startsWith("error") ? (prev?.tries ?? 0) + 1 : 0 };
+    await saveReview(env, slug, version, out);
+    return out;
+  };
   const demo = await getDemo(env, slug);
   if (!demo || demo.liveVersion !== version) return { at, skipped: "not live" };
   if (!env.BROWSER) return done({ at, skipped: "no browser" });
@@ -249,11 +263,11 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     await page.setViewport({ width: 1280, height: 800 });
     await page.goto(siteUrl, { waitUntil: "networkidle0", timeout: 25_000 });
     const desktop = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
-    const dFacts = await page.evaluate<PageFacts>(FACTS);
+    const dFacts = factsOf(await page.evaluate<PageFacts>(FACTS));
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true });
     await page.goto(siteUrl, { waitUntil: "networkidle0", timeout: 25_000 });
     const phone = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
-    const pFacts = await page.evaluate<PageFacts>(FACTS);
+    const pFacts = factsOf(await page.evaluate<PageFacts>(FACTS));
     await page.setViewport({ width: 1200, height: 630 });
     await page.goto(siteUrl, { waitUntil: "networkidle0", timeout: 20_000 });
     const og = bytesOf(await page.screenshot({ type: "jpeg", quality: 78 }));
@@ -276,7 +290,7 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
         await page.goto(demo.intake.websiteUrl, { waitUntil: "domcontentloaded", timeout: 20_000 });
         await new Promise((r) => setTimeout(r, 1500));
         const oPhone = bytesOf(await page.screenshot({ type: "jpeg", quality: 65 }));
-        const oFacts = await page.evaluate<PageFacts>(FACTS);
+        const oFacts = factsOf(await page.evaluate<PageFacts>(FACTS));
         await saveImage(env, slug, version, "old-desktop.jpg", "Their current website on desktop", oDesk);
         await saveImage(env, slug, version, "old-phone.jpg", "Their current website on a phone", oPhone);
         shots.push("old-desktop.jpg", "old-phone.jpg");
@@ -294,7 +308,8 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
 
     // Claude's critique of the screenshots.
     const facts = checks.map((c) => `- ${c.label}: ${c.ok ? "ok" : "FAILED"}${c.detail ? ` (${c.detail})` : ""}`).join("\n");
-    const crit = await deps.critique(env, { desktop, phone }, facts);
+    const studio = kit.style === "studio";
+    const crit = await deps.critique(env, { desktop, phone }, facts, studio);
     review = { at, score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues, checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
 
     // Fix: write the home page again with the notes, when it isn't good enough.
@@ -303,7 +318,7 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
       ...failed.map((c) => `${c.label}: FAILED${c.detail ? ` (${c.detail})` : ""}. Fix this.`),
       ...crit.issues.filter((i) => i.severity !== "low").map((i) => `${i.what} → ${i.fix}`),
     ];
-    if ((crit.score < FIX_BELOW || failed.length) && notes.length) {
+    if ((crit.score < (studio ? FIX_BELOW_STUDIO : FIX_BELOW) || failed.length) && notes.length) {
       const spec = pagesOf(kit).find((p) => p.path === "/");
       const current = await getPage(env, slug, version, "/");
       if (spec && current) {

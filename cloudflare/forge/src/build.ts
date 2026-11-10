@@ -22,10 +22,11 @@ import {
   touchBuild,
   updateIntake,
 } from "./db";
-import { designKit, designSitePage, factsBlock, Fatal, pagesOf, planSite, sitemapFor, TryLater, type Plan } from "./designer";
+import { designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, planSite, sitemapFor, TryLater, type Plan } from "./designer";
 import type { BuildJob, Env } from "./env";
-import { previewImages } from "./images";
+import { beforeAfterImages, previewImages } from "./images";
 import { privacyPage, termsPage } from "./legal";
+import { pickConcept } from "./concepts";
 import { mergeIntake } from "./places";
 import { readWebsite } from "./scrape";
 import { buildCost, chargeBuild, getTenant, recordBuildCost, type Tenant } from "./tenants";
@@ -128,6 +129,10 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
     if (demo && demo.liveVersion === job.version) await reviewSite(env, job.slug, job.version);
     return "done";
   }
+  if (job.stage === "pairs") {
+    if (demo && demo.liveVersion === job.version) await addPairs(env, job.slug, job.version, attempts);
+    return "done";
+  }
   if (job.stage === "change") {
     if (demo && demo.liveVersion === job.version) await applyChange(env, job.slug, job.version, job.path, job.instruction, attempts);
     return "done";
@@ -144,12 +149,18 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       // A cheap planning step picks niche-fitting services and describes the preview photos,
       // which Workers AI then generates (free) and the site serves from its own address.
       const plan: Plan | null = await planSite(env, intake, site).catch((e) => (console.log("plan failed", errText(e)), null));
-      const images = await previewImages(env, plan?.imagePrompts ?? []);
-      await Promise.all(images.map((img) => saveImage(env, slug, version, img.name, img.description, img.bytes)));
+      const [images, pairImages] = await Promise.all([previewImages(env, plan?.imagePrompts ?? []), beforeAfterImages(env, plan?.pairs ?? []).catch(() => [])]);
+      await Promise.all([...images, ...pairImages].map((img) => saveImage(env, slug, version, img.name, img.description, img.bytes)));
       const imgBase = `${env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : ""}/${slug}/_img/${version}/`;
       const previews = images.map((img) => ({ url: imgBase + img.name, description: img.description }));
+      // A pair is only offered when both of its pictures came out.
+      const pairs = [1, 2].flatMap((n) => {
+        const b = pairImages.find((p) => p.name === `ba-${n}-before.jpg`);
+        const a = pairImages.find((p) => p.name === `ba-${n}-after.jpg`);
+        return b && a ? [{ beforeUrl: `${imgBase}ba-${n}-before.jpg`, afterUrl: `${imgBase}ba-${n}-after.jpg`, before: b.description.replace(/^Before: /, ""), after: a.description.replace(/^After: /, "") }] : [];
+      });
       const pages = sitemapFor(intake, plan?.services);
-      const { kit, usage } = await designKit(env, factsBlock(intake, site, slug, plan, previews), pages, intake.style);
+      const { kit, usage } = await designKit(env, factsBlock(intake, site, slug, plan, previews, pairs), pages, intake.style, intake.style === "studio" ? pickConcept(intake, slug).id : undefined);
       // The planning call is counted with the design.
       const u = usage as Record<string, unknown>;
       await saveKit(env, slug, version, kit, { ...u, cost_usd: (Number(u.cost_usd) || 0) + (plan?.cost ?? 0) });
@@ -209,6 +220,49 @@ async function applyChange(env: Env, slug: string, version: string, path: string
     const demo = await getDemo(env, slug);
     const u = usage as { cost_usd?: number };
     if (demo) await recordBuildCost(env, demo.tenantId, slug, `${version}:change:${Date.now()}`, Number(u.cost_usd) || 0, 1, "change");
+    await note("done");
+  } catch (e) {
+    if (e instanceof TryLater && attempts < BUSY_TRIES) throw e;
+    await note("failed", errText(e));
+  }
+}
+
+/** The pages a before/after feature belongs on, when the site has them. */
+const PAIR_PAGES = ["/gallery", "/"];
+
+/**
+ * Add illustrative before/after photos to a site that is already live: plan the scenes (Haiku),
+ * make the pictures, save them under the live version, then have the gallery and home page written
+ * again around them. No credit is taken: the cost is a few cents, recorded as a change.
+ */
+async function addPairs(env: Env, slug: string, version: string, attempts: number): Promise<void> {
+  const note = (status: "working" | "done" | "failed", error = "") => setChangeNote(env, slug, { path: "/gallery", instruction: "Add illustrative before/after photos", status, error, at: new Date().toISOString() });
+  try {
+    const demo = await getDemo(env, slug);
+    const kit = await getKit(env, slug, version);
+    if (!demo || !kit) return void (await note("failed", "The site isn't live yet."));
+    const { pairs, cost } = await planPairs(env, demo.intake);
+    if (!pairs.length) return void (await note("failed", "This kind of business doesn't have a natural before and after (nothing visibly changes), so nothing was added."));
+    const made = await beforeAfterImages(env, pairs);
+    await Promise.all(made.map((img) => saveImage(env, slug, version, img.name, img.description, img.bytes)));
+    const base = `${env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : ""}/${slug}/_img/${version}/`;
+    const ready = [1, 2].flatMap((n) => {
+      const b = made.find((p) => p.name === `ba-${n}-before.jpg`);
+      const a = made.find((p) => p.name === `ba-${n}-after.jpg`);
+      return b && a ? [{ beforeUrl: `${base}ba-${n}-before.jpg`, afterUrl: `${base}ba-${n}-after.jpg`, before: b.description.replace(/^Before: /, ""), after: a.description.replace(/^After: /, "") }] : [];
+    });
+    if (!ready.length) return void (await note("failed", "The picture generator couldn't make the pairs right now (its daily allowance may be used up). Try again later."));
+    const instruction = `${pairsRule(ready)}\n\nReplace any "Your before photo appears here" or "photo coming soon" placeholder tiles with this feature, and keep everything else as it is.`;
+    let usd = cost;
+    for (const path of PAIR_PAGES) {
+      const spec = pagesOf(kit).find((p) => p.path === path);
+      const current = await getPage(env, slug, version, path);
+      if (!spec || !current) continue;
+      const { page, usage } = await designSitePage(env, kit, spec, { instruction, current });
+      await savePage(env, slug, version, path, page, usage);
+      usd += Number((usage as { cost_usd?: number }).cost_usd) || 0;
+    }
+    await recordBuildCost(env, demo.tenantId, slug, `${version}:pairs:${Date.now()}`, usd, 3, "change");
     await note("done");
   } catch (e) {
     if (e instanceof TryLater && attempts < BUSY_TRIES) throw e;

@@ -18,7 +18,7 @@
  */
 import { handleApp } from "./app";
 import { build, startQueued } from "./build";
-import { pruneThrottle, pruneVisitors, queuedTenants } from "./db";
+import { pruneThrottle, pruneVisitors, queuedTenants, reviewsDue } from "./db";
 import { importClip, serveVideo, syncFolder } from "./drive";
 import type { BuildJob, Ctx, Env, MessageBatch, VideoJob } from "./env";
 import { CORS, serveImage, servePitch, serveSite, takeLead, text } from "./serve";
@@ -26,7 +26,7 @@ import { CORS, serveImage, servePitch, serveSite, takeLead, text } from "./serve
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)) || "Something went wrong.";
 
 /** A site image: preview photos, the review's screenshots, the social preview and the old-site captures. */
-export const IMAGE_PATH = /^\/([a-z0-9-]{3,64})\/_img\/([a-z0-9]{6,40})\/((?:photo-\d{1,2}|og|shot-desktop|shot-phone|old-desktop|old-phone)\.jpg)$/;
+export const IMAGE_PATH = /^\/([a-z0-9-]{3,64})\/_img\/([a-z0-9]{6,40})\/((?:photo-\d{1,2}|ba-[12]-(?:before|after)|og|shot-desktop|shot-phone|old-desktop|old-phone)\.jpg)$/;
 
 /** /<slug> plus an optional page path such as /services or /services/drain-cleaning. */
 const PAGE_PATH = /^\/([a-z0-9-]{3,64})((?:\/[a-z0-9-]+){1,2})?$/;
@@ -82,6 +82,8 @@ const worker = {
   async scheduled(_event: unknown, env: Env): Promise<void> {
     await pruneThrottle(env).catch(() => undefined);
     await pruneVisitors(env).catch(() => undefined);
+    // A live site whose review never ran or crashed gets another go (2 an hour at most).
+    if (env.BROWSER) for (const r of await reviewsDue(env).catch(() => [] as { slug: string; version: string }[])) await env.BUILDS.send({ slug: r.slug, version: r.version, stage: "review" }).catch(() => undefined);
     // Queued (bulk) builds whose account has a free slot: a safety net for the start-on-finish path.
     for (const id of await queuedTenants(env).catch(() => [] as number[])) await startQueued(env, id).catch((e) => console.error("queued build", errText(e)));
     await syncFolder(env).catch((e) => console.error("video sync failed", errText(e)));

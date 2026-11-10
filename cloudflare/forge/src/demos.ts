@@ -7,6 +7,7 @@ import { Intake, type Demo } from "../../../src/forge/schema";
 import { startBuild, type StartResult } from "./build";
 import { getDemo, makeSlug, saveDemo, type Stored } from "./db";
 import type { Env } from "./env";
+import { conceptById } from "./concepts";
 import { resolveMapsLink, splitStreetCity, type MapsPlace } from "./places";
 import { widgetId } from "./site";
 import { buildCost, type Tenant } from "./tenants";
@@ -33,6 +34,7 @@ export const noCreditsText = (e: NoCredits) =>
 export const INTAKE_FIELDS = [
   "businessName",
   "style",
+  "concept",
   "googleUrl",
   "industry",
   "city",
@@ -100,6 +102,7 @@ export async function prepareIntake(raw: Record<string, string>): Promise<Intake
     primaryColor: color,
     mode: g("mode") || "auto",
     style: g("style") === "studio" ? "studio" : "standard",
+    concept: conceptById(g("concept")) ? g("concept") : "auto",
     websiteUrl: g("websiteUrl"),
     photoUrls: g("photoUrls"),
     chatWidget: g("chatWidget"),

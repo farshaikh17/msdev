@@ -9,6 +9,7 @@ import { splitList, parseReviews } from "../../../src/forge/copy";
 import { GENERIC, presetFor } from "../../../src/forge/presets";
 import type { Intake } from "../../../src/forge/schema";
 import type { Env } from "./env";
+import { conceptById } from "./concepts";
 import { MOTION_API } from "./motion";
 import type { SiteFacts } from "./scrape";
 
@@ -180,6 +181,8 @@ export interface Plan {
   services: string[];
   /** Descriptions of the preview photos to generate for this business. */
   imagePrompts: string[];
+  /** 0 or 2 illustrative before/after scenes, for trades where the work visibly transforms something. */
+  pairs?: { before: string; after: string }[];
   /** What the planning call cost (US$). */
   cost: number;
 }
@@ -207,6 +210,7 @@ export async function planSite(env: Env, i: Intake, site: SiteFacts | null): Pro
 4 to 6 services this business offers, one per line (2–4 words each, title case). Use the services given or on their website when there are any; otherwise the main services a business in this niche typically offers.
 @@@ PHOTOS
 6 photo descriptions for an image generator, one per line (15–30 words each): realistic scenes for this business's website. The first is a wide hero shot; the rest show the main services, the work in progress, the setting and a happy customer moment. Concrete and visual (subject, setting, light), e.g. "A wildlife technician in uniform inspecting a roof vent on a Florida home at golden hour, ladder against the wall". No text, signs or brand names in the scene.
+${PAIRS_PROMPT}
 
 ${facts}`,
     2000,
@@ -220,8 +224,32 @@ ${facts}`,
       .split("\n")
       .map((l) => l.replace(/^[-*\d.)\s]+/, "").trim())
       .filter((l) => l && l.length <= 400);
-  return { services: lines(p.SERVICES).filter((l) => l.length <= 60).slice(0, 6), imagePrompts: lines(p.PHOTOS).slice(0, 6), cost: Number(usage.cost_usd) || 0 };
+  const pairs = lines(p.PAIRS)
+    .map((l) => l.match(/^BEFORE:\s*(.+?)\s*\|\|\s*AFTER:\s*(.+)$/i))
+    .flatMap((m) => (m ? [{ before: m[1]!.slice(0, 300), after: m[2]!.slice(0, 300) }] : []))
+    .slice(0, 2);
+  return { services: lines(p.SERVICES).filter((l) => l.length <= 60).slice(0, 6), imagePrompts: lines(p.PHOTOS).slice(0, 6), pairs, cost: Number(usage.cost_usd) || 0 };
 }
+
+const PAIRS_PROMPT = `@@@ PAIRS
+Only if this trade's work visibly transforms something that a customer would photograph before and after (landscaping, cleaning, painting, roofing, remodeling, flooring, pressure washing, fencing, paving, tree work, auto body or detailing, a smile or hair makeover, and the like), 2 before-and-after scenes, one per line, written as: BEFORE: a short vivid description of the neglected or old state || AFTER: what the same scene looks like once the business has done the work (each 12–25 words, the same place and viewpoint, no people, no text). For trades where nothing visible changes (a plumber fixing a pipe behind a wall, a lawyer, an accountant, a restaurant) write the single word NONE.`;
+
+/** Just the before/after scenes for a trade (for a site that already exists). */
+export async function planPairs(env: Env, i: Intake): Promise<{ pairs: { before: string; after: string }[]; cost: number }> {
+  const facts = [`Business: ${i.businessName}`, i.industry && `Niche: ${i.industry}`, i.city && `Location: ${i.city}`, i.services && `Services given: ${i.services}`].filter(Boolean).join("\n");
+  const { text, usage } = await ask(env, `You're planning illustrative preview pictures for a local business's website. Reply with exactly this part and nothing else.\n\n${PAIRS_PROMPT}\n\n${facts}`, 800, env.CLAUDE_PAGE_MODEL || PAGE_MODEL, "low", PLAN_SYSTEM);
+  const p = parseParts(text);
+  const pairs = (p.PAIRS ?? "")
+    .split("\n")
+    .map((l) => l.replace(/^[-*\d.)\s]+/, "").trim().match(/^BEFORE:\s*(.+?)\s*\|\|\s*AFTER:\s*(.+)$/i))
+    .flatMap((m) => (m ? [{ before: m[1]!.slice(0, 300), after: m[2]!.slice(0, 300) }] : []))
+    .slice(0, 2);
+  return { pairs, cost: Number(usage.cost_usd) || 0 };
+}
+
+/** What a page writer is told about before/after pairs (shared by new builds and the add-pairs button). */
+export const pairsRule = (pairs: PreviewPair[]) =>
+  `Illustrative before/after pairs (AI-made previews at 512x384, the same scene before and after the work). Build a real before-and-after feature from them on the home page and the gallery (a draggable comparison slider, or two side-by-side images with Before and After labels), with object-fit: cover. Next to the pair, in small clear type, write exactly: "Illustrative sample. Your real before and after photos replace these at launch." Never claim they are this business's own jobs, and never write a customer name, address or result under them. Do NOT show the "Your before photo appears here" placeholder tiles when these exist.\n${pairs.map((p, n) => `- Pair ${n + 1}: before ${p.beforeUrl} — ${p.before}; after ${p.afterUrl} — ${p.after}`).join("\n")}`;
 
 const PLAN_SYSTEM = "You plan websites for local service businesses. Follow the reply format exactly.";
 
@@ -299,12 +327,7 @@ Reply with the parts you are asked for, each starting with a line "@@@ NAME" (ex
 const STUDIO = `## Studio edition (this site is a Studio build)
 This is our top tier. It must feel like an Awwwards "Site of the Day" made for a local business: art-directed, cinematic, bold and memorable, while still working hard as a business site (calls, quotes, services, trust). The sales rep should hear "wow" in the first five seconds.
 
-Art direction first. Choose ONE strong concept that suits this business and commit to it on every page:
-- Editorial: an oversized serif display (Instrument Serif, Fraunces, Cormorant Garamond, Playfair Display), asymmetric 12-column grids, generous whitespace, small captions, numbered sections.
-- Kinetic grotesk: giant condensed uppercase (Big Shoulders Display, Anton, Bebas Neue, Archivo Black, Six Caps) at 12–20vw with tight leading, hard colour blocks and marquees.
-- Cinematic dark: a near-black canvas, full-bleed imagery with grain, a glowing accent, slow reveals, thin type for details.
-- Bright and playful: bold colour fields, rounded shapes, chunky display type (Unbounded, Syne, Dela Gothic One, Bricolage Grotesque).
-Pair the display face with a clean text face (Hanken Grotesk, Inter Tight, Manrope, Figtree, Space Grotesk, DM Sans).
+{{ART_DIRECTION}}
 
 Signature moves: use most of these on the home page and several on every inner page:
 - The hero: display type at about clamp(3.2rem, min(11vw, 16vh), 13rem) with data-split="chars" (keep the headline short: 2–4 lines on desktop; the headline, its paragraph and the CTA must all fit in the first screen at 1440×900 and at 390×844, clear of the header), over the moving background, tinted by a living shader (data-shader) in the brand colours, with a large round magnetic CTA (data-magnetic) and the phone close by.
@@ -319,9 +342,18 @@ Keep it usable: the 360px phone layout must be as considered as desktop (type si
 
 ${MOTION_API}`;
 
-export const systemFor = (style: Style) =>
+export const ART_DIRECTION_FALLBACK = `Art direction first. Choose ONE strong concept that suits this business and commit to it on every page: editorial (oversized serif, asymmetric grids), kinetic (giant condensed grotesk, hard colour blocks), cinematic (near-black, full-bleed imagery, grain), or playful (chunky rounded type, bright colour). Pair the display face with a clean text face.`;
+
+const artDirection = (concept?: string) => {
+  const c = conceptById(concept);
+  return c
+    ? `## Art direction for this site (fixed: hold every page to it)\n${c.brief}\n\nThis is one of nine distinct directions we use; a neighbouring site is built in a different one, so commit fully to this one's type, colour logic, layout and moves, and avoid the habits of the others. Do not fall back on an italic serif accent phrase, a marquee band, or a giant wordmark footer unless THIS direction calls for them.`
+    : ART_DIRECTION_FALLBACK;
+};
+
+export const systemFor = (style: Style, concept?: string) =>
   style === "studio"
-    ? SYSTEM.replace("Keep motion restrained: no custom cursors, WebGL or heavy effects.", "Motion comes from our Studio motion engine (below): use its attributes generously and tastefully.").replace("## Copy rules", `${STUDIO}\n\n## Copy rules`)
+    ? SYSTEM.replace("Keep motion restrained: no custom cursors, WebGL or heavy effects.", "Motion comes from our Studio motion engine (below): use its attributes generously and tastefully.").replace("## Copy rules", `${STUDIO.replace("{{ART_DIRECTION}}", artDirection(concept))}\n\n## Copy rules`)
     : SYSTEM;
 
 const sitemapText = (pages: PageSpec[]) => pages.map((p) => `${p.path} — ${p.name}`).join("\n");
@@ -410,12 +442,19 @@ export function parseParts(text: string): Record<string, string> {
 
 /** Everything Claude is told about the business (stored with the kit, so every page job sees the same facts). */
 /** A preview photo already made for this site: where it's served and what it shows. */
+export interface PreviewPair {
+  beforeUrl: string;
+  afterUrl: string;
+  before: string;
+  after: string;
+}
+
 export interface PreviewPhoto {
   url: string;
   description: string;
 }
 
-export function factsBlock(i: Intake, site: SiteFacts | null, slug: string, plan: Plan | null = null, previews: PreviewPhoto[] = []): string {
+export function factsBlock(i: Intake, site: SiteFacts | null, slug: string, plan: Plan | null = null, previews: PreviewPhoto[] = [], pairs: PreviewPair[] = []): string {
   const p = presetFor(i.industry, i.businessName, i.services);
   const generic = p === GENERIC;
   const lines: string[] = [];
@@ -438,9 +477,10 @@ export function factsBlock(i: Intake, site: SiteFacts | null, slug: string, plan
       ? `The business's own photos (pick the best, skip any that look like logos or tiny graphics; use these in the gallery and anywhere showing their work):\n${[...new Set(photos)].slice(0, 20).map((u) => `- ${u}`).join("\n")}`
       : "The business's own photos: none. In the gallery and before/after, use clearly-labelled 'your photos appear here' tiles.",
   );
+  if (pairs.length) lines.push(pairsRule(pairs));
   if (previews.length)
     lines.push(
-      `Preview photos made for this site (1024x768; the first is the hero shot). Use them generously: the hero, service cards and service pages, about and section imagery, with object-fit: cover. They are illustrative, so never present them as this business's own projects, team or before/after results; give each a descriptive alt:\n${previews.map((p) => `- ${p.url} — ${p.description}`).join("\n")}`,
+      `Preview photos made for this site (1024x768; the first is the hero shot). Use them generously: the hero, service cards and service pages, about and section imagery, with object-fit: cover. They are illustrative, so never present them as this business's own projects or team; in the gallery you may show them as clearly labelled "Sample photo" tiles (never captioned as a real job); give each a descriptive alt:\n${previews.map((p) => `- ${p.url} — ${p.description}`).join("\n")}`,
     );
   if (i.logoUrl) lines.push(`Logo image: ${i.logoUrl}`);
   const map = mapEmbed(i);
@@ -480,6 +520,8 @@ export interface Kit {
   pages?: PageSpec[];
   /** "studio": the creative tier, with the motion engine on every page. */
   style?: Style;
+  /** The art direction a Studio site is held to (see concepts.ts). */
+  concept?: string;
 }
 export interface PageDraft {
   title: string;
@@ -572,11 +614,11 @@ const need = (parts: Record<string, string>, names: string[]) => {
 };
 
 /** Stage 1: the design system (fonts, CSS, header, footer, script) for the given pages. */
-export async function designKit(env: Env, brief: string, pages: PageSpec[], style: Style = "standard"): Promise<{ kit: Kit; usage: unknown }> {
+export async function designKit(env: Env, brief: string, pages: PageSpec[], style: Style = "standard", concept?: string): Promise<{ kit: Kit; usage: unknown }> {
   // Low effort: the brief already makes the design decisions explicit, and thinking is the costliest part.
   // A Studio site thinks harder about its art direction: that is where the budget goes.
   const studio = style === "studio";
-  const { text, usage, cut } = await ask(env, `${kitTask(pages, style)}\n\n## The business\n${brief}`, 64000, env.CLAUDE_MODEL || MODEL, studio ? "medium" : effortOf(env, "low"), systemFor(style));
+  const { text, usage, cut } = await ask(env, `${kitTask(pages, style)}\n\n## The business\n${brief}`, 64000, env.CLAUDE_MODEL || MODEL, studio ? "medium" : effortOf(env, "low"), systemFor(style, concept));
   if (cut) throw new Error("The site's design came back incomplete (too long). Try again.");
   const p = parseParts(text);
   need(p, ["CSS", "HEADER", "FOOTER"]);
@@ -595,7 +637,7 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[], styl
       components: p.COMPONENTS ?? "",
       brief,
       pages,
-      ...(studio ? { style: "studio" as const } : {}),
+      ...(studio ? { style: "studio" as const, ...(conceptById(concept) ? { concept } : {}) } : {}),
     },
     usage,
   };
@@ -661,7 +703,7 @@ ${page.brief}${current}${notes}${change}`;
     studio ? (home ? 56000 : 32000) : home ? 40000 : 24000,
     model,
     studio ? "medium" : home ? effortOf(env, "low") : "medium",
-    systemFor(studio ? "studio" : "standard"),
+    systemFor(studio ? "studio" : "standard", kit.concept),
   );
   const p = parseParts(text);
   // A reply that ran on after finishing its <main> (e.g. repeating itself) is still a whole page.

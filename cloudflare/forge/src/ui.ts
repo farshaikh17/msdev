@@ -6,6 +6,7 @@ import type { Review } from "./review";
 import { SWATCHES } from "./designer";
 import type { Session } from "./auth";
 import { STUDIO_CREDITS, buildCost, type Usage } from "./tenants";
+import { CONCEPTS } from "./concepts";
 import { ic } from "./web-ui";
 
 const THEME_BOOT = `(function(){var d=document.documentElement,t;try{t=localStorage.getItem("forge-theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";d.setAttribute("data-theme",t)})()`;
@@ -176,7 +177,8 @@ export function fields(v?: Partial<Intake>): string {
   const style = v?.style ?? "standard";
   const tier = `<fieldset class="look" style="border:0;padding:0;margin:0"><legend class="note" style="font-weight:600;margin-bottom:8px">Style</legend>
 <div class="look-row">${radio("style", "standard", style !== "studio", "Standard · 1 credit")}${radio("style", "studio", style === "studio", `Studio · ${STUDIO_CREDITS} credits`)}</div>
-<p class="note" style="margin:0"><b>Standard</b>: a polished, fast multi-page site. <b>Studio</b>: an award-style, art-directed site with kinetic type, smooth scrolling, WebGL backgrounds, a custom cursor and page transitions. It takes longer and uses the larger models.</p></fieldset>`;
+<label for="f-concept" style="max-width:420px">Studio art direction<select id="f-concept" name="concept"><option value="auto"${(v?.concept ?? "auto") === "auto" ? " selected" : ""}>Auto: the best fit for the trade, different each time</option>${CONCEPTS.map((c) => `<option value="${esc(c.id)}"${v?.concept === c.id ? " selected" : ""}>${esc(c.name)}: ${esc(c.blurb)}</option>`).join("")}</select></label>
+<p class="note" style="margin:0"><b>Standard</b>: a polished, fast multi-page site. <b>Studio</b>: an award-style, art-directed site with kinetic type, smooth scrolling, WebGL backgrounds, a custom cursor and page transitions, held to one of nine distinct art directions (the choice above only applies to Studio). It takes longer and uses the larger models.</p></fieldset>`;
   const look = `<fieldset class="look" style="border:0;padding:0;margin:0"><legend class="note" style="font-weight:600;margin-bottom:8px">Look</legend>
 <div class="look-row">${radio("mode", "auto", mode === "auto", "✨ Let the AI choose")}${radio("mode", "dark", mode === "dark", "🌙 Dark")}${radio("mode", "light", mode === "light", "☀️ Light")}</div>
 <div class="look-row">${radio("primaryColor", "", !color, `<i class="dot auto"></i>Auto colour`)}${SWATCHES.map((c) =>
@@ -248,8 +250,11 @@ function qualityCard(d: Stored, r: Review | null | undefined, links: { site: str
   if (!d.liveVersion) return "";
   const again = `<form method="post" action="/demos/${esc(d.slug)}/review"><button class="btn ghost" type="submit" data-busy="Queued…">Run the quality check${r ? " again" : " now"}</button></form>`;
   if (!r) return `<section class="card"><h2>Quality check</h2><p class="note" style="margin:0">The automatic review runs a few minutes after the design goes live: screenshots on desktop and phone, checks, and Claude's critique. It fixes the home page itself when something's off.</p>${again}</section>`;
-  if (r.skipped && !r.score) return `<section class="card"><h2>Quality check</h2><p class="note" style="margin:0">Not run for this version (${esc(r.skipped)}).</p>${again}</section>`;
   const img = (n: string) => `${links.site}/_img/${d.liveVersion}/${n}`;
+  if (r.skipped && !r.score)
+    return `<section class="card"><h2>Quality check</h2><p class="note" style="margin:0">${r.skipped.startsWith("error") ? "The check hit a problem and will try again by itself within the hour" : "Not run for this version"} (${esc(r.skipped)}).</p>${
+      r.shots?.includes("shot-desktop.jpg") ? `<div class="row" style="align-items:flex-start"><img src="${esc(img("shot-desktop.jpg"))}" alt="Desktop screenshot" style="width:min(100%,420px);border-radius:10px;border:1px solid var(--line)"><img src="${esc(img("shot-phone.jpg"))}" alt="Phone screenshot" style="width:110px;border-radius:10px;border:1px solid var(--line)"></div>` : ""
+    }${again}</section>`;
   const passed = r.checks?.filter((c) => c.ok).length ?? 0;
   return `<section class="card"><div class="row" style="justify-content:space-between"><h2>Quality check: <span style="color:var(--steel)">${r.score}/10</span> design · ${passed} of ${r.checks?.length ?? 0} checks</h2>${pitch ? `<a class="btn ghost" href="${esc(pitch)}" target="_blank" rel="noreferrer">Before &amp; after page ↗</a>` : ""}</div>
 ${r.verdict ? `<p style="margin:0"><i>${esc(r.verdict)}</i></p>` : ""}
@@ -296,6 +301,7 @@ function changeCard(d: Stored, pages: { name: string; path: string }[], aiOn: bo
 <form method="post" action="/demos/${esc(d.slug)}/change" style="display:grid;gap:12px"><div class="grid"><label>Page<select name="path">${pages.map((p) => `<option value="${esc(p.path)}">${esc(p.name)}</option>`).join("")}</select></label>
 <label class="full">What should change?<textarea name="instruction" rows="2" maxlength="600" placeholder="e.g. Make the hero darker and add a financing section before the reviews" required></textarea></label></div>
 <div><button class="btn" type="submit" data-busy="Sending…"${working || !aiOn ? " disabled" : ""}>Apply the change</button> <span class="note">Only that page is rewritten; a few cents, no credit.</span></div></form>
+<form method="post" action="/demos/${esc(d.slug)}/pairs" style="display:grid;gap:8px"><p class="note" style="margin:0"><b>Before &amp; after photos</b>: for trades where the work visibly changes something (landscaping, cleaning, painting, roofing…), make AI before-and-after pairs and rewrite the gallery and home page around them. They're labelled "Illustrative sample" until real photos replace them. A few cents, no credit.</p><div><button class="btn ghost" type="submit" data-busy="Starting…"${working || !aiOn ? " disabled" : ""}>Add illustrative before/after photos</button></div></form>
 <form method="post" action="/demos/${esc(d.slug)}/replace" style="display:grid;gap:12px"><p class="note" style="margin:0"><b>Quick text fix</b> (no AI): replace an exact phrase everywhere on the site.</p><div class="grid"><label>Find<input name="find" maxlength="200" required placeholder="e.g. (555) 123-4567"></label><label>Replace with<input name="replace" maxlength="200" placeholder="e.g. (305) 555-0100"></label></div><div><button class="btn ghost" type="submit">Replace everywhere</button></div></form></section>`;
 }
 

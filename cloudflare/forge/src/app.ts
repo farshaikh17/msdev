@@ -253,7 +253,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     }
   }
 
-  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/replace|\/review)?$/);
+  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/replace|\/review|\/pairs)?$/);
   if (m) {
     const [, slug, action] = m;
     // Always scoped to this account: another account's demo is simply "not found".
@@ -288,6 +288,14 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
         if (e instanceof Invalid) return redirect(withMsg(`/demos/${slug}`, "error", e.message));
         throw e;
       }
+    }
+    if (action === "/pairs" && post) {
+      if (!demo.liveVersion) return redirect(withMsg(`/demos/${slug}`, "error", "Wait for the design to finish first."));
+      if (!aiOn) return redirect(withMsg(`/demos/${slug}`, "error", "This needs Claude, which is switched off."));
+      if (demo.changeNote?.status === "working" && Date.now() - Date.parse(demo.changeNote.at) < 10 * 60_000) return redirect(withMsg(`/demos/${slug}`, "error", "A change is still being applied. Give it a minute."));
+      await setChangeNote(env, slug, { path: "/gallery", instruction: "Add illustrative before/after photos", status: "working", error: "", at: new Date().toISOString() });
+      await env.BUILDS.send({ slug, version: demo.liveVersion, stage: "pairs" });
+      return redirect(withMsg(`/demos/${slug}`, "ok", "Making the before and after pictures and rewriting the gallery and home page around them. Usually 3–6 minutes."));
     }
     if (action === "/review" && post) {
       if (!owner) return needOwner();

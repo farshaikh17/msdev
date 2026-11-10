@@ -54,6 +54,8 @@ export const Intake = z.object({
   mode: z.enum(["auto", "light", "dark"]).default("auto"),
   /** "studio": the creative tier (art-directed, motion engine, bigger budget). */
   style: z.enum(["standard", "studio"]).default("standard"),
+  /** Studio art direction ("auto": one is picked to suit the trade). See cloudflare/forge/src/concepts.ts. */
+  concept: z.string().trim().max(20).default("auto"),
   /** The business's current website, read for facts and photos. */
   websiteUrl: z.union([z.literal(""), z.url()]).default(""),
   /** Photo links (one per line) the site may use: the business's own work, team, premises. */

@@ -20,6 +20,7 @@ vi.mock("../cloudflare/forge/src/designer", async (orig) => {
   return { ...real, planSite: vi.fn(), designKit: vi.fn(), designSitePage: vi.fn() };
 });
 vi.mock("../cloudflare/forge/src/images", () => ({
+  beforeAfterImages: vi.fn(async () => []),
   previewImages: vi.fn(async () => [
     { name: "photo-1.jpg", description: "a barber at work", bytes: new Uint8Array([1, 2, 3]) },
     { name: "photo-2.jpg", description: "a shop front", bytes: new Uint8Array([4, 5, 6]) },

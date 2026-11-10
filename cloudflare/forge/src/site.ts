@@ -44,7 +44,9 @@ const BASE_CSS = `.legal{max-width:760px;margin:0 auto;padding:clamp(48px,8vw,11
  * wrap, and between tablet and wide desktop the header row scales down a little so it fits.
  */
 export const HEADER_CSS = `header a,header button,header summary,header li,header [class*="phone"],header [class*="btn"]{white-space:nowrap}
-@media (min-width:900px) and (max-width:1279px){header>*{zoom:.88}}`;
+@media (min-width:900px) and (max-width:1279px){header>*{zoom:.88}}
+/* The chat bubble sits bottom-right: leave room under the footer so it never covers the credit line. */
+body>footer::after{content:"";display:block;height:84px}`;
 
 /**
  * The footer credit for an account's sites. Mianro's own line is the default (the design SOP);

@@ -5,7 +5,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../cloudflare/forge/src/index";
-import { designKit, designSitePage, planSite } from "../cloudflare/forge/src/designer";
+import { designKit, designSitePage, planPairs, planSite } from "../cloudflare/forge/src/designer";
+import { beforeAfterImages } from "../cloudflare/forge/src/images";
 import { countView, getDemo, getPage, getReview, viewStats } from "../cloudflare/forge/src/db";
 import type { BuildJob, Env, VideoJob } from "../cloudflare/forge/src/env";
 import { qrSvg } from "../cloudflare/forge/src/outreach";
@@ -18,9 +19,9 @@ import { build, call, html, loc, makeAccount, makeHarness, setupAdmin, slugOf, t
 
 vi.mock("../cloudflare/forge/src/designer", async (orig) => {
   const real = await orig<typeof import("../cloudflare/forge/src/designer")>();
-  return { ...real, planSite: vi.fn(), designKit: vi.fn(), designSitePage: vi.fn() };
+  return { ...real, planSite: vi.fn(), planPairs: vi.fn(), designKit: vi.fn(), designSitePage: vi.fn() };
 });
-vi.mock("../cloudflare/forge/src/images", () => ({ previewImages: vi.fn(async () => [{ name: "photo-1.jpg", description: "a shop", bytes: new Uint8Array([1]) }]) }));
+vi.mock("../cloudflare/forge/src/images", () => ({ beforeAfterImages: vi.fn(async () => []), previewImages: vi.fn(async () => [{ name: "photo-1.jpg", description: "a shop", bytes: new Uint8Array([1]) }]) }));
 vi.mock("../cloudflare/forge/src/scrape", () => ({ readWebsite: vi.fn() }));
 vi.mock("../cloudflare/forge/src/outreach", async (orig) => {
   const real = await orig<typeof import("../cloudflare/forge/src/outreach")>();
@@ -93,7 +94,7 @@ describe("the automatic review", () => {
     const version = demo.liveVersion!;
     const links = ["/" + slug, `/${slug}/about`, `/${slug}/nowhere`, "tel:+15555555555"];
     const { browser, visited } = fakeBrowser(goodFacts(links));
-    const critique = vi.fn(async () => ({ score: 5, verdict: "Flat hero.", strengths: ["Clear phone"], issues: [{ what: "Hero lacks contrast", fix: "Darken the overlay", severity: "high" as const }], costUsd: 0.012 }));
+    const critique = vi.fn<ReviewDeps["critique"]>(async () => ({ score: 5, verdict: "Flat hero.", strengths: ["Clear phone"], issues: [{ what: "Hero lacks contrast", fix: "Darken the overlay", severity: "high" as const }], costUsd: 0.012 }));
     const deps: ReviewDeps = { launch: async () => browser, critique };
     const env = { ...h.env, BROWSER: {} } as Env;
     const r = await reviewSite(env, slug, version, deps);
@@ -265,5 +266,193 @@ describe("the pitch page on its own", () => {
     const page = pitchPage(demo, { at: "", score: 8, checks: [{ id: "h1", label: "One heading", ok: true }], shots: ["shot-desktop.jpg", "shot-phone.jpg"], old: null }, { site: "https://sites.test/bravo", img: (n) => `/bravo/_img/v/${n}` }, "credit");
     expect(page).toContain("couldn't find a website");
     expect(page).toContain("/bravo/_img/v/shot-desktop.jpg");
+  });
+});
+
+describe("illustrative before/after pairs", () => {
+  it("are generated in two steps (the after uses the before as its reference), kept only when both come out, and counted against the day", async () => {
+    const { beforeAfterImages, DAILY_IMAGES } = await vi.importActual<typeof import("../cloudflare/forge/src/images")>("../cloudflare/forge/src/images");
+    const calls: { prompt: string; hasRef: boolean; w: string }[] = [];
+    let n = 0;
+    const AI = {
+      run: async (_m: string, input: { multipart: { body: ReadableStream; contentType: string } }) => {
+        const form = await new Response(input.multipart.body, { headers: { "content-type": input.multipart.contentType } }).formData();
+        calls.push({ prompt: String(form.get("prompt")), hasRef: form.has("input_image_0"), w: String(form.get("width")) });
+        return { image: btoa(`img${++n}`) };
+      },
+    };
+    const env = { ...h.env, AI } as unknown as Env;
+    const out = await beforeAfterImages(env, [{ before: "an overgrown yard", after: "a landscaped yard" }, { before: "a stained patio", after: "a clean patio" }]);
+    expect(out.map((x) => x.name)).toEqual(["ba-1-before.jpg", "ba-1-after.jpg", "ba-2-before.jpg", "ba-2-after.jpg"]);
+    expect(calls.filter((c) => c.hasRef)).toHaveLength(2);
+    expect(calls.every((c) => c.w === "512")).toBe(true);
+    expect(calls.find((c) => c.hasRef)!.prompt).toContain("image 0 as the exact reference");
+    // A failed "after" drops the whole pair; nothing is half-shown.
+    let k = 0;
+    const flaky = { run: async (_m: string, input: { multipart: { body: ReadableStream; contentType: string } }) => {
+      const form = await new Response(input.multipart.body, { headers: { "content-type": input.multipart.contentType } }).formData();
+      if (form.has("input_image_0") && ++k === 1) throw new Error("model busy");
+      return { image: btoa("x") };
+    } };
+    expect((await beforeAfterImages({ ...h.env, AI: flaky } as unknown as Env, [{ before: "a", after: "b" }, { before: "c", after: "d" }])).map((x) => x.name)).toEqual(["ba-2-before.jpg", "ba-2-after.jpg"]);
+    // Past the day's allowance nothing is generated.
+    h.db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(`ai-images:${new Date().toISOString().slice(0, 10)}`, String(DAILY_IMAGES));
+    expect(await beforeAfterImages(env, [{ before: "a", after: "b" }])).toEqual([]);
+  });
+
+  it("the planner's PAIRS lines are read, and NONE means no pairs", async () => {
+    const { planSite: realPlan } = await vi.importActual<typeof import("../cloudflare/forge/src/designer")>("../cloudflare/forge/src/designer");
+    expect(typeof realPlan).toBe("function");
+    const re = /^BEFORE:\s*(.+?)\s*\|\|\s*AFTER:\s*(.+)$/i;
+    expect("BEFORE: weedy dead lawn || AFTER: lush striped lawn".match(re)?.slice(1)).toEqual(["weedy dead lawn", "lush striped lawn"]);
+    expect("NONE".match(re)).toBeNull();
+  });
+
+  it("the site's brief carries the pairs with the 'Illustrative sample' rule", async () => {
+    const { factsBlock } = await vi.importActual<typeof import("../cloudflare/forge/src/designer")>("../cloudflare/forge/src/designer");
+    const { Intake } = await import("../src/forge/schema");
+    const brief = factsBlock(Intake.parse({ businessName: "Olvin's Landscaping" }), null, "olvins-1", null, [], [{ beforeUrl: "https://s/ba-1-before.jpg", afterUrl: "https://s/ba-1-after.jpg", before: "dead lawn", after: "lush lawn" }]);
+    expect(brief).toContain("ba-1-before.jpg");
+    expect(brief).toContain("Illustrative sample. Your real before and after photos replace these at launch.");
+    expect(brief).toContain('Do NOT show the "Your before photo appears here" placeholder tiles');
+    expect(factsBlock(Intake.parse({ businessName: "Xavier Roofing" }), null, "x-1a2b", null, [], [])).not.toContain("before/after pairs");
+  });
+});
+
+describe("the review's browser snippet", () => {
+  it("is an expression that calls the function, and a missing or empty result can't crash the checks", async () => {
+    const { FACTS, factsOf } = await import("../cloudflare/forge/src/review");
+    expect(FACTS.startsWith("(() =>")).toBe(true);
+    expect(FACTS.trimEnd().endsWith(")()")).toBe(true);
+    expect(() => new Function(`return ${FACTS}`)).not.toThrow();
+    for (const bad of [undefined, null, {}, "x", { links: "nope" }]) {
+      const f = factsOf(bad);
+      expect(Array.isArray(f.links)).toBe(true);
+      expect(f.h1).toBe(0);
+    }
+  });
+
+  it("a crashed review is retried by the hourly catch-up at most three times, an hour apart", async () => {
+    const { reviewsDue } = await import("../cloudflare/forge/src/db");
+    const { slug, demo } = await liveDemo();
+    const version = demo.liveVersion!;
+    const set = (r: object | null) => h.db.prepare("UPDATE site_versions SET review = ? WHERE slug = ? AND version = ?").run(r ? JSON.stringify(r) : null, slug, version);
+    set(null);
+    expect((await reviewsDue(h.env)).map((x) => x.slug)).toEqual([slug]);
+    set({ at: new Date().toISOString(), skipped: "error: boom", tries: 1 });
+    expect(await reviewsDue(h.env)).toEqual([]); // too soon
+    set({ at: new Date(Date.now() - 2 * 3_600_000).toISOString(), skipped: "error: boom", tries: 1 });
+    expect(await reviewsDue(h.env)).toHaveLength(1);
+    set({ at: new Date(Date.now() - 2 * 3_600_000).toISOString(), skipped: "error: boom", tries: 3 });
+    expect(await reviewsDue(h.env)).toEqual([]); // given up
+    set({ at: new Date(Date.now() - 2 * 3_600_000).toISOString(), skipped: "browser budget for this month is used up" });
+    expect(await reviewsDue(h.env)).toEqual([]); // not an error: left alone
+    set({ at: new Date().toISOString(), score: 8, shots: [] });
+    expect(await reviewsDue(h.env)).toEqual([]); // fine
+  });
+});
+
+describe("Studio art directions", () => {
+  it("has nine distinct directions, each with a full brief", async () => {
+    const { CONCEPTS } = await import("../cloudflare/forge/src/concepts");
+    expect(CONCEPTS.map((c) => c.id)).toEqual(["editorial", "kinetic", "cinematic", "brutalist", "swiss", "organic", "americana", "playful", "luxe"]);
+    for (const c of CONCEPTS) {
+      expect(c.brief.length).toBeGreaterThan(400);
+      expect(c.brief).toContain("Do NOT");
+    }
+  });
+
+  it("picks one that suits the trade, stays the same for a site, and varies between sites", async () => {
+    const { pickConcept, conceptById } = await import("../cloudflare/forge/src/concepts");
+    const plumber = { industry: "Plumbing", businessName: "Acme Plumbing" };
+    const picks = new Set(Array.from({ length: 40 }, (_, i) => pickConcept(plumber, `acme-plumbing-${i.toString(16).padStart(8, "0")}`).id));
+    // Only the plumbing shortlist is used, and more than one of it appears.
+    expect([...picks].every((id) => ["kinetic", "americana", "brutalist", "swiss"].includes(id))).toBe(true);
+    expect(picks.size).toBeGreaterThanOrEqual(3);
+    expect(pickConcept(plumber, "acme-plumbing-1a2b3c4d").id).toBe(pickConcept(plumber, "acme-plumbing-1a2b3c4d").id);
+    // A salon never gets the plumber's loud look; an unknown trade can get any.
+    expect(pickConcept({ industry: "Hair salon" }, "x-12345678").id).toMatch(/luxe|editorial|organic|playful/);
+    expect(conceptById(pickConcept({ industry: "Underwater basket weaving" }, "y-87654321").id)).toBeTruthy();
+    // An explicit choice always wins.
+    expect(pickConcept({ ...plumber, concept: "luxe" }, "anything-1").id).toBe("luxe");
+    expect(pickConcept({ ...plumber, concept: "not-a-concept" }, "anything-1").id).not.toBe("not-a-concept");
+  });
+
+  it("is chosen on the form, fixed on the site's kit, and told to Claude as the art direction", async () => {
+    const { systemFor } = await vi.importActual<typeof import("../cloudflare/forge/src/designer")>("../cloudflare/forge/src/designer");
+    const sys = systemFor("studio", "brutalist");
+    expect(sys).toContain("Art direction for this site (fixed");
+    expect(sys).toContain("NEO-BRUTALIST");
+    expect(sys).not.toContain("LUXE.");
+    expect(systemFor("studio", "luxe")).toContain("LUXE.");
+    expect(systemFor("studio")).toContain("Choose ONE strong concept"); // old sites without a concept
+    expect(systemFor("standard", "luxe")).not.toContain("LUXE.");
+    const admin = await setupAdmin(h);
+    const page = await html(await call(h, "/", { cookie: admin }));
+    expect(page).toContain('name="concept"');
+    expect(page).toContain("Neo-brutalist");
+    // A Studio build with a chosen direction passes it on to the designer, and an Auto build passes one that suits the trade.
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 9);
+    await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Alpha Plumbing", industry: "Plumbing", city: "Tampa, FL", style: "studio", concept: "swiss" } });
+    await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Beta Plumbing", industry: "Plumbing", city: "Tampa, FL", style: "studio" } });
+    await drain(h);
+    const concepts = vi.mocked(designKit).mock.calls.map((c) => c[4]);
+    expect(concepts[0]).toBe("swiss");
+    expect(["kinetic", "americana", "brutalist", "swiss"]).toContain(concepts[1]);
+    // Standard builds get none.
+    vi.mocked(designKit).mockClear();
+    await build(h, b.cookie, "Gamma Plumbing");
+    await drain(h);
+    expect(vi.mocked(designKit).mock.calls[0]![4]).toBeUndefined();
+  });
+
+  it("a Studio site is held to a higher bar by the review", async () => {
+    const { slug, demo } = await liveDemo();
+    const version = demo.liveVersion!;
+    // Make the live kit a Studio kit.
+    const row = h.db.prepare("SELECT kit FROM site_versions WHERE slug = ? AND version = ?").get(slug, version) as { kit: string };
+    h.db.prepare("UPDATE site_versions SET kit = ? WHERE slug = ? AND version = ?").run(JSON.stringify({ ...JSON.parse(row.kit), style: "studio" }), slug, version);
+    const { browser } = fakeBrowser(goodFacts([`/${slug}/about`]));
+    const critique = vi.fn<ReviewDeps["critique"]>(async () => ({ score: 7, verdict: "Competent.", strengths: [], issues: [{ what: "Generic hero", fix: "Make the headline huge", severity: "medium" as const }], costUsd: 0.01 }));
+    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => browser, critique });
+    expect(critique.mock.calls[0]![3]).toBe(true);
+    expect(r.fixed).toBe(true); // 7 is good enough for Standard, not for Studio
+  });
+});
+
+describe("adding before/after photos to a site that is already live", () => {
+  const img = (name: string) => ({ name, description: `${name.includes("before") ? "Before" : "After"}: scene`, bytes: new Uint8Array([1, 2, 3]) });
+
+  it("plans the scenes, makes the pictures, saves them, and rewrites the gallery and home page around them", async () => {
+    const { slug, b, demo } = await liveDemo();
+    const version = demo.liveVersion!;
+    vi.mocked(planPairs).mockResolvedValue({ pairs: [{ before: "a dead lawn", after: "a lush lawn" }], cost: 0.001 });
+    vi.mocked(beforeAfterImages).mockResolvedValue([img("ba-1-before.jpg"), img("ba-1-after.jpg")]);
+    const r = await call(h, `/demos/${slug}/pairs`, { cookie: b.cookie, form: {} });
+    expect(loc(r)).toContain("Making the before and after pictures");
+    expect(h.queued.map((q) => (q.body as BuildJob).stage)).toEqual(["pairs"]);
+    await drain(h);
+    const saved = (h.db.prepare("SELECT name FROM site_images WHERE slug = ? AND version = ? AND name LIKE 'ba-%' ORDER BY name").all(slug, version) as { name: string }[]).map((x) => x.name);
+    expect(saved).toEqual(["ba-1-after.jpg", "ba-1-before.jpg"]);
+    const instr = vi.mocked(designSitePage).mock.calls.filter((c) => c[3]?.instruction).map((c) => ({ path: c[2].path, text: c[3]!.instruction! }));
+    expect(instr.map((i) => i.path).sort()).toEqual(["/", "/gallery"]);
+    expect(instr.every((i) => i.text.includes("ba-1-before.jpg"))).toBe(true);
+    expect(instr[0]!.text).toContain("Illustrative sample. Your real before and after photos replace these at launch.");
+    expect((await getDemo(h.env, slug))!.changeNote).toMatchObject({ status: "done", instruction: "Add illustrative before/after photos" });
+    expect((h.db.prepare("SELECT count(*) c FROM build_costs WHERE outcome = 'change'").get() as { c: number }).c).toBe(1);
+  });
+
+  it("says so plainly when the trade has no natural before and after, or the pictures can't be made", async () => {
+    const { slug, b } = await liveDemo();
+    vi.mocked(planPairs).mockResolvedValue({ pairs: [], cost: 0.001 });
+    await call(h, `/demos/${slug}/pairs`, { cookie: b.cookie, form: {} });
+    await drain(h);
+    expect((await getDemo(h.env, slug))!.changeNote).toMatchObject({ status: "failed" });
+    expect((await getDemo(h.env, slug))!.changeNote!.error).toContain("natural before and after");
+    vi.mocked(planPairs).mockResolvedValue({ pairs: [{ before: "a", after: "b" }], cost: 0.001 });
+    vi.mocked(beforeAfterImages).mockResolvedValue([]);
+    await call(h, `/demos/${slug}/pairs`, { cookie: b.cookie, form: {} });
+    await drain(h);
+    expect((await getDemo(h.env, slug))!.changeNote!.error).toContain("daily allowance");
   });
 });
