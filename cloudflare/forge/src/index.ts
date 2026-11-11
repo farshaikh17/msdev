@@ -26,7 +26,7 @@ import { serveDraft, CORS, serveImage, servePitch, serveSite, takeLead, text } f
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)) || "Something went wrong.";
 
 /** A site image: preview photos, the review's screenshots, the social preview and the old-site captures. */
-export const IMAGE_PATH = /^\/([a-z0-9-]{3,64})\/_img\/([a-z0-9]{6,40})\/((?:photo-\d{1,2}|lib-\d|ba-[12]-(?:before|after)|og|shot-desktop|shot-phone|old-desktop|old-phone)\.jpg)$/;
+export const IMAGE_PATH = /^\/([a-z0-9-]{3,64})\/_img\/([a-z0-9]{6,40})\/((?:photo-\d{1,2}|ba-[12]-(?:before|after)|og|shot-desktop|shot-phone|old-desktop|old-phone)\.jpg)$/;
 
 /** /<slug> plus an optional page path such as /services or /services/drain-cleaning. */
 const PAGE_PATH = /^\/([a-z0-9-]{3,64})((?:\/[a-z0-9-]+){1,2})?$/;

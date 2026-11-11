@@ -88,7 +88,7 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
       motion = heroMotion(
         matchVideo(library, demo.intake, slug, pagesOf(kit).map((p) => p.name).join(" ")),
         // Only the site's own photos: never the link preview, review screenshots or before/after pairs.
-        names.filter((n) => /^(lib|photo)-\d+\.jpg$/.test(n)).map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`),
+        names.filter((n) => /^photo-\d+\.jpg$/.test(n)).map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`),
       );
     }
   } else {
@@ -129,7 +129,7 @@ export async function serveDraft(req: Request, env: Env, slug: string, version: 
   const library = await listLibrary(env, found.tenant.id);
   const motion = heroMotion(
     matchVideo(library, found.demo.intake, slug, pagesOf(kit).map((p) => p.name).join(" ")),
-    names.filter((n) => /^(lib|photo)-\d+\.jpg$/.test(n)).map((n) => `${prefix}/_img/${version}/${n}`),
+    names.filter((n) => /^photo-\d+\.jpg$/.test(n)).map((n) => `${prefix}/_img/${version}/${n}`),
   );
   const res = new Response(assemble(kit, page, slug, creditFor(found.tenant)), { headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "no-store" } });
   return finish(res, { prefix, current: "/", widget: "", leadUrl: `${prefix}/_lead`, heroMotion: motion });
