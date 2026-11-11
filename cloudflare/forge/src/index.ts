@@ -42,6 +42,7 @@ async function handleSites(req: Request, env: Env, ctx: Ctx): Promise<Response> 
   if (m && read) return serveVideo(req, env, m[1]);
   m = path.match(IMAGE_PATH);
   if (m && read) return serveImage(req, env, ctx, m[1], m[2], m[3]);
+  if (path === "/favicon.ico" && read) return new Response(null, { status: 204, headers: { "cache-control": "public, max-age=86400" } });
   m = path.match(/^\/([a-z0-9-]{3,64})\/_pitch$/);
   if (m && read) return servePitch(req, env, m[1], `/${m[1]}`);
   m = path.match(/^\/([a-z0-9-]{3,64})\/_draft\/([a-z0-9]{6,40})$/);

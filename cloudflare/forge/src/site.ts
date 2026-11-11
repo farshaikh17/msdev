@@ -91,8 +91,10 @@ export function assemble(kit: Kit, page: PageDraft, slug: string, credit: string
   const boot = `<script>try{var t=localStorage.getItem(${key});if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>`;
   const studio = kit.style === "studio";
   const accent = /^#[0-9a-f]{6}$/i.test(kit.accent) ? kit.accent : "#111111";
+  // A site icon (the accent colour with the page's first letter), so browsers don't ask for one that isn't there.
+  const icon = `<link rel="icon" href="data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${accent}"/><text x="32" y="44" font-family="Georgia,serif" font-size="36" font-weight="700" text-anchor="middle" fill="#fff">${esc((page.title.trim()[0] ?? "•").toUpperCase())}</text></svg>`)}">`;
   const doc = `<!doctype html><html lang="en" data-theme="${kit.theme}"${studio ? ` style="--m-accent:${accent}"` : ""}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>${esc(page.title)}</title><meta name="description" content="${esc(page.description)}"><meta name="robots" content="noindex">
+<title>${esc(page.title)}</title>${icon}<meta name="description" content="${esc(page.description)}"><meta name="robots" content="noindex">
 ${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${HEADER_CSS}\n${HERO_CSS}\n${CREDIT_CSS}\n${QA_CSS}${studio ? MOTION_CSS : ""}</style></head><body>
 ${kit.header}
 ${page.body}

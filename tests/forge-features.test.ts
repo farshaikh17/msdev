@@ -95,12 +95,22 @@ describe("the automatic review", () => {
     const version = demo.liveVersion!;
     const links = ["/" + slug, `/${slug}/about`, `/${slug}/nowhere`, "tel:+15555555555"];
     const { browser, visited } = fakeBrowser(goodFacts(links));
-    const critique = vi.fn<ReviewDeps["critique"]>(async () => ({ score: 5, verdict: "Flat hero.", strengths: ["Clear phone"], issues: [{ what: "Hero lacks contrast", fix: "Darken the overlay", severity: "high" as const }], costUsd: 0.012 }));
+    let looks = 0;
+    // The first look scores 5; after the rewrite the page is looked at again and scores 8.
+    const critique = vi.fn<ReviewDeps["critique"]>(async () => (++looks > 1 ? { score: 8, verdict: "Much stronger.", strengths: ["Clear offer"], issues: [], costUsd: 0.012 } : { score: 5, verdict: "Flat hero.", strengths: ["Clear phone"], issues: [{ what: "Hero lacks contrast", fix: "Darken the overlay", severity: "high" as const }], costUsd: 0.012 }));
     const deps: ReviewDeps = { launch: async () => browser, critique, sleep: async () => undefined };
     const env = { ...h.env, BROWSER: {} } as Env;
     const r = await reviewSite(env, slug, version, deps);
     expect(r.skipped).toBeUndefined();
-    expect(r.score).toBe(5);
+    // The score shown is of the page as it now is; the earlier score is kept beside it.
+    expect(r.score).toBe(8);
+    expect(r.before).toBe(5);
+    expect(r.verdict).toBe("Much stronger.");
+    expect(critique).toHaveBeenCalledTimes(2);
+    expect(visited.some((u) => u.includes(`?r=${version}-fixed`))).toBe(true);
+    // The critique is told not to ask for facts nobody gave.
+    expect(critique.mock.calls[0]![2]).toContain("No phone number was given");
+    expect(r.checks?.some((c) => c.id === "tel")).toBe(false);
     expect(r.shots).toEqual(["shot-desktop.jpg", "shot-phone.jpg", "og.jpg"]);
     expect(visited[0]).toContain(`https://sites.test/${slug}?r=${version}`);
     // The dead link was caught; the fix pass got the failed check and the high issue.
@@ -116,7 +126,7 @@ describe("the automatic review", () => {
     expect(saved).toEqual(["og.jpg", "photo-1.jpg", "shot-desktop.jpg", "shot-phone.jpg"]);
     const costs = h.db.prepare("SELECT outcome, usd FROM build_costs WHERE tenant_id = ? ORDER BY rowid").all(b.id) as { outcome: string; usd: number }[];
     expect(costs.map((c) => c.outcome)).toEqual(["ready", "review"]);
-    expect(costs[1]!.usd).toBeCloseTo(0.012 + 0.01, 5);
+    expect(costs[1]!.usd).toBeCloseTo(0.012 + 0.01 + 0.012, 5);
     expect((await browserUsed(h.env)).seconds).toBeGreaterThanOrEqual(0);
   });
 

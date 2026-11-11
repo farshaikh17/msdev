@@ -57,6 +57,8 @@ export interface Review {
   strengths?: string[];
   issues?: Issue[];
   checks?: Check[];
+  /** The score before the home page was written again (the score shown is of the page as it is now). */
+  before?: number;
   /** The home page was written again with the notes. */
   fixed?: boolean;
   fixError?: string;
@@ -113,6 +115,28 @@ export const FACTS = `(() => ({
   words: (document.body.innerText || "").split(/\\s+/).filter(Boolean).length,
   https: location.protocol === "https:",
 }))()`;
+
+/** Open the home page again on desktop and phone and have it critiqued afresh (after a rewrite). */
+async function rescore(env: Env, deps: ReviewDeps, url: string, settle: number, sleep: (ms: number) => Promise<void>, facts: string, studio: boolean) {
+  if ((await browserUsed(env)).seconds >= BROWSER_BUDGET_SECONDS) return null;
+  const started = Date.now();
+  const browser = await deps.launch(env);
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 800 });
+    await visit(page, url, settle, sleep);
+    const desktop = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
+    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true });
+    await visit(page, url, settle, sleep);
+    const phone = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
+    await page.close();
+    const crit = await deps.critique(env, { desktop, phone }, `${facts}\n\nThis page has just been revised after an earlier review; score it as it is now.`, studio);
+    return { crit, desktop, phone };
+  } finally {
+    await browser.close().catch(() => undefined);
+    await addBrowserSeconds(env, (Date.now() - started) / 1000).catch(() => undefined);
+  }
+}
 
 /** What a look at a Studio build's first screen found (null when it couldn't be looked at). */
 export interface HeroLook {
@@ -211,6 +235,8 @@ const CRITIQUE_SYSTEM = `You are the creative director at Mianro Systems reviewi
 
 Score the page from 1 to 10 overall, weighing: first impression and distinctiveness (does it look custom and expensive, or like an AI template?), hierarchy and typography, colour and contrast, layout and spacing on desktop AND on the phone, use of imagery, clarity of the offer and the call to action, trust signals, and copy. Mark these down hard: text cut off or overlapping, elements running off the screen, unreadable contrast, an empty or broken-looking area, a hero that doesn't explain what the business does, the same card grid repeated section after section, a label above every single heading, gradient text used as decoration, nested cards, cards rounded like pills.
 
+Judge the design, not missing information. The designer is forbidden to invent facts, so never ask for a star rating, a review count, a year, an award, a licence, a phone number, a customer name or any other fact that isn't already on the page or in the measured facts, and never mark the page down for lacking one. The chat button in the bottom corner is added by our system and is not the designer's: ignore it.
+
 Reply with JSON only, no markdown: {"score": 1-10, "verdict": "one sentence", "strengths": ["..."], "issues": [{"what": "...", "fix": "a concrete instruction the designer can act on", "severity": "high|medium|low"}]}. Never use double quote characters inside any text value (write quoted words with single quotes). At most 8 issues, most important first. If the page is genuinely excellent, say so and keep the issues list short.`;
 
 async function critiqueReal(env: Env, shots: { desktop: Uint8Array; phone: Uint8Array }, facts: string, studio = false) {
@@ -278,7 +304,7 @@ const EMPTY_FACTS: PageFacts = { overflow: false, h1: 0, noAlt: 0, brokenImgs: 0
 export const factsOf = (raw: unknown): PageFacts => ({ ...EMPTY_FACTS, ...(raw && typeof raw === "object" ? (raw as Partial<PageFacts>) : {}), links: Array.isArray((raw as PageFacts | null)?.links) ? (raw as PageFacts).links : [] });
 
 /** Checks on a built page. `paths` are the site's real page paths; `prefix` is where it is served. */
-function checksFor(desktop: PageFacts, phone: PageFacts, paths: string[], prefix: string, consoleErrors: string[]): Check[] {
+function checksFor(desktop: PageFacts, phone: PageFacts, paths: string[], prefix: string, consoleErrors: string[], hasPhone = true): Check[] {
   const internal = desktop.links.filter((h) => h.startsWith(prefix + "/") || h === prefix);
   const broken = internal.filter((h) => {
     const p = h.slice(prefix.length).split(/[?#]/)[0] || "/";
@@ -297,7 +323,8 @@ function checksFor(desktop: PageFacts, phone: PageFacts, paths: string[], prefix
     { id: "dots", label: "No facts strung together with dots", ok: (desktop.dotStrings ?? 0) === 0, detail: desktop.dotStrings ? `${desktop.dotStrings} found; write them as plain lines` : undefined },
     { id: "links", label: "Every link goes to a real page", ok: broken.length === 0, detail: broken.length ? `${broken.length} dead: ${[...new Set(broken)].slice(0, 4).join(", ")}` : undefined },
     { id: "console", label: "No script errors", ok: consoleErrors.length === 0, detail: consoleErrors.length ? consoleErrors[0]!.slice(0, 120) : undefined },
-    { id: "tel", label: "Tap-to-call phone link", ok: desktop.tel },
+    // No phone number was given for this business: nothing to link, so nothing to fail.
+    ...(hasPhone ? [{ id: "tel", label: "Tap-to-call phone link", ok: desktop.tel }] : []),
     { id: "form", label: "A form on the page", ok: desktop.forms > 0 },
     { id: "text", label: "Readable text size on a phone", ok: phone.textPx >= 15, detail: `${phone.textPx}px` },
   ];
@@ -406,7 +433,10 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     await saveImage(env, slug, version, "og.jpg", "Link preview", og);
     shots.push("shot-desktop.jpg", "shot-phone.jpg", "og.jpg");
 
-    const checks = checksFor(dFacts, pFacts, pagesOf(kit).map((p) => p.path), prefix, consoleErrors.filter((e) => !/favicon|ERR_BLOCKED|net::/i.test(e)));
+    const checks = checksFor(dFacts, pFacts, pagesOf(kit).map((p) => p.path), prefix, // A missing file shows up as a broken image or link in its own check; the console line for it names no file, so it isn't a script error.
+      consoleErrors.filter((e) => !/favicon|ERR_BLOCKED|net::|Failed to load resource/i.test(e)),
+      !!demo.intake.phone,
+    );
     checks.splice(2, 0, { id: "overflow-inner", label: "Other pages fit a phone screen", ok: !wide.length, detail: wide.length ? wide.map((x) => `${x.path} is ${x.px}px too wide`).join(", ") : undefined });
 
     // The business's current website, for the before/after.
@@ -436,7 +466,7 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     await addBrowserSeconds(env, seconds);
 
     // Claude's critique of the screenshots.
-    const facts = checks.map((c) => `- ${c.label}: ${c.ok ? "ok" : "FAILED"}${c.detail ? ` (${c.detail})` : ""}`).join("\n");
+    const facts = `${checks.map((c) => `- ${c.label}: ${c.ok ? "ok" : "FAILED"}${c.detail ? ` (${c.detail})` : ""}`).join("\n")}${demo.intake.phone ? "" : "\n- No phone number was given for this business, so the page has none: that is correct."}`;
     const studio = kit.style === "studio";
     // A Studio site is judged against its own art direction, so one that drifts to the generic layout is marked down.
     const look = studio ? conceptById(kit.concept) : undefined;
@@ -460,6 +490,18 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
           const u = usage as { cost_usd?: number };
           review.fixed = true;
           review.costUsd = (review.costUsd ?? 0) + (Number(u.cost_usd) || 0);
+          // Look again, so the score shown is of the page as it now is, not the one that was replaced.
+          const again = await rescore(env, deps, `${base}${prefix}?r=${version}-fixed`, settle, sleep, facts + direction, studio).catch((e) => (console.log("rescore failed", slug, e instanceof Error ? e.message : String(e)), null));
+          if (again) {
+            review.before = crit.score;
+            review.score = again.crit.score;
+            review.verdict = again.crit.verdict;
+            review.strengths = again.crit.strengths;
+            review.issues = again.crit.issues;
+            review.costUsd += again.crit.costUsd;
+            await saveImage(env, slug, version, "shot-desktop.jpg", "The home page on desktop", again.desktop);
+            await saveImage(env, slug, version, "shot-phone.jpg", "The home page on a phone", again.phone);
+          }
         } catch (e) {
           review.fixError = e instanceof Error ? e.message : String(e);
         }
