@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Intake } from "@/forge/schema";
 import { profileFor } from "../cloudflare/forge/src/profiles";
+import { reverseGeocode } from "../cloudflare/forge/src/places";
 import { CONCEPTS, drawFor, pickConcept } from "../cloudflare/forge/src/concepts";
 import { costOf, CREDIT_MARKER, factsBlock, mapEmbed, parseParts, profileNote, sitemapFor, studioHome, systemFor, tidyCss, type Kit } from "../cloudflare/forge/src/designer";
 import { clearAttempts, makeSlug, pruneThrottle, recordAttempt, throttled } from "../cloudflare/forge/src/db";
@@ -57,6 +58,10 @@ describe("Forge worker — multi-page sites", () => {
     expect(kind("Petal & Stem Florist")).toBe("retail");
     expect(kind("The Grill", "Roofing")).toBe("contractor");
     expect(kind("B&B Motel", "Motel")).toBe("lodging");
+    // A thrift shop is a shop, but it needs a Donate page, not custom orders.
+    const thrift = sitemapFor(Intake.parse({ businessName: "Main Street Thrift Shop", industry: "Thrift Store" })).map((p) => p.path);
+    expect(thrift).toContain("/donate");
+    expect(thrift).not.toContain("/custom-orders");
     expect(sitemapFor(Intake.parse({ businessName: "B&B Motel", industry: "Motel" })).map((p) => p.path)).toEqual(expect.arrayContaining(["/rooms", "/rates", "/your-stay", "/location"]));
     expect(profileNote(Intake.parse({ businessName: "Acme Plumbing" }))).toBe("");
   });
@@ -113,6 +118,16 @@ describe("Forge worker — multi-page sites", () => {
     const first = pickConcept({ industry: "Restaurant" }, "x-1").id;
     expect(pickConcept({ industry: "Restaurant" }, "x-1", [first]).id).not.toBe(first);
     expect(pickConcept({ industry: "Restaurant", concept: "luxe" }, "x-1", ["luxe"]).id).toBe("luxe");
+  });
+
+  it("finds the town from a map position, and the street only when the business itself is named there", async () => {
+    const reply = (name: string) => new Response(JSON.stringify({ name, address: { house_number: "320", road: "Chocktoot Street", village: "Chiloquin", state: "Oregon", "ISO3166-2-lvl4": "US-OR", postcode: "97624" } }));
+    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(reply("El Rodeo Mexican Seafood")).mockResolvedValueOnce(reply(""));
+    expect(await reverseGeocode("42.5779779,-121.867045", "El Rodeo Mexican Seafood")).toEqual({ city: "Chiloquin, OR", address: "320 Chocktoot Street, Chiloquin, OR 97624" });
+    expect(await reverseGeocode("42.5779779,-121.867045", "Somebody Else")).toEqual({ city: "Chiloquin, OR", address: "" });
+    expect(String(spy.mock.calls[0]![0])).toContain("nominatim.openstreetmap.org/reverse");
+    expect(await reverseGeocode("not a position", "x")).toBeNull();
+    spy.mockRestore();
   });
 
   it("caps service pages at six", () => {

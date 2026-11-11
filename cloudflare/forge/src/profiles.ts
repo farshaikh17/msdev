@@ -284,7 +284,22 @@ const MATCH: [RegExp, Exclude<Profile["id"], "contractor">][] = [
 /** Trades that travel to the customer keep the contractor pages even if a word above appears ("Spa Repair", "Bar Stool Refinishing"). */
 const TRADE = /\b(plumb\w*|hvac|heating|cooling|air condition\w*|roof\w*|electric\w*|landscap\w*|lawn|tree|cleaning|cleaners?|maid|janitorial|pest|exterminat\w*|remodel\w*|construction|contractors?|painting|painters?|flooring|fenc\w*|concrete|paving|masonry|handyman|garage doors?|locksmith|moving|movers|pressure wash\w*|pool (service|repair|cleaning)|repair|installation|restoration|towing|septic|gutter\w*|siding|windows?|drywall|insulation|solar|irrigation|junk|hauling|detailing)\b/i;
 
+/** Resale shops take donations: that, not custom orders, is the page they need. */
+const RESALE = /\b(thrift|resale|consignment|second[- ]?hand|charity shop|goodwill|habitat restore|donation)\b/i;
+const DONATE: Pick<Profile, "steps"> = {
+  steps: {
+    name: "Donate",
+    path: "/donate",
+    brief: "Page hero; what the shop gladly takes and what it can't (in general terms unless a list was given); how to drop off, step by step (where and when only if given; otherwise 'Call before you bring large items'); what happens to donations; a short donation enquiry form (name, phone, what you'd like to donate, large items yes or no) with the privacy note; FAQs; closing CTA.",
+  },
+};
+
 export function profileFor(i: { industry?: string; businessName?: string; services?: string }): Profile {
+  const p = baseProfile(i);
+  return p.id === "retail" && RESALE.test(`${i.industry ?? ""} ${i.businessName ?? ""} ${i.services ?? ""}`) ? { ...p, ...DONATE } : p;
+}
+
+function baseProfile(i: { industry?: string; businessName?: string; services?: string }): Profile {
   const contractor = { id: "contractor" } as Profile;
   // The trade that was typed (or worked out by the planner) decides; the name is only a hint.
   const trade = i.industry ?? "";

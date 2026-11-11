@@ -196,3 +196,38 @@ export function splitStreetCity(city: string, address: string): { city: string; 
   const town = parts.length >= 3 ? parts[parts.length - 2]! : "";
   return { city: town && state ? `${town}, ${state}` : town || state, address: parts.join(", ") };
 }
+
+/** Where a map position is, from OpenStreetMap (free, no key; one request per build). */
+export interface PlaceArea {
+  /** "Pineville, LA" */
+  city: string;
+  /** "552 Main Street, Pineville, LA 71360": only when OpenStreetMap names the business itself there. */
+  address: string;
+}
+
+const norm = (s: string) => s.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, " ").trim();
+
+export async function reverseGeocode(mapQuery: string, businessName: string): Promise<PlaceArea | null> {
+  const m = mapQuery.match(/^(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)$/);
+  if (!m) return null;
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${m[1]}&lon=${m[2]}&zoom=18&addressdetails=1`, {
+      headers: { "user-agent": "ForgeSiteBuilder/1.0 (website preview builder)", "accept-language": "en" },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!r.ok) return null;
+    const d = (await r.json()) as { name?: string; address?: Record<string, string> };
+    const a = d.address ?? {};
+    const town = a.city || a.town || a.village || a.hamlet || a.suburb || "";
+    const state = (a["ISO3166-2-lvl4"] ?? "").replace(/^US-/, "") || a.state || "";
+    if (!town) return null;
+    const city = state ? `${town}, ${state}` : town;
+    // A reverse lookup gives the nearest address, which may be next door: only trust it as the
+    // business's own when the place found there carries the business's name.
+    const own = !!d.name && !!businessName && (norm(d.name).includes(norm(businessName).split(" ").slice(0, 2).join(" ")) || norm(businessName).includes(norm(d.name)));
+    const street = [a.house_number, a.road].filter(Boolean).join(" ");
+    return { city, address: own && street ? `${street}, ${city}${a.postcode ? ` ${a.postcode}` : ""}` : "" };
+  } catch {
+    return null;
+  }
+}

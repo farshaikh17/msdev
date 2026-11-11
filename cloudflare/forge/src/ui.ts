@@ -251,11 +251,11 @@ export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = []): string {
 <input name="customColor" type="color" value="${custom ? esc(color) : "#2f5fd0"}" aria-label="Custom colour" style="width:44px;height:36px;padding:2px"></div>
 <p class="note" style="margin:0">Every site gets a light/dark switch; this sets which one it opens in.</p></fieldset>`;
   return `<div class="grid"><label class="full big-field" for="f-businessName">Business name or Google Maps link<input id="f-businessName" name="businessName" value="${esc(v?.businessName ?? "")}" placeholder="e.g. Vanguard Pipe & Water   or   https://maps.app.goo.gl/…" required autocomplete="off"></label>
-${t("city", "City (optional, adds a map)", "e.g. Myrtle Beach, SC")}${t("industry", "What they do (optional)", "e.g. Plumbing, Roofing, Hair salon")}</div>
+${t("phone", "Phone (gives the site a call button)", "e.g. (646) 594-9379", false, "tel")}${t("city", "City (optional; a Maps link fills it in)", "e.g. Myrtle Beach, SC")}${t("industry", "What they do (optional)", "e.g. Plumbing, Roofing, Hair salon")}</div>
 <details><summary>More options</summary><div style="display:grid;gap:16px;margin-top:12px">
 <p class="note" style="margin:0">Everything here is optional. Left alone, Forge picks what suits the business.</p>
 ${reuseSel}${tier}${look}
-<div class="grid">${t("phone", "Phone", "e.g. (646) 594-9379")}${t("googleUrl", "Google Maps link", "https://maps.app.goo.gl/…", false, "url")}
+<div class="grid">${t("googleUrl", "Google Maps link", "https://maps.app.goo.gl/…", false, "url")}
 ${t("websiteUrl", "Their current website (we read it for facts, photos and contact details)", "https://…", false, "url")}
 ${a("services", "Services", "Comma or line separated, e.g. Drain cleaning, Water heaters")}
 ${a("serviceAreas", "Service areas", "e.g. Myrtle Beach, Conway, Surfside Beach")}

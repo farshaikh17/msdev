@@ -36,7 +36,7 @@ import type { BuildJob, Env } from "./env";
 import { beforeAfterImages, previewImages } from "./images";
 import { privacyPage, termsPage } from "./legal";
 import { drawFor, pickConcept } from "./concepts";
-import { mergeIntake } from "./places";
+import { mergeIntake, reverseGeocode } from "./places";
 import { readWebsite } from "./scrape";
 import { buildCost, chargeBuild, getTenant, recordBuildCost, type Tenant } from "./tenants";
 import { deliver } from "./webhook";
@@ -221,6 +221,15 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       const site = demo.intake.websiteUrl ? await readWebsite(demo.intake.websiteUrl) : null;
       // Phone, address, hours and map position the business publishes fill whatever was left blank.
       const { intake, filled } = mergeIntake(demo.intake, site?.business);
+      // Built from a map link alone: find the town (and, when it is certain, the street address) from the map position.
+      if (!intake.city && !intake.address && intake.mapQuery) {
+        const area = await reverseGeocode(intake.mapQuery, intake.businessName);
+        if (area) {
+          intake.city = area.city;
+          if (area.address) intake.address = area.address;
+          filled.push("city");
+        }
+      }
       if (filled.length) await updateIntake(env, slug, intake);
       // A cheap planning step picks niche-fitting services and describes the preview photos,
       // which Workers AI then generates (free) and the site serves from its own address.
