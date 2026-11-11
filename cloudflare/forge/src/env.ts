@@ -48,6 +48,8 @@ export interface KVNamespace {
 export type BuildJob =
   | { slug: string; version: string; stage: "kit" }
   | { slug: string; version: string; stage: "page"; path: string }
+  /** Studio: the first screen alone, looked at in a browser before the rest of the home page is written. */
+  | { slug: string; version: string; stage: "hero" }
   /** After go-live: screenshot, check and critique the site, and fix the home page if needed. */
   | { slug: string; version: string; stage: "review" }
   /** Add illustrative before/after photos to a live site (the gallery and home page are rewritten around them). */

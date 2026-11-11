@@ -11,7 +11,7 @@ import { countView, getDemo, getKit, getPage, getQa, getReview, viewStats } from
 import type { BuildJob, Env, VideoJob } from "../cloudflare/forge/src/env";
 import { qrSvg } from "../cloudflare/forge/src/outreach";
 import { pitchPage } from "../cloudflare/forge/src/pitch";
-import { BROWSER_BUDGET_SECONDS, browserUsed, reviewSite, scoreOld, type Browser, type ReviewDeps } from "../cloudflare/forge/src/review";
+import { reviewHero, BROWSER_BUDGET_SECONDS, browserUsed, reviewSite, scoreOld, type Browser, type ReviewDeps } from "../cloudflare/forge/src/review";
 import { readWebsite } from "../cloudflare/forge/src/scrape";
 import { ogHtml } from "../cloudflare/forge/src/site";
 import { getTenant } from "../cloudflare/forge/src/tenants";
@@ -531,6 +531,41 @@ describe("the QA standards pass", () => {
     const qa = (await getQa(h.env, slug, demo.liveVersion!))!;
     expect(qa).toMatchObject({ found: 0, repaired: [], issues: [], costUsd: 0 });
     expect(vi.mocked(fixChrome)).not.toHaveBeenCalled();
+  });
+});
+
+describe("looking at a Studio first screen before the page is written", () => {
+  const kitOf = async (slug: string, version: string) => ({ ...(await getKit(h.env, slug, version))!, style: "studio" as const, concept: "cinematic" });
+  const deps = (facts: Record<string, unknown>, score: number): ReviewDeps => ({
+    launch: async () => fakeBrowser(facts).browser,
+    sleep: async () => undefined,
+    critique: vi.fn(async () => ({ score, verdict: "v", strengths: [], issues: [{ what: "Headline over a dark photo", fix: "Use the letterboxed title card", severity: "high" as const }], costUsd: 0.03 })),
+  });
+
+  it("a good first screen is built on as it is; the critique is told its art direction and that the rest isn't written yet", async () => {
+    const { slug, demo } = await liveDemo();
+    const d = deps(goodFacts([]), 9);
+    const look = await reviewHero({ ...h.env, BROWSER: {} } as Env, slug, demo.liveVersion!, await kitOf(slug, demo.liveVersion!), d);
+    expect(look).toMatchObject({ score: 9, notes: [], costUsd: 0.03 });
+    const told = vi.mocked(d.critique).mock.calls[0]![2];
+    expect(told).toContain("ONLY the first screen");
+    expect(told).toContain("Cinematic");
+    expect(told).toContain("letterbox");
+  });
+
+  it("measured tells and a low score come back as notes for one more go", async () => {
+    const { slug, demo } = await liveDemo();
+    const look = await reviewHero({ ...h.env, BROWSER: {} } as Env, slug, demo.liveVersion!, await kitOf(slug, demo.liveVersion!), deps({ ...goodFacts([]), eyebrows: 1, accentWord: true, h1Words: 14 }, 5));
+    expect(look!.score).toBe(5);
+    expect(look!.notes.join(" ")).toContain("label above the headline");
+    expect(look!.notes.join(" ")).toContain("one colour and one style");
+    expect(look!.notes.join(" ")).toContain("14 words");
+    expect(look!.notes.join(" ")).toContain("letterboxed title card");
+  });
+
+  it("without a browser there is no look, and the build carries on", async () => {
+    const { slug, demo } = await liveDemo();
+    expect(await reviewHero(h.env, slug, demo.liveVersion!, await kitOf(slug, demo.liveVersion!), deps(goodFacts([]), 9))).toBeNull();
   });
 });
 

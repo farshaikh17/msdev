@@ -818,6 +818,10 @@ export interface PageRevision {
   adaptFrom?: PageDraft;
   /** A small repair, not a design decision: use the mid-priced model even for the home page. */
   cheap?: boolean;
+  /** Write only the home page's first screen (Studio builds look at it in a browser before going on). */
+  heroOnly?: boolean;
+  /** The first screen, already built and reviewed: the home page keeps it and adds the rest. */
+  hero?: PageDraft;
 }
 
 export async function designSitePage(env: Env, kit: Kit, page: PageSpec, rev: PageRevision = {}): Promise<{ page: PageDraft; usage: unknown }> {
@@ -854,8 +858,14 @@ ${PAGE_TASK}`;
   const adapt = rev.adaptFrom
     ? `\n\n## The same page on a finished sister site (same design system)\nCSS:\n${rev.adaptFrom.css || "(none)"}\n\nMAIN:\n${rev.adaptFrom.body}\n\nWrite THIS business's page with the same layout, sections, components, spacing, motion and visual style as the sister page above, but with entirely new copy, facts, numbers, names and photos taken only from the business facts and photos given earlier. Never carry over the sister site's business name, phone, address, reviews, photo links or any claim; use only this business's own.`
     : "";
+  const first = rev.hero
+    ? `\n\n## The first screen (already built, checked in a browser on desktop and phone, and approved)\nCSS:\n${rev.hero.css || "(none)"}\n\nMAIN:\n${rev.hero.body}\n\nKeep that first section exactly as it is, as the first thing inside <main>, and include its CSS unchanged in your CSS part. Write everything that comes after it.`
+    : "";
+  const only = rev.heroOnly
+    ? `\n\n## For now, write ONLY the first screen\nReply with a <main> that contains just the first section described above (the first screen) and nothing after it, with the CSS it needs. The rest of the page is written once this first screen has been looked at in a browser. It must be complete and finished on its own: the headline, its one sentence, the actions and the picture, fitting one screen at 1440×900 and at 390×844.`
+    : "";
   const task = `## ${rev.instruction ? "Change" : rev.notes?.length ? "Improve" : "Write"} this page: ${page.name} (${page.path})
-${page.brief}${current}${notes}${change}${adapt}`;
+${page.brief}${current}${notes}${change}${adapt}${first}${only}`;
   // The home page is the showcase, so it gets the design model; the rest follow the kit on the cheaper one.
   const home = page.path === "/";
   const studio = kit.style === "studio";

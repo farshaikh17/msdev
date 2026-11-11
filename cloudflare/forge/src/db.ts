@@ -218,7 +218,8 @@ export async function getPage(env: Env, slug: string, version: string, path: str
 /** The paths written so far for a version. */
 export async function pagesDone(env: Env, slug: string, version: string): Promise<string[]> {
   const { results } = await env.DB.prepare("SELECT path FROM site_pages WHERE slug = ? AND version = ?").bind(slug, version).all<{ path: string }>();
-  return results.map((r) => r.path);
+  // Working drafts (a Studio first screen under "/_hero") aren't pages of the site.
+  return results.map((r) => r.path).filter((p) => !p.startsWith("/_"));
 }
 
 /** Every page is written: make this version the live site, total up what it cost, and drop older versions. */

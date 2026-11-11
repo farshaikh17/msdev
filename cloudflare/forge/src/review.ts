@@ -13,7 +13,7 @@
 import { conceptById } from "./concepts";
 import Anthropic from "@anthropic-ai/sdk";
 import { getDemo, getKit, getPage, getReview, getSetting, saveImage, savePage, saveReview, setSetting } from "./db";
-import { costOf, designSitePage, pagesOf } from "./designer";
+import { costOf, designSitePage, pagesOf, type Kit } from "./designer";
 import type { Env } from "./env";
 import { recordBuildCost } from "./tenants";
 
@@ -25,6 +25,8 @@ export const CRITIQUE_MODEL = "claude-sonnet-5-5";
 const FIX_BELOW = 7;
 /** A Studio site has to be exceptional, so it is rewritten below this. */
 const FIX_BELOW_STUDIO = 8;
+/** A first screen scoring this or better (with nothing measured wrong) is built on as it is. */
+export const HERO_GOOD = 8;
 
 export interface Check {
   id: string;
@@ -111,6 +113,67 @@ export const FACTS = `(() => ({
   words: (document.body.innerText || "").split(/\\s+/).filter(Boolean).length,
   https: location.protocol === "https:",
 }))()`;
+
+/** What a look at a Studio build's first screen found (null when it couldn't be looked at). */
+export interface HeroLook {
+  score: number;
+  /** What to change, most important first (empty: build on it as it is). */
+  notes: string[];
+  costUsd: number;
+}
+
+/**
+ * Open a build's first-screen draft on desktop and phone, measure it, and have it critiqued against
+ * its art direction, before the rest of the home page is written. Returns null (carry on without)
+ * when there is no browser, no budget left, or anything goes wrong.
+ */
+export async function reviewHero(env: Env, slug: string, version: string, kit: Kit, deps: ReviewDeps = realDeps): Promise<HeroLook | null> {
+  const base = env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : "";
+  if (!env.BROWSER || !env.ANTHROPIC_API_KEY || !base) return null;
+  if ((await browserUsed(env)).seconds >= BROWSER_BUDGET_SECONDS) return null;
+  const started = Date.now();
+  const sleep = deps.sleep ?? realSleep;
+  let browser: Browser | null = null;
+  try {
+    browser = await deps.launch(env);
+    const page = await browser.newPage();
+    const url = `${base}/${slug}/_draft/${version}`;
+    await page.setViewport({ width: 1440, height: 900 });
+    await visit(page, url, 5500, sleep);
+    const desktop = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
+    const d = factsOf(await page.evaluate<PageFacts>(FACTS));
+    const tall = Number(await page.evaluate<number>("document.documentElement.scrollHeight")) || 0;
+    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true });
+    await visit(page, url, 5500, sleep);
+    const phone = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
+    const p = factsOf(await page.evaluate<PageFacts>(FACTS));
+    await page.close();
+    await browser.close();
+    browser = null;
+    await addBrowserSeconds(env, (Date.now() - started) / 1000);
+    const measured = [
+      d.overflow && "The first screen scrolls sideways on desktop.",
+      p.overflow && "The first screen scrolls sideways on a phone.",
+      d.h1 !== 1 && `It has ${d.h1} main headings (h1); it needs exactly one.`,
+      (d.eyebrows ?? 0) > 0 && "There is a small spaced-capitals label above the headline. Remove it.",
+      d.accentWord && "One word or phrase of the headline is in another colour or in italics. Set the whole headline in one colour and one style.",
+      (d.h1Words ?? 0) > 10 && `The headline is ${d.h1Words} words. Cut it to eight or fewer.`,
+      (d.dotStrings ?? 0) > 0 && "Facts are strung together with dots or bullets. Write them as plain short lines, or drop them.",
+      tall > 900 * 1.35 && "The first screen is much taller than one screen at 1440×900: the headline, its sentence and the button must all be visible without scrolling.",
+      !d.tel && kit.brief.includes("Phone:") && "The phone number isn't a tap-to-call link.",
+    ].filter((x): x is string => typeof x === "string");
+    const look = conceptById(kit.concept);
+    const direction = look ? `\n\nThis is ONLY the first screen of the home page; the rest isn't written yet, so don't mark it down for missing sections, reviews or a form. Its art direction is "${look.name}". The first screen should be: ${look.hero}\nRuled out for it: ${look.never}\nIf it doesn't match that description (for example it is a big headline over a darkened full-bleed photo when the direction says otherwise), say so as a high-severity issue with the fix, and score no higher than 6.` : "\n\nThis is ONLY the first screen of the home page; the rest isn't written yet.";
+    const crit = await deps.critique(env, { desktop, phone }, `${measured.length ? measured.map((m) => `- FAILED: ${m}`).join("\n") : "- The measured checks passed."}${direction}`, true);
+    const notes = [...measured, ...crit.issues.filter((i) => i.severity !== "low").map((i) => `${i.what} → ${i.fix}`)];
+    return { score: crit.score, notes: crit.score >= HERO_GOOD && !measured.length ? [] : notes, costUsd: crit.costUsd };
+  } catch (e) {
+    if (browser) await browser.close().catch(() => undefined);
+    await addBrowserSeconds(env, (Date.now() - started) / 1000).catch(() => undefined);
+    console.log("hero look failed", slug, e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
 
 /** The slice of Puppeteer this module uses (so tests can hand in a stand-in). */
 export interface BrowserPage {

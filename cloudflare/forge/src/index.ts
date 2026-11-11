@@ -21,12 +21,12 @@ import { build, fillPairs, startQueued } from "./build";
 import { pruneThrottle, pruneVisitors, queuedTenants, reviewsDue } from "./db";
 import { importClip, serveVideo, syncFolder } from "./drive";
 import type { BuildJob, Ctx, Env, MessageBatch, VideoJob } from "./env";
-import { CORS, serveImage, servePitch, serveSite, takeLead, text } from "./serve";
+import { serveDraft, CORS, serveImage, servePitch, serveSite, takeLead, text } from "./serve";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)) || "Something went wrong.";
 
 /** A site image: preview photos, the review's screenshots, the social preview and the old-site captures. */
-export const IMAGE_PATH = /^\/([a-z0-9-]{3,64})\/_img\/([a-z0-9]{6,40})\/((?:photo-\d{1,2}|ba-[12]-(?:before|after)|og|shot-desktop|shot-phone|old-desktop|old-phone)\.jpg)$/;
+export const IMAGE_PATH = /^\/([a-z0-9-]{3,64})\/_img\/([a-z0-9]{6,40})\/((?:photo-\d{1,2}|lib-\d|ba-[12]-(?:before|after)|og|shot-desktop|shot-phone|old-desktop|old-phone)\.jpg)$/;
 
 /** /<slug> plus an optional page path such as /services or /services/drain-cleaning. */
 const PAGE_PATH = /^\/([a-z0-9-]{3,64})((?:\/[a-z0-9-]+){1,2})?$/;
@@ -44,6 +44,8 @@ async function handleSites(req: Request, env: Env, ctx: Ctx): Promise<Response> 
   if (m && read) return serveImage(req, env, ctx, m[1], m[2], m[3]);
   m = path.match(/^\/([a-z0-9-]{3,64})\/_pitch$/);
   if (m && read) return servePitch(req, env, m[1], `/${m[1]}`);
+  m = path.match(/^\/([a-z0-9-]{3,64})\/_draft\/([a-z0-9]{6,40})$/);
+  if (m && read) return serveDraft(req, env, m[1], m[2], `/${m[1]}`);
   m = path.match(PAGE_PATH);
   if (m && read) return serveSite(req, env, ctx, m[1], m[2] ?? "", `/${m[1]}`, false);
   return text("Nothing here. Demo links look like /business-name-1a2b3c4d.", 404);

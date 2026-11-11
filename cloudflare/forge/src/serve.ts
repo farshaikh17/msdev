@@ -88,7 +88,7 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
       motion = heroMotion(
         matchVideo(library, demo.intake, slug, pagesOf(kit).map((p) => p.name).join(" ")),
         // Only the site's own photos: never the link preview, review screenshots or before/after pairs.
-        names.filter((n) => /^photo-\d+\.jpg$/.test(n)).map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`),
+        names.filter((n) => /^(lib|photo)-\d+\.jpg$/.test(n)).map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`),
       );
     }
   } else {
@@ -111,6 +111,28 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
   });
   ctx.waitUntil(cache.put(req, res.clone()));
   return res;
+}
+
+/** The path a version's first-screen draft is kept under (never part of the site's own pages). */
+export const HERO_DRAFT = "/_hero";
+
+/**
+ * A build's first screen on its own, before the site is live, so the build can look at it in a real
+ * browser. Reached only with the build's version id; never cached, counted or indexed.
+ */
+export async function serveDraft(req: Request, env: Env, slug: string, version: string, prefix: string): Promise<Response> {
+  const found = await publicDemo(env, slug);
+  const kit = found ? await getKit(env, slug, version) : null;
+  const page = kit ? await getPage(env, slug, version, HERO_DRAFT) : null;
+  if (!found || !kit || !page) return text("Nothing here.", 404);
+  const names = await imageNames(env, slug, version);
+  const library = await listLibrary(env, found.tenant.id);
+  const motion = heroMotion(
+    matchVideo(library, found.demo.intake, slug, pagesOf(kit).map((p) => p.name).join(" ")),
+    names.filter((n) => /^(lib|photo)-\d+\.jpg$/.test(n)).map((n) => `${prefix}/_img/${version}/${n}`),
+  );
+  const res = new Response(assemble(kit, page, slug, creditFor(found.tenant)), { headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "no-store" } });
+  return finish(res, { prefix, current: "/", widget: "", leadUrl: `${prefix}/_lead`, heroMotion: motion });
 }
 
 const BOT = /bot|crawl|spider|slurp|preview|facebookexternalhit|whatsapp|telegram|discord|slack|skype|twitterbot|linkedin|pinterest|curl|wget|python|java\/|headless|lighthouse|pagespeed|gtmetrix|uptime|monitor/i;

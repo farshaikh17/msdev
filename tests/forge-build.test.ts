@@ -373,6 +373,29 @@ describe("Studio builds", () => {
     expect(vi.mocked(adaptKit)).not.toHaveBeenCalled();
   });
 
+  it("with a browser to look through, builds the first screen alone, then the rest of the home page around it", async () => {
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 5);
+    // A browser binding that can't actually open: the look is skipped and the build carries on.
+    (h.env as { BROWSER?: unknown }).BROWSER = {};
+    const slug = slugOf(await studio(b.cookie, "Studio Barbers"));
+    const stages: string[] = [];
+    const seen = h.env.BUILDS.send.bind(h.env.BUILDS);
+    h.env.BUILDS.send = (async (body: BuildJob, o?: unknown) => (stages.push(body.stage), seen(body as never, o as never))) as never;
+    await drain(h);
+    expect(stages).toContain("hero");
+    const home = vi.mocked(designSitePage).mock.calls.filter((c) => c[2].path === "/");
+    // First the first screen on its own, then the whole page told to keep it.
+    expect(home[0]![3]).toMatchObject({ heroOnly: true });
+    expect(home.at(-1)![3]?.hero?.body).toContain("<h1>Home</h1>");
+    expect(home.at(-1)![3]?.heroOnly).toBeUndefined();
+    const demo = (await getDemo(h.env, slug))!;
+    expect(demo.buildStatus).toBe("ready");
+    // The draft is kept out of the site's pages.
+    expect(await pagesDone(h.env, slug, demo.liveVersion!)).not.toContain("/_hero");
+    expect(await getPage(h.env, slug, demo.liveVersion!, "/_hero")).toBeTruthy();
+  });
+
   it("standard sites stay light: no motion engine", async () => {
     const admin = await setupAdmin(h);
     const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 5);

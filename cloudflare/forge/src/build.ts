@@ -4,6 +4,7 @@
  * the look; then one "page" job per page writes the pages side by side. The site goes live only
  * when every page is written.
  */
+import { HERO_DRAFT } from "./serve";
 import {
   buildingCount,
   getDemo,
@@ -39,7 +40,7 @@ import { mergeIntake } from "./places";
 import { readWebsite } from "./scrape";
 import { buildCost, chargeBuild, getTenant, recordBuildCost, type Tenant } from "./tenants";
 import { deliver } from "./webhook";
-import { reviewSite } from "./review";
+import { reviewHero, reviewSite } from "./review";
 
 /** How often a job retries when Claude is busy (rate limit, overload) before the build fails. */
 const BUSY_TRIES = 4;
@@ -267,11 +268,41 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       // The pages are written side by side (the queue runs several jobs at once). The home page and
       // the first inner page start at once; the other inner pages wait a little so the prompt they
       // share is already cached when they ask for it.
+      // A fresh Studio design builds its first screen alone and looks at it in a browser before the
+      // home page is written; the inner pages don't wait for that.
+      const heroFirst = intake.style === "studio" && !base && !!env.BROWSER;
+      if (heroFirst) await env.BUILDS.send({ slug, version, stage: "hero" });
       await Promise.all(
         pages
-          .filter((p) => p.kind === "ai")
+          .filter((p) => p.kind === "ai" && !(heroFirst && p.path === "/"))
           .map((p, n) => env.BUILDS.send({ slug, version, stage: "page", path: p.path }, n <= 1 ? undefined : { delaySeconds: 30 })),
       );
+      return "done";
+    }
+    if (job.stage === "hero") {
+      const kit = await getKit(env, slug, version);
+      const spec = kit ? pagesOf(kit).find((p) => p.path === "/") : null;
+      if (kit && spec && !(await getPage(env, slug, version, HERO_DRAFT))) {
+        try {
+          let { page, usage } = await designSitePage(env, kit, spec, { heroOnly: true });
+          await savePage(env, slug, version, HERO_DRAFT, page, usage);
+          await touchBuild(env, slug, version, "pages");
+          const look = await reviewHero(env, slug, version, kit);
+          if (look?.notes.length) {
+            // One more go with what the browser and the critique found; the cost of both is kept.
+            const cost = (Number((usage as { cost_usd?: number }).cost_usd) || 0) + look.costUsd;
+            ({ page, usage } = await designSitePage(env, kit, spec, { heroOnly: true, notes: look.notes, current: page }));
+            await savePage(env, slug, version, HERO_DRAFT, page, { ...(usage as object), cost_usd: (Number((usage as { cost_usd?: number }).cost_usd) || 0) + cost });
+          } else if (look) {
+            await savePage(env, slug, version, HERO_DRAFT, page, { ...(usage as object), cost_usd: (Number((usage as { cost_usd?: number }).cost_usd) || 0) + look.costUsd });
+          }
+        } catch (e) {
+          if (e instanceof TryLater || e instanceof Fatal) throw e;
+          // The first screen couldn't be built on its own: the home page is written in one go instead.
+          console.log("hero first failed, writing the home page whole", slug, errText(e));
+        }
+      }
+      await env.BUILDS.send({ slug, version, stage: "page", path: "/" });
       return "done";
     }
     const kit = await getKit(env, slug, version);
@@ -281,7 +312,8 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
     if (!(await pagesDone(env, slug, version)).includes(spec.path)) {
       // The home page of a reused design follows the sister site's home page.
       const adaptFrom = kit.reuse && spec.path === "/" ? await getPage(env, kit.reuse.slug, kit.reuse.version, "/") : null;
-      const { page, usage } = await designSitePage(env, kit, spec, adaptFrom ? { adaptFrom } : {});
+      const hero = spec.path === "/" ? await getPage(env, slug, version, HERO_DRAFT) : null;
+      const { page, usage } = await designSitePage(env, kit, spec, adaptFrom ? { adaptFrom } : hero ? { hero } : {});
       await savePage(env, slug, version, spec.path, page, usage);
       await touchBuild(env, slug, version, "pages");
     }
