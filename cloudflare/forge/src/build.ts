@@ -10,6 +10,8 @@ import {
   getKit,
   getPage,
   pairsDue,
+  saveChrome,
+  saveQa,
   setTrade,
   PAIRS_NOTE,
   goLive,
@@ -26,7 +28,8 @@ import {
   updateIntake,
 } from "./db";
 import type { Kit } from "./designer";
-import { adaptKit, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, studioHome, TryLater, type Plan } from "./designer";
+import { lintSite, repairNote, type QaIssue, type QaResult } from "./qa";
+import { adaptKit, fixChrome, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, studioHome, TryLater, type Plan } from "./designer";
 import type { BuildJob, Env } from "./env";
 import { beforeAfterImages, previewImages } from "./images";
 import { privacyPage, termsPage } from "./legal";
@@ -87,6 +90,57 @@ export async function startBuild(env: Env, tenant: Tenant, userId: number | null
 }
 
 /** Every page is written: go live and tell the account's webhook. */
+/**
+ * Check a live version against Mianro's QA standards (see qa.ts) on every page, repair what it
+ * finds (the shared header and footer once, then up to six pages, each on the mid-priced model),
+ * check again, and keep the result for the app to show.
+ */
+export async function qaPass(env: Env, slug: string, version: string): Promise<QaResult | null> {
+  const demo = await getDemo(env, slug);
+  let kit = await getKit(env, slug, version);
+  if (!demo || !kit) return null;
+  const specs = pagesOf(kit);
+  const load = async () => (await Promise.all(specs.map(async (p) => ({ path: p.path, page: await getPage(env, slug, version, p.path) })))).flatMap((x) => (x.page ? [{ path: x.path, page: x.page }] : []));
+  const first = lintSite(kit, specs, await load(), { phone: demo.intake.phone });
+  const repaired: string[] = [];
+  let costUsd = 0;
+  const cost = (u: unknown) => (costUsd += Number((u as { cost_usd?: number }).cost_usd) || 0);
+  if (first.length && env.ANTHROPIC_API_KEY) {
+    const shared = first.filter((i) => i.path === "site");
+    if (shared.length) {
+      try {
+        const fixed = await fixChrome(env, kit, repairNote(shared));
+        await saveChrome(env, slug, version, fixed.header, fixed.footer);
+        kit = { ...kit, header: fixed.header, footer: fixed.footer };
+        cost(fixed.usage);
+        repaired.push("header and footer");
+      } catch (e) {
+        console.log("qa: header/footer not repaired", slug, errText(e));
+      }
+    }
+    const byPage = new Map<string, QaIssue[]>();
+    for (const i of first) if (i.path !== "site") byPage.set(i.path, [...(byPage.get(i.path) ?? []), i]);
+    for (const [path, list] of [...byPage].sort((a, b) => b[1].length - a[1].length).slice(0, 6)) {
+      const spec = specs.find((p) => p.path === path);
+      const current = await getPage(env, slug, version, path);
+      if (!spec || !current || spec.kind !== "ai") continue;
+      try {
+        const { page, usage } = await designSitePage(env, kit, spec, { instruction: repairNote(list), current, cheap: true });
+        await savePage(env, slug, version, path, page, usage);
+        cost(usage);
+        repaired.push(path);
+      } catch (e) {
+        console.log("qa: page not repaired", slug, path, errText(e));
+      }
+    }
+  }
+  const issues = repaired.length ? lintSite(kit, specs, await load(), { phone: demo.intake.phone }) : first;
+  const result: QaResult = { at: new Date().toISOString(), issues, found: first.length, repaired, costUsd };
+  await saveQa(env, slug, version, result);
+  if (costUsd) await recordBuildCost(env, demo.tenantId, slug, `${version}:qa:${Date.now()}`, costUsd, repaired.length, "change");
+  return result;
+}
+
 /** Make before/after pictures for sites left showing empty before/after boxes (one site, or the next few). */
 export async function fillPairs(env: Env, slug?: string): Promise<number> {
   if (!env.AI || !env.ANTHROPIC_API_KEY) return 0;
@@ -142,7 +196,11 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
   const demo = await getDemo(env, job.slug);
   // Jobs on the live site (not a build in progress).
   if (job.stage === "review") {
-    if (demo && demo.liveVersion === job.version) await reviewSite(env, job.slug, job.version);
+    if (demo && demo.liveVersion === job.version) {
+      // Our own QA standards first (no browser needed), so the screenshots are of the repaired site.
+      await qaPass(env, job.slug, job.version).catch((e) => console.error("qa pass failed", job.slug, errText(e)));
+      await reviewSite(env, job.slug, job.version);
+    }
     return "done";
   }
   if (job.stage === "pairs") {

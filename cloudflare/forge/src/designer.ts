@@ -780,6 +780,22 @@ export async function adaptKit(env: Env, src: Kit, from: { slug: string; version
   return { kit: { ...src, header: p.HEADER, footer, brief, pages, reuse: from }, usage };
 }
 
+/** Repair the header and footer every page shares (QA findings), keeping the design exactly. */
+export async function fixChrome(env: Env, kit: Kit, note: string): Promise<{ header: string; footer: string; usage: Record<string, unknown> }> {
+  const { text, usage } = await ask(
+    env,
+    `Here are the header and footer of a finished website and the pages it has.\n\n## Pages\n${sitemapText(pagesOf(kit))}\n\n## Header\n${kit.header}\n\n## Footer\n${kit.footer}\n\n## What to fix\n${note}\n\nKeep the markup, classes, structure, wording and script hooks exactly as they are apart from those fixes. Keep the ${CREDIT_MARKER} marker in the footer. Reply with two parts:\n@@@ HEADER\nthe header HTML\n@@@ FOOTER\nthe footer HTML`,
+    12000,
+    STUDIO_PAGE_MODEL,
+    "low",
+  );
+  const p = parseParts(text);
+  need(p, ["HEADER", "FOOTER"]);
+  let footer = p.FOOTER;
+  if (!footer.includes(CREDIT_MARKER)) footer = /<\/footer>/i.test(footer) ? footer.replace(/<\/footer>(?![\s\S]*<\/footer>)/i, `<p>${CREDIT_MARKER}</p></footer>`) : `${footer}${CREDIT_MARKER}`;
+  return { header: p.HEADER, footer, usage };
+}
+
 /**
  * Stage 2: one page, written against the kit so every page matches. Everything but the page's
  * own task is identical across a site's inner pages and cached, so later pages pay a tenth for it.
@@ -791,6 +807,8 @@ export interface PageRevision {
   current?: PageDraft;
   /** The same page from a finished sister site: keep its layout and style, write all-new content. */
   adaptFrom?: PageDraft;
+  /** A small repair, not a design decision: use the mid-priced model even for the home page. */
+  cheap?: boolean;
 }
 
 export async function designSitePage(env: Env, kit: Kit, page: PageSpec, rev: PageRevision = {}): Promise<{ page: PageDraft; usage: unknown }> {
@@ -832,7 +850,7 @@ ${page.brief}${current}${notes}${change}${adapt}`;
   // The home page is the showcase, so it gets the design model; the rest follow the kit on the cheaper one.
   const home = page.path === "/";
   const studio = kit.style === "studio";
-  const model = home && !kit.reuse ? env.CLAUDE_MODEL || MODEL : home ? STUDIO_PAGE_MODEL : studio ? STUDIO_PAGE_MODEL : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
+  const model = rev.cheap ? STUDIO_PAGE_MODEL : home && !kit.reuse ? env.CLAUDE_MODEL || MODEL : home ? STUDIO_PAGE_MODEL : studio ? STUDIO_PAGE_MODEL : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
   const { text, usage, cut } = await ask(
     env,
     [

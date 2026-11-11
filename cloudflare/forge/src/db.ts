@@ -1,4 +1,5 @@
 /** Demos and settings in D1. Demos are archived, not deleted. */
+import type { QaResult } from "./qa";
 import { Intake, SiteContent, type Demo } from "../../../src/forge/schema";
 import type { Outreach } from "./outreach";
 import type { Review } from "./review";
@@ -436,6 +437,20 @@ export async function countLeads(env: Env, slug: string): Promise<number> {
 }
 
 // ---- The automatic review ---------------------------------------------------------------------
+
+/** Replace a version's shared header and footer (a QA repair). */
+export async function saveChrome(env: Env, slug: string, version: string, header: string, footer: string): Promise<void> {
+  await env.DB.prepare("UPDATE site_versions SET kit = json_set(kit, '$.header', ?, '$.footer', ?) WHERE slug = ? AND version = ?").bind(header, footer, slug, version).run();
+}
+
+export async function saveQa(env: Env, slug: string, version: string, qa: QaResult): Promise<void> {
+  await env.DB.prepare("UPDATE site_versions SET qa = ? WHERE slug = ? AND version = ?").bind(JSON.stringify(qa), slug, version).run();
+}
+
+export async function getQa(env: Env, slug: string, version: string): Promise<QaResult | null> {
+  const r = await env.DB.prepare("SELECT qa FROM site_versions WHERE slug = ? AND version = ?").bind(slug, version).first<{ qa: string | null }>();
+  return parseJson<QaResult>(r?.qa);
+}
 
 export async function saveReview(env: Env, slug: string, version: string, review: Review): Promise<void> {
   await env.DB.prepare("UPDATE site_versions SET review = ? WHERE slug = ? AND version = ?").bind(JSON.stringify(review), slug, version).run();

@@ -5,9 +5,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../cloudflare/forge/src/index";
-import { designKit, designSitePage, planPairs, planSite } from "../cloudflare/forge/src/designer";
+import { designKit, designSitePage, fixChrome, planPairs, planSite } from "../cloudflare/forge/src/designer";
 import { beforeAfterImages } from "../cloudflare/forge/src/images";
-import { countView, getDemo, getPage, getReview, viewStats } from "../cloudflare/forge/src/db";
+import { countView, getDemo, getKit, getPage, getQa, getReview, viewStats } from "../cloudflare/forge/src/db";
 import type { BuildJob, Env, VideoJob } from "../cloudflare/forge/src/env";
 import { qrSvg } from "../cloudflare/forge/src/outreach";
 import { pitchPage } from "../cloudflare/forge/src/pitch";
@@ -19,7 +19,7 @@ import { build, call, html, loc, makeAccount, makeHarness, setupAdmin, slugOf, t
 
 vi.mock("../cloudflare/forge/src/designer", async (orig) => {
   const real = await orig<typeof import("../cloudflare/forge/src/designer")>();
-  return { ...real, planSite: vi.fn(), planPairs: vi.fn(), designKit: vi.fn(), designSitePage: vi.fn() };
+  return { ...real, planSite: vi.fn(), planPairs: vi.fn(), designKit: vi.fn(), designSitePage: vi.fn(), fixChrome: vi.fn() };
 });
 vi.mock("../cloudflare/forge/src/images", () => ({ beforeAfterImages: vi.fn(async () => []), previewImages: vi.fn(async () => [{ name: "photo-1.jpg", description: "a shop", bytes: new Uint8Array([1]) }]) }));
 vi.mock("../cloudflare/forge/src/scrape", () => ({ readWebsite: vi.fn() }));
@@ -39,10 +39,10 @@ async function drain(h: Harness, max = 200): Promise<void> {
 }
 
 const goodKit = (_env: Env, brief: string, pages: unknown) => ({
-  kit: { theme: "light" as const, accent: "#aa3333", fonts: "", css: "", header: '<header><a href="/">Home</a></header>', footer: "<footer><!--mianro-credit--></footer>", script: "", components: "", brief, pages: pages as never },
+  kit: { theme: "light" as const, accent: "#aa3333", fonts: "", css: "", header: '<header><a href="/">Home</a></header>', footer: '<footer><a href="/">Home</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms</a><!--mianro-credit--></footer>', script: "", components: "", brief, pages: pages as never },
   usage: { cost_usd: 0.4, model: "stub" },
 });
-const goodPage = (spec: { name: string }, extra = "") => ({ page: { title: spec.name, description: "d", css: "", body: `<main><h1>${spec.name}</h1><p>About us. ${extra}</p></main>` }, usage: { cost_usd: 0.01, model: "stub" } });
+const goodPage = (spec: { name: string }, extra = "") => ({ page: { title: spec.name, description: "d", css: "", body: `<main><h1>${spec.name}</h1><p>About us. ${extra}</p><form></form></main>` }, usage: { cost_usd: 0.01, model: "stub" } });
 
 /** A browser that "renders" whatever facts the test wants and hands back tiny JPEG-ish bytes. */
 function fakeBrowser(facts: Record<string, unknown>, opts: { failOld?: boolean } = {}): { browser: Browser; visited: string[] } {
@@ -491,6 +491,46 @@ describe("empty before/after boxes fill themselves", () => {
     const instr = vi.mocked(designSitePage).mock.calls.filter((c) => c[3]?.instruction).map((c) => c[3]!.instruction!);
     expect(instr.some((t) => t.includes("Remove the before/after area"))).toBe(true);
     expect((await getDemo(h.env, slug))!.changeNote).toMatchObject({ status: "done" });
+  });
+});
+
+describe("the QA standards pass", () => {
+  it("finds the faults our QA team blocks, repairs the footer and the page, checks again, and shows the result", async () => {
+    // A site as a model might leave it: a footer logo that isn't a link, a dead social icon, and a button to a section that isn't there.
+    vi.mocked(designKit).mockImplementation(async (env, brief, pages) => {
+      const k = goodKit(env, brief, pages);
+      return { ...k, kit: { ...k.kit, footer: '<footer><span class="logo">Bravo</span><a href="/" aria-label="Instagram"><svg></svg></a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms</a><!--mianro-credit--></footer>' } };
+    });
+    vi.mocked(designSitePage).mockImplementation(async (_env, _kit, spec, rev) =>
+      rev?.instruction ? goodPage(spec, "REPAIRED") : spec.path === "/about" ? { ...goodPage(spec), page: { ...goodPage(spec).page, body: '<main><h1>About</h1><a class="btn" href="#team">Meet the team</a></main>' } } : goodPage(spec),
+    );
+    vi.mocked(fixChrome).mockResolvedValue({ header: '<header><a href="/">Home</a></header>', footer: '<footer><a href="/">Bravo</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms</a><!--mianro-credit--></footer>', usage: { cost_usd: 0.02 } });
+    const { slug, b, demo } = await liveDemo();
+    const version = demo.liveVersion!;
+    const qa = (await getQa(h.env, slug, version))!;
+    expect(qa.found).toBe(3);
+    expect(qa.repaired).toEqual(["header and footer", "/about"]);
+    expect(qa.issues).toEqual([]);
+    // The footer was repaired once, with the faults spelled out; the page was repaired on the cheaper model.
+    expect(vi.mocked(fixChrome)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(fixChrome).mock.calls[0]![2]).toContain("footer logo or name isn't a link");
+    expect(vi.mocked(fixChrome).mock.calls[0]![2]).toContain("Instagram");
+    const fix = vi.mocked(designSitePage).mock.calls.filter((c) => c[3]?.instruction?.includes("QA team"));
+    expect(fix.map((c) => c[2].path)).toEqual(["/about"]);
+    expect(fix[0]![3]).toMatchObject({ cheap: true });
+    expect(fix[0]![3]!.instruction).toContain("#team");
+    expect((await getKit(h.env, slug, version))!.footer).toContain('<a href="/">Bravo</a>');
+    expect((await getPage(h.env, slug, version, "/about"))!.body).toContain("REPAIRED");
+    const shown = await html(await call(h, `/demos/${slug}`, { cookie: b.cookie }));
+    expect(shown).toContain("QA standards: all 13 met");
+    expect(shown).toContain("repaired 2 places automatically");
+  });
+
+  it("a site that already meets the standards is left alone and costs nothing", async () => {
+    const { slug, demo } = await liveDemo();
+    const qa = (await getQa(h.env, slug, demo.liveVersion!))!;
+    expect(qa).toMatchObject({ found: 0, repaired: [], issues: [], costUsd: 0 });
+    expect(vi.mocked(fixChrome)).not.toHaveBeenCalled();
   });
 });
 

@@ -13,6 +13,7 @@ import {
   deleteVideo,
   getDemo,
   getKit,
+  getQa,
   getReview,
   getSetting,
   listDemos,
@@ -273,9 +274,10 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
       ]);
       const pages = liveKit ? pagesOf(liveKit).map((p) => ({ name: p.name, path: p.path, url: `${site(slug)}${p.path === "/" ? "" : p.path}` })) : [];
       const total = (buildKit ? pagesOf(buildKit) : sitemapFor(demo.intake)).length;
-      const [review, views] = await Promise.all([demo.liveVersion ? getReview(env, slug, demo.liveVersion) : null, viewStats(env, { slugs: [slug] })]);
+      const [review, views, qa] = await Promise.all([demo.liveVersion ? getReview(env, slug, demo.liveVersion) : null, viewStats(env, { slugs: [slug] }), demo.liveVersion ? getQa(env, slug, demo.liveVersion) : null]);
       return demoPage(s, demo, { site: site(slug), ghl: ghlLink(s.tenant.ghlPageUrl, slug), pages }, { done, total }, leads, q("ok"), q("error"), {
         review,
+        qa,
         views: views.get(slug),
         pitch: review?.shots?.length ? `${site(slug)}/_pitch` : "",
         qr: qrSvg(site(slug)),

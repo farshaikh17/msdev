@@ -3,9 +3,10 @@
  * point its links at the demo's own address, deliver its forms to the team app,
  * and add the GoHighLevel chat widget in the site's primary colour.
  */
+import { QA_CSS, QA_JS, qaFixHtml } from "./qa";
 import { MOTION_CSS, motionScripts } from "./motion";
 import { esc } from "../../../src/forge/render";
-import { CREDIT, CREDIT_CSS, CREDIT_MARKER, tidyCss, type Kit, type PageDraft } from "./designer";
+import { pagesOf, CREDIT, CREDIT_CSS, CREDIT_MARKER, tidyCss, type Kit, type PageDraft } from "./designer";
 import type { HTMLElement } from "./env";
 import type { Tenant } from "./tenants";
 import { HERO_CSS, LEGACY_HERO_BG } from "./hero";
@@ -90,13 +91,16 @@ export function assemble(kit: Kit, page: PageDraft, slug: string, credit: string
   const boot = `<script>try{var t=localStorage.getItem(${key});if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>`;
   const studio = kit.style === "studio";
   const accent = /^#[0-9a-f]{6}$/i.test(kit.accent) ? kit.accent : "#111111";
-  return `<!doctype html><html lang="en" data-theme="${kit.theme}"${studio ? ` style="--m-accent:${accent}"` : ""}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  const doc = `<!doctype html><html lang="en" data-theme="${kit.theme}"${studio ? ` style="--m-accent:${accent}"` : ""}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(page.title)}</title><meta name="description" content="${esc(page.description)}"><meta name="robots" content="noindex">
-${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${HEADER_CSS}\n${HERO_CSS}\n${CREDIT_CSS}${studio ? MOTION_CSS : ""}</style></head><body>
+${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${HEADER_CSS}\n${HERO_CSS}\n${CREDIT_CSS}\n${QA_CSS}${studio ? MOTION_CSS : ""}</style></head><body>
 ${kit.header}
 ${page.body}
 ${kit.footer.split(CREDIT_MARKER).join(credit)}
-<script>${kit.script}</script>${studio ? motionScripts() : ""}</body></html>`;
+<script>${kit.script}</script><script>${QA_JS}</script>${studio ? motionScripts() : ""}</body></html>`;
+  // The QA standards that need no judgement: +1 on phone links, legal links always in the footer.
+  const legal = (path: string) => !pagesOf(kit).some((p) => p.path === path) || new RegExp(`href\\s*=\\s*["']${path}["']`, "i").test(kit.footer);
+  return qaFixHtml(doc, { hasPrivacy: legal("/privacy"), hasTerms: legal("/terms") });
 }
 
 /**

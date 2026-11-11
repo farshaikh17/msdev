@@ -3,6 +3,7 @@ import { esc } from "../../../src/forge/render";
 import type { Intake } from "../../../src/forge/schema";
 import type { ChangeNote, Lead, Listed, Stored, ViewStat } from "./db";
 import type { Review } from "./review";
+import { QA_RULES, type QaResult, type QaRule } from "./qa";
 import { SWATCHES } from "./designer";
 import type { Session } from "./auth";
 import { STUDIO_CREDITS, buildCost, type Usage } from "./tenants";
@@ -314,6 +315,8 @@ ${fields(undefined, reuse)}
 
 export interface DemoExtra {
   review?: Review | null;
+  /** How the site did against our QA standards (see qa.ts). */
+  qa?: QaResult | null;
   views?: ViewStat;
   /** The before/after page link, once the review has run. */
   pitch?: string;
@@ -344,7 +347,25 @@ ${r.fixed ? `<p class="note" style="margin:0">The home page was already rewritte
 }
 
 /** Step 1: what the site looks like and how good it is. */
-function lookStep(d: Stored, r: Review | null | undefined, links: { site: string }, owner: boolean): string {
+/** Our own QA standards: which the site meets, what was repaired, and anything still open. */
+function qaBlock(qa: QaResult | null | undefined): string {
+  if (!qa) return "";
+  const open = new Map<QaRule, string[]>();
+  for (const i of qa.issues) open.set(i.rule, [...(open.get(i.rule) ?? []), `${i.path === "site" ? "Header or footer" : i.path}: ${i.what}`]);
+  const rules = Object.keys(QA_RULES) as QaRule[];
+  const passed = rules.length - open.size;
+  const head = open.size ? `QA standards: ${passed} of ${rules.length} met` : `QA standards: all ${rules.length} met`;
+  const fixed = qa.repaired.length ? ` We found ${qa.found} fault${qa.found === 1 ? "" : "s"} and repaired ${qa.repaired.length === 1 ? "one place" : `${qa.repaired.length} places`} automatically (${esc(qa.repaired.join(", "))}).` : qa.found ? "" : " Nothing needed repairing.";
+  return `<div><b>${head}</b><div class="note">Every page is checked against the list our QA team uses: logo links, footer links, legal pages, dead buttons, headings, forms and phone links.${fixed}</div>
+<details style="margin-top:8px"><summary>See the QA standards</summary><ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">${rules
+    .map((r) => {
+      const bad = open.get(r);
+      return `<li style="display:flex;gap:8px;align-items:flex-start;font-size:.9rem"><span class="tag ${bad ? "bad" : "ok"}" style="flex:none">${bad ? "✕" : "✓"}</span><span>${esc(QA_RULES[r])}${bad ? `<br><span class="note">${bad.slice(0, 4).map(esc).join("<br>")}${bad.length > 4 ? `<br>and ${bad.length - 4} more` : ""}</span>` : ""}</span></li>`;
+    })
+    .join("")}</ul></details></div>`;
+}
+
+function lookStep(d: Stored, r: Review | null | undefined, links: { site: string }, owner: boolean, qa?: QaResult | null): string {
   const again = owner && d.liveVersion ? `<form method="post" action="/demos/${esc(d.slug)}/review"><button class="btn ghost" type="submit" data-busy="Queued…">${r ? "Check again" : "Check it now"}</button></form>` : "";
   let quality = "";
   if (d.liveVersion) {
@@ -356,7 +377,7 @@ function lookStep(d: Stored, r: Review | null | undefined, links: { site: string
   return `<section class="card step"><h2><span class="stepn">1</span>Look at it</h2>
 <iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(d.intake.businessName)}"></iframe>
 <div class="row"><a class="btn" href="${esc(links.site)}" target="_blank" rel="noreferrer">Open the full site ↗</a><span class="note">Check it on your phone too.</span></div>
-${quality}</section>`;
+${quality}${qaBlock(qa)}</section>`;
 }
 
 /** Step 2: fix what the check found (one press each), or ask for anything else. */
@@ -470,7 +491,7 @@ export function demoPage(
       s.user.role === "admin" && d.buildCost ? ` · built for <b>$${d.buildCost.usd.toFixed(2)}</b> (${d.buildCost.calls} Claude calls)` : ""
     }</p></div>
 ${next}
-${lookStep(d, r, links, owner)}
+${lookStep(d, r, links, owner, extra.qa)}
 ${improve}
 ${sendStep(d, links, extra, improve ? 3 : 2)}
 <details class="card"><summary>More tools</summary><div style="display:grid;gap:16px;margin-top:12px">

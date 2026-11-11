@@ -62,11 +62,11 @@ async function drain(h: Harness, max = 200): Promise<{ retries: number[] }> {
 }
 
 const goodKit = (_env: Env, brief: string, pages: unknown, style?: string) => ({
-  kit: { theme: "dark" as const, accent: "#aa3333", fonts: "", css: "", header: '<header><a href="/">Home</a></header>', footer: "<footer><!--mianro-credit--></footer>", script: "", components: "", brief, pages: pages as never, ...(style === "studio" ? { style: "studio" as const } : {}) },
+  kit: { theme: "dark" as const, accent: "#aa3333", fonts: "", css: "", header: '<header><a href="/">Home</a></header>', footer: '<footer><a href="/">Home</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms</a><!--mianro-credit--></footer>', script: "", components: "", brief, pages: pages as never, ...(style === "studio" ? { style: "studio" as const } : {}) },
   usage: { cost_usd: 0.4, model: "stub" },
 });
 const goodPage = (_env: Env, _kit: unknown, spec: { name: string }) => ({
-  page: { title: spec.name, description: "d", css: "", body: `<main><h1>${spec.name}</h1></main>` },
+  page: { title: spec.name, description: "d", css: "", body: `<main><h1>${spec.name}</h1><form></form></main>` },
   usage: { cost_usd: 0.01, model: "stub" },
 });
 
