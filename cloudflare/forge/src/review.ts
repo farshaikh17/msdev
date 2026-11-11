@@ -492,7 +492,13 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
           review.costUsd = (review.costUsd ?? 0) + (Number(u.cost_usd) || 0);
           // Look again, so the score shown is of the page as it now is, not the one that was replaced.
           const again = await rescore(env, deps, `${base}${prefix}?r=${version}-fixed`, settle, sleep, facts + direction, studio).catch((e) => (console.log("rescore failed", slug, e instanceof Error ? e.message : String(e)), null));
-          if (again) {
+          if (again && again.crit.score < crit.score) {
+            // The rewrite came out worse: put the original page back and keep its score.
+            await savePage(env, slug, version, "/", current, null);
+            review.fixed = false;
+            review.fixError = `A rewrite scored ${again.crit.score}/10, lower than the original's ${crit.score}/10, so the original was kept.`;
+            review.costUsd += again.crit.costUsd;
+          } else if (again) {
             review.before = crit.score;
             review.score = again.crit.score;
             review.verdict = again.crit.verdict;

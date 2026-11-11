@@ -415,6 +415,19 @@ describe("Studio art directions", () => {
     expect(vi.mocked(designKit).mock.calls[0]![4]).toBeUndefined();
   });
 
+  it("keeps the original home page when the rewrite scores lower", async () => {
+    const { slug, demo } = await liveDemo();
+    const version = demo.liveVersion!;
+    const before = (await getPage(h.env, slug, version, "/"))!.body;
+    let looks = 0;
+    const critique = vi.fn<ReviewDeps["critique"]>(async () => ({ score: ++looks > 1 ? 4 : 6, verdict: "v", strengths: [], issues: [{ what: "Weak hero", fix: "Bigger", severity: "high" as const }], costUsd: 0.01 }));
+    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => fakeBrowser(goodFacts([])).browser, critique, sleep: async () => undefined });
+    expect(r.score).toBe(6);
+    expect(r.fixed).toBe(false);
+    expect(r.fixError).toContain("original was kept");
+    expect((await getPage(h.env, slug, version, "/"))!.body).toBe(before);
+  });
+
   it("a Studio site is held to a higher bar by the review", async () => {
     const { slug, demo } = await liveDemo();
     const version = demo.liveVersion!;

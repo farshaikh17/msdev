@@ -49,7 +49,7 @@ html.m-on .m-cursor,html.m-on .m-ring{opacity:1}
 [data-grain]::after{content:"";position:absolute;inset:-50%;z-index:3;pointer-events:none;opacity:.07;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");animation:m-grain 1s steps(6) infinite}
 @keyframes m-grain{0%{transform:translate(0,0)}20%{transform:translate(-8%,4%)}40%{transform:translate(6%,-6%)}60%{transform:translate(-4%,8%)}80%{transform:translate(8%,2%)}100%{transform:translate(0,0)}}
 [data-marquee]{overflow:hidden;white-space:nowrap}[data-marquee]>*{display:inline-flex}
-[data-horizontal]{overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;max-width:100%}[data-horizontal-track]{display:flex}[data-horizontal-track]>*{scroll-snap-align:start;flex:none}
+[data-horizontal]{overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;max-width:100%}:where([data-horizontal-track]){display:flex}:where([data-horizontal-track])>:where(*){scroll-snap-align:start;flex-shrink:0;min-width:min(78vw,560px)}
 [data-horizontal].m-pinned{overflow:hidden;scroll-snap-type:none}
 [data-follow]{pointer-events:none;display:none}html.m-on.m-fine [data-follow]{display:block}
 html.m-wait [data-split],html.m-wait [data-reveal]{visibility:hidden}
@@ -125,8 +125,10 @@ var mm=G.matchMedia();
 mm.add("(min-width: 900px)",function(){
   all("[data-horizontal]").forEach(function(sec){
     var track=sec.querySelector("[data-horizontal-track]");if(!track)return;
-    sec.classList.add("m-pinned");
     var dist=function(){return Math.max(0,track.scrollWidth-sec.clientWidth)};
+    // Nothing wider than the screen to slide through: leave it as an ordinary (swipeable) row.
+    if(dist()<40)return;
+    sec.classList.add("m-pinned");
     G.to(track,{x:function(){return -dist()},ease:"none",scrollTrigger:{trigger:sec,start:"top top",end:function(){return "+="+dist()},pin:true,scrub:1,invalidateOnRefresh:true}});
   });
   all("[data-stack]").forEach(function(wrap){
