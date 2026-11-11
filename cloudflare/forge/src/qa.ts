@@ -216,7 +216,9 @@ if(!document.getElementById(id)){e.preventDefault();var m=document.querySelector
 function zoomable(i){return i.closest("main")&&!i.closest("a,button,.hero-motion,[data-no-zoom]")&&i.getBoundingClientRect().width>=140}
 function mark(){[].slice.call(document.querySelectorAll("main img")).forEach(function(i){if(zoomable(i))i.setAttribute("data-fg-zoom","")})}
 mark();addEventListener("load",mark);
-document.addEventListener("click",function(e){var i=e.target;if(!i||i.tagName!=="IMG"||!zoomable(i))return;
+document.addEventListener("click",function(e){var t=e.target,i=t;if(!t||!t.closest||t.closest("a,button,input,select,textarea,label,summary,[role=button],.fg-zoom"))return;
+if(t.tagName!=="IMG"){if((t.innerText||"").trim().length>60)return;i=(document.elementsFromPoint(e.clientX,e.clientY)||[]).filter(function(x){return x.tagName==="IMG"})[0]}
+if(!i||!zoomable(i))return;
 var o=document.createElement("div");o.className="fg-zoom";o.setAttribute("role","dialog");o.setAttribute("aria-label","Photo");
 var big=document.createElement("img");big.src=i.currentSrc||i.src;big.alt=i.alt||"";var b=document.createElement("button");b.type="button";b.setAttribute("aria-label","Close");b.textContent="\\u00d7";
 o.appendChild(big);o.appendChild(b);document.body.appendChild(o);requestAnimationFrame(function(){o.classList.add("on")});b.focus();

@@ -246,3 +246,10 @@ with `tier: studio`.
 - **Anti-template rules:** the design brief now names the devices that make a site look AI-made
   (an eyebrow on every heading, numbered markers everywhere, gradient text, identical card grids,
   nested cards, pill-rounded cards) and limits them to deliberate use.
+
+## QA standards and the design floor
+
+- **QA standards** (`src/qa.ts`): the rules Mianro's QA team blocks a site for (from the Design Team Website Tracker): logo links, footer links, legal pages, dead buttons and anchors, social icons without a profile, repeated or empty headings, page titles, forms, phone links. Guards on every page make the commonest faults impossible (logo always links home, pictures open when clicked, `+1` on phone links, legal links in the footer). After a build, every page is linted, repaired (header and footer once, then up to six pages on the mid-priced model), linted again, and the result is shown on the site's page in the app.
+- **The floor** (`src/designer.ts`): the tells of a machine-made page are ruled out for every site, and the quality check measures them in a browser (labels above headings, a coloured or italic word in the headline, a long headline, facts joined by dots). Adapted from the ideas in [Hallmark](https://github.com/nutlope/hallmark) (MIT).
+- **Studio looks are materials, not plans** (`src/concepts.ts`): each look has its own first screen and scenes; `drawFor` deals each site its own scene order, biggest moment, mirroring, menu and footer, and avoids what the account built recently.
+- **Hero first** (Studio, when Browser Run is available): the first screen is designed alone, opened in a browser on desktop and phone, critiqued against its look, revised once if needed, and only then is the rest of the home page written around it.
