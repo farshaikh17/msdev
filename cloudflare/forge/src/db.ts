@@ -438,6 +438,18 @@ export async function countLeads(env: Env, slug: string): Promise<number> {
 
 // ---- The automatic review ---------------------------------------------------------------------
 
+/** The looks and deals of an account's most recent Studio sites, newest first (so the next one differs). */
+export async function recentLooks(env: Env, tenantId: number, notSlug: string, limit = 8): Promise<{ concept: string; draw: string }[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT json_extract(v.kit, '$.concept') concept, json_extract(v.kit, '$.draw') draw FROM site_versions v
+       JOIN demos d ON d.slug = v.slug WHERE d.tenant_id = ? AND d.slug != ? AND json_extract(v.kit, '$.style') = 'studio'
+      ORDER BY v.created_at DESC LIMIT ?`,
+  )
+    .bind(tenantId, notSlug, limit)
+    .all<{ concept: string | null; draw: string | null }>();
+  return results.map((r) => ({ concept: r.concept ?? "", draw: r.draw ?? "" }));
+}
+
 /** Replace a version's shared header and footer (a QA repair). */
 export async function saveChrome(env: Env, slug: string, version: string, header: string, footer: string): Promise<void> {
   await env.DB.prepare("UPDATE site_versions SET kit = json_set(kit, '$.header', ?, '$.footer', ?) WHERE slug = ? AND version = ?").bind(header, footer, slug, version).run();

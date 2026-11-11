@@ -78,6 +78,11 @@ interface PageFacts {
   brokenImgs: number;
   /** Tall sections with nothing in them (no words, pictures, video or drawing). */
   emptyBlocks?: number;
+  /** The tells of a machine-made page: small spaced-capital labels above headings, a main heading with one word in another colour or in italics, its length in words, and strings of facts joined by dots. */
+  eyebrows?: number;
+  accentWord?: boolean;
+  h1Words?: number;
+  dotStrings?: number;
   links: string[];
   hasViewport: boolean;
   tel: boolean;
@@ -94,6 +99,10 @@ export const FACTS = `(() => ({
   noAlt: Array.from(document.images).filter((i) => !i.hasAttribute("alt")).length,
   brokenImgs: Array.from(document.images).filter((i) => i.src && i.complete && !i.naturalWidth).length,
   emptyBlocks: Array.from(document.querySelectorAll("main section, main > div")).filter((e) => e.offsetHeight >= 480 && !(e.innerText || "").trim() && !e.querySelector("img,picture,video,canvas,svg,iframe")).length,
+  eyebrows: Array.from(document.querySelectorAll("main h1, main h2, main h3")).filter((h) => { const p = h.previousElementSibling; if (!p || !(p.innerText || "").trim() || (p.innerText || "").length > 70 || /^H[1-6]$/.test(p.tagName)) return false; const c = getComputedStyle(p); return c.textTransform === "uppercase" && parseFloat(c.letterSpacing) >= 1 && parseFloat(c.fontSize) <= 16; }).length,
+  accentWord: (() => { const h = document.querySelector("main h1"); if (!h) return false; const b = getComputedStyle(h); return Array.from(h.querySelectorAll("em, i, span, strong, mark, u")).some((e) => { if (!(e.innerText || "").trim() || e.closest(".m-line-mask, .m-line, .m-char, .m-word") === e || /^m-/.test(e.className || "")) return false; const c = getComputedStyle(e); return c.color !== b.color || c.fontStyle !== b.fontStyle; }); })(),
+  h1Words: ((document.querySelector("main h1") || {}).innerText || "").split(/\\s+/).filter(Boolean).length,
+  dotStrings: Array.from(document.querySelectorAll("main p, main span, main div, main li")).filter((e) => e.children.length === 0 && (e.innerText || "").length < 90 && /\\S\\s+[·•|]\\s+\\S.*\\s[·•|]\\s/.test(e.innerText || "")).length,
   links: Array.from(document.querySelectorAll("a[href]")).map((a) => a.getAttribute("href") || "").slice(0, 400),
   hasViewport: !!document.querySelector('meta[name="viewport"]'),
   tel: !!document.querySelector('a[href^="tel:"]'),
@@ -219,6 +228,10 @@ function checksFor(desktop: PageFacts, phone: PageFacts, paths: string[], prefix
     { id: "alt", label: "Every image has alt text", ok: desktop.noAlt === 0, detail: desktop.noAlt ? `${desktop.noAlt} without` : undefined },
     { id: "images", label: "No broken images", ok: desktop.brokenImgs === 0, detail: desktop.brokenImgs ? `${desktop.brokenImgs} broken` : undefined },
     { id: "empty", label: "No empty sections", ok: !desktop.emptyBlocks, detail: desktop.emptyBlocks ? `${desktop.emptyBlocks} blank block${desktop.emptyBlocks === 1 ? "" : "s"}` : undefined },
+    { id: "eyebrow", label: "No small labels above the headings", ok: (desktop.eyebrows ?? 0) <= 1, detail: desktop.eyebrows ? `${desktop.eyebrows} found; remove them` : undefined },
+    { id: "accent-word", label: "The main heading is one colour and one style", ok: !desktop.accentWord, detail: desktop.accentWord ? "one word or phrase is coloured or italic; set the whole heading the same" : undefined },
+    { id: "h1-short", label: "The main heading is short", ok: (desktop.h1Words ?? 0) <= 10, detail: `${desktop.h1Words ?? 0} words; eight or fewer` },
+    { id: "dots", label: "No facts strung together with dots", ok: (desktop.dotStrings ?? 0) === 0, detail: desktop.dotStrings ? `${desktop.dotStrings} found; write them as plain lines` : undefined },
     { id: "links", label: "Every link goes to a real page", ok: broken.length === 0, detail: broken.length ? `${broken.length} dead: ${[...new Set(broken)].slice(0, 4).join(", ")}` : undefined },
     { id: "console", label: "No script errors", ok: consoleErrors.length === 0, detail: consoleErrors.length ? consoleErrors[0]!.slice(0, 120) : undefined },
     { id: "tel", label: "Tap-to-call phone link", ok: desktop.tel },

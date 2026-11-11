@@ -10,7 +10,7 @@ import { GENERIC, presetFor } from "../../../src/forge/presets";
 import { profileFor, type Profile } from "./profiles";
 import type { Intake } from "../../../src/forge/schema";
 import type { Env } from "./env";
-import { conceptById } from "./concepts";
+import { conceptById, type Draw } from "./concepts";
 import { MOTION_API } from "./motion";
 import type { SiteFacts } from "./scrape";
 
@@ -110,7 +110,7 @@ export function sitemapFor(i: Intake, suggested: string[] = []): PageSpec[] {
         "/",
         "Home",
         `At least 12 substantive sections between the header and footer, in this order:
-1. Hero: full-bleed, with the motion layer described in the design system as its background (not a photo beside the text): a headline specific to this business with an accent phrase, a one-paragraph promise, primary and secondary buttons (${p.cta.name} → ${p.cta.path}, and ${p.items.name} → ${p.items.path} or the phone), trust points.
+1. Hero: full-bleed, with the motion layer described in the design system as its background (not a photo beside the text): a headline specific to this business, one sentence of promise, primary and secondary buttons (${p.cta.name} → ${p.cta.path}, and ${p.items.name} → ${p.items.path} or the phone), trust points.
 2. Trust strip: only verified facts given to you; otherwise qualitative points without numbers. The marquee ticker may sit here.
 ${p.home.map((h, n) => `${n + 3}. ${fill(h)}`).join("\n")}
 ${p.home.length + 3}. Reviews: real reviews, or clearly-labelled sample reviews; link to /reviews.
@@ -150,7 +150,7 @@ ${p.home.length + 6}. Final call to action band.`,
       "/",
       "Home",
       `At least 12 substantive sections between the header and footer, in this order:
-1. Hero: full-bleed, with the motion layer described in the design system as its background (not a photo beside the text): niche-specific headline with an accent phrase, a one-paragraph promise, primary and secondary buttons (Get a quote → /quote, and the phone), trust points.
+1. Hero: full-bleed, with the motion layer described in the design system as its background (not a photo beside the text): niche-specific headline, one sentence of promise, primary and secondary buttons (Get a quote → /quote, and the phone), trust points.
 2. Trust strip: only verified facts (licence, years, guarantees given to you); otherwise qualitative points without numbers. The marquee ticker may sit here.
 3. Services overview: a card for each service page, each card linking to its own page (${services.map((s) => s.path).join(", ")}), plus "All services" → /services.
 4. Before and after / results: genuine paired photos only if supplied (none are paired, so use the business's own work photos as results, or clearly-marked "Your project photos appear here at launch" tiles), linking to /gallery.
@@ -311,9 +311,10 @@ export async function planPairs(env: Env, i: Intake): Promise<{ pairs: { before:
  * A Studio home page: what it must contain, and the order and layout of its scenes, which come
  * from the art direction (so two Studio sites don't share a skeleton).
  */
-export function studioHome(pages: PageSpec[], conceptId: string): string {
+export function studioHome(pages: PageSpec[], conceptId: string, draw?: Draw): string {
   const c = conceptById(conceptId);
   if (!c) return pages[0]?.brief ?? "";
+  const order = draw?.order ?? c.scenes.map((_, i) => i);
   const by = (role: PageSpec["role"], path: string) => pages.find((p) => p.role === role) ?? pages.find((p) => p.path === path);
   const index = by("index", "/services");
   const items = pages.filter((p) => (pages.some((x) => x.role === "index") ? p.role === "item" : p.path.startsWith("/services/")));
@@ -322,11 +323,11 @@ export function studioHome(pages: PageSpec[], conceptId: string): string {
   const steps = by("steps", "/process");
   return `Compose the home page as the sequence of scenes below, in this order, each laid out the way its line describes. This is the "${c.name}" art direction: do not fall back on a generic order of sections.
 
-First screen: ${c.hero}
+First screen: ${c.hero}${draw?.mirror ? "\nFor this site, mirror that composition left to right: what the description puts on the right goes on the left, and the reverse (a centred composition stays centred)." : ""}
 The primary button is "${cta?.name ?? "Get a Quote"}" → ${cta?.path ?? "/quote"}; the phone is a tel: link.
 
 Then:
-${c.scenes.map((x, n) => `${n + 2}. ${x}`).join("\n")}
+${order.map((i, n) => `${n + 2}. ${c.scenes[i]}${draw && i === draw.feature ? " Give this scene the most room on the page: it is this site's biggest moment after the first screen." : ""}`).join("\n")}
 
 What the scenes must carry between them (fit each into the scene that suits it; add one more scene in the same style only if something has nowhere to go):
 - What the business offers: every one of ${items.map((p) => `${p.name} → ${p.path}`).join("; ")}, each linking to its page, and a link to ${index?.name ?? "Services"} → ${index?.path ?? "/services"}.
@@ -396,7 +397,7 @@ Our system assembles each page as: <!doctype html><html data-theme="light|dark">
 - External resources allowed: Google Fonts (<link> to fonts.googleapis.com / fonts.gstatic.com), the image URLs you are given, and the Google map embed URL you are given (as an <iframe> with title, loading="lazy" and referrerpolicy="no-referrer-when-downgrade"). Nothing else: no frameworks, icon fonts or CDNs. Draw icons as small inline SVGs.
 - Never invent image URLs. Use only the photo links supplied (the business's own, and preview photos when given). Without photos, design with typography, colour, gradients, soft glows, inline-SVG illustrations and patterns; where a photo genuinely belongs (gallery, before/after), use a designed tile clearly labelled as a space for the business's real photos — never a bare grey box and never a fake photo.
 - Light AND dark mode: define every colour as a CSS custom property on :root for the light palette and on [data-theme="dark"] for the dark palette. Both modes must be fully designed and readable. A sun/moon toggle button in the header switches modes by setting document.documentElement.dataset.theme and saving it to localStorage under the key you are given, inside try/catch (a saved choice is applied before the page renders by our own head script).
-- The accent colour is the brand's primary colour: use it for primary buttons, accent words, icons and highlights in both modes (adjust lightness slightly per mode for contrast). Choose palettes that suit the real niche; don't default to dark mode, electric blue or yellow unless asked or clearly right.
+- The accent colour is the brand's primary colour: use it for primary buttons, icons and highlights in both modes (adjust lightness slightly per mode for contrast). Choose palettes that suit the real niche; don't default to dark mode, electric blue or yellow unless asked or clearly right.
 - Every phone number is a tel: link (US numbers as +1XXXXXXXXXX). Only show an email address if one was given.
 - Forms: our system submits every form and shows the confirmation, so never handle form submit in your script. Give every field a name attribute, a <label>, the right type and required where needed. Under each submit button add the small note: By submitting, you agree to our <a href="/privacy">Privacy Policy</a>. Style a .form-thanks confirmation box (it replaces the form after sending) and a .form-error message.
 - One <h1> per page and a sensible heading order. Visible keyboard focus. Descriptive alt text. Good contrast.
@@ -405,14 +406,20 @@ Our system assembles each page as: <!doctype html><html data-theme="light|dark">
 - A GoHighLevel chat bubble is added to the bottom-right corner of every page automatically. Keep that corner free on every screen size: no back-to-top button there; on phones the sticky "Call" button sits bottom-left (or a bar leaving the right 90px free), and nothing important sits under the bubble.
 - Content must be visible without JavaScript and without scrolling. Reveal animations may only enhance already-visible content; never start sections at opacity 0. Respect prefers-reduced-motion. Keep motion restrained: no custom cursors, WebGL or heavy effects.
 
+## The floor (never, on any page; our checks fail a page for these)
+- The tells of a machine-made page: a small label above a heading (an "eyebrow"); labels, captions, tags or nav links in tracked-out capitals (set them in the text face, sentence case, a step smaller), unless this site's art direction makes tracked capitals its own material, and then only where it says; one coloured, italic or underlined word or phrase inside a heading (a heading is one weight and one colour); facts strung together with middle dots or bullets ("Lewistown · Motel · Since 1984"); decorative status dots; an emoji used as an icon; a card inside a card; gradient text; a purple-to-blue gradient; a drawn fake browser, phone or app window; any invented number, rating, award, logo, customer name or year.
+- One idea per screen, set big. Fullness comes from scale and pictures, never from more words: about 80 words on any one screen.
+- CSS: html and body get overflow-x: clip (never hidden, never a 100vw width); grid tracks that hold pictures or long text are minmax(0, 1fr) and their children min-width: 0; never "transition: all", and animate transform and opacity only (never width, height, top or left); every interactive element has a :focus-visible style.
+- Every button and link goes somewhere real: a page from the list, a section that exists on the same page (give it the id), a tel: link or the form. The logo or business name in the header AND in the footer is a link to "/". The footer links to /privacy and /terms. No social icons unless a real profile address was given. No heading is repeated on a page.
+
 ## The quality bar (this is what "premium" means here)
 - A distinct identity per business: pick a font pairing that fits the trade and tone, never Inter or system fonts alone. Good pairings: Fraunces + Inter; Instrument Serif + Plus Jakarta Sans; Cormorant Garamond + Jost; Big Shoulders Display + Hanken Grotesk; Hedvig Letters Serif + Figtree; Bricolage Grotesque + Hanken Grotesk; Sora + Inter; Michroma + Manrope; Marcellus + Poppins; Playfair Display + Manrope.
-- Hero: eyebrow line (location · trade · since/licence if known), a big confident headline with an accent phrase in italic serif or the accent colour, a one-paragraph promise, two buttons, and 3–4 trust points with tiny icons.
+- Hero: a headline of eight words or fewer, in one weight and one colour, that says what this business does or promises; one sentence under it (twenty words at most); one primary button and at most one quieter second action; at most three short trust points. Nothing above the headline.
 - The home hero has a moving background (a video or slowly animating photos) that our system supplies. Build it as a full-bleed <section> with position:relative, overflow:hidden and a min-height of about 88vh (about 640px on phones) whose FIRST child is exactly <div class="hero-motion" aria-hidden="true"></div> (leave it empty and don't style it; our system fills and positions it), then a gradient overlay layer (position:absolute; inset:0) that keeps the text readable over any photo in both modes, then the content with position:relative and z-index:2. Inner pages keep a page hero without the motion layer.
-- Inner pages open with a page hero in the same visual language (smaller), with an eyebrow, h1, one line and a breadcrumb, and then have at least 5–6 meaningful sections written for that page — never the same generic blocks or paragraphs on every page. Vary layouts, image scales and backgrounds from section to section.
+- Inner pages open with a page hero in the same visual language (smaller), with an h1, one line and a breadcrumb, and then have at least 5–6 meaningful sections written for that page — never the same generic blocks or paragraphs on every page. Vary layouts, image scales and backgrounds from section to section.
 - 1200px max content width, generous and VARIED vertical rhythm (≈96–128px between sections on desktop, not identical padding everywhere), soft 1px borders, cards rounded 12–16px (images and big panels up to 24px), subtle shadows, hover states on every interactive element, balanced headings (text-wrap: balance).
 - The hero must work at a glance (our reviews mark these down every time): the photo or video stays recognisable, so darken only behind the text with a directional gradient, never a flat dark wash over the whole picture; the primary call to action is a clearly labelled button (rectangular or softly rounded) directly under the paragraph, the most obvious thing after the headline, never a circle, a sticker or a badge; a small label above the headline stays on one line on a phone or is left out; on a phone the first screen has at most one floating element of ours (the sticky call button), and nothing sits on top of the trust points.
-- Devices that read as "AI template" when used as wallpaper (the wallpaper test: a device on 3 or more sections is decoration, cut it back): a small caps eyebrow above every heading (use at most 2 per page), numbered 01/02/03 markers on everything (only where there is a real sequence), the same icon+heading+text card grid repeated section after section (vary the layout: a split, a full-bleed band, a list, a timeline, a single big quote), gradient text, nested cards, decorative glass blur, a coloured left stripe on cards, cards rounded like pills (32px+), hand-drawn sketchy SVG scenes standing in for photos. Tinted neutrals toward the brand hue beat flat grey or default beige. Text contrast at least 4.5:1 for body copy; body line length 65–75 characters; a type scale with clear steps (ratio ≥ 1.25); no all-caps body copy.
+- Devices that read as "AI template" when used as wallpaper (the wallpaper test: a device on 3 or more sections is decoration, cut it back): numbered 01/02/03 markers on everything (only where there is a real sequence), the same icon+heading+text card grid repeated section after section (vary the layout: a split, a full-bleed band, a list, a timeline, a single big quote), gradient text, nested cards, decorative glass blur, a coloured left stripe on cards, cards rounded like pills (32px+), hand-drawn sketchy SVG scenes standing in for photos. Tinted neutrals toward the brand hue beat flat grey or default beige. Text contrast at least 4.5:1 for body copy; body line length 65–75 characters; a type scale with clear steps (ratio ≥ 1.25); no all-caps body copy.
 - Reviews: real quotes when supplied (name + context). Otherwise clearly-labelled samples with the name "Sample review" and the note "Sample reviews — your Google reviews appear here at launch." Never invent a star rating or review count.
 - Service area: the real map embed with a readable list of the places served; never a decorative or made-up map.
 - FAQ: <details>/<summary> accordions, direct answers.
@@ -481,7 +488,7 @@ the primary colour as #rrggbb
 @@@ FONTS
 the Google Fonts <link> tags (preconnects + one stylesheet)
 @@@ CSS
-the whole site's stylesheet (no <style> tag): tokens for both modes, base, header (with a ${drop} dropdown that works on hover, keyboard focus and tap), footer, buttons, eyebrows, and every component the pages will use — home hero (with the motion layer and overlay described above), page hero with breadcrumb, marquee ticker, service cards, feature/why-us cards, process timeline, before/after and gallery tiles (including the labelled photo-space tile), map embed frame with place list, review cards, area cards, checklists, contact cards, forms (with .form-thanks, .form-error and the privacy note), FAQ accordion, CTA band, and legal pages (.legal: a readable article up to 760px wide with h1, h2, p, ul and a .legal-note callout).${index ? " Also what this kind of business needs: an opening-hours table, and a designed list for its offer (for a menu: rows of dish name, short description and an optional price slot, grouped under headings)." : ""}${style === "studio" ? " Also the Studio components this art direction needs: its display type scale, the hero composition it describes, and one component for each scene in its home page sequence (named after what it is in this direction, e.g. contents list, film strip, sign board, spec table), plus the full-screen menu overlay. Do not build components the direction rules out. Under about 60 KB." : " Under about 45 KB."}
+the whole site's stylesheet (no <style> tag): tokens for both modes, base, header (with a ${drop} dropdown that works on hover, keyboard focus and tap), footer, buttons, and every component the pages will use — home hero (with the motion layer and overlay described above), page hero with breadcrumb, marquee ticker, service cards, feature/why-us cards, process timeline, before/after and gallery tiles (including the labelled photo-space tile), map embed frame with place list, review cards, area cards, checklists, contact cards, forms (with .form-thanks, .form-error and the privacy note), FAQ accordion, CTA band, and legal pages (.legal: a readable article up to 760px wide with h1, h2, p, ul and a .legal-note callout).${index ? " Also what this kind of business needs: an opening-hours table, and a designed list for its offer (for a menu: rows of dish name, short description and an optional price slot, grouped under headings)." : ""}${style === "studio" ? " Also the Studio components this art direction needs: its display type scale, the hero composition it describes, and one component for each scene in its home page sequence (named after what it is in this direction, e.g. contents list, film strip, sign board, spec table), plus the full-screen menu overlay. Do not build components the direction rules out. Under about 60 KB." : " Under about 45 KB."}
 @@@ HEADER
 the <header> element: logo/name linking to /, the main nav (${nav}), a phone link, a "${cta?.name ?? "Get a Quote"}" button to ${cta?.path ?? "/quote"}, the theme toggle, and the mobile menu (which lists every page above except the legal ones).
 @@@ FOOTER
@@ -629,6 +636,8 @@ export interface Kit {
   style?: Style;
   /** The art direction a Studio site is held to (see concepts.ts). */
   concept?: string;
+  /** How this site was dealt within its look (see drawFor in concepts.ts); compared with later sites so they differ. */
+  draw?: string;
   /** Built on another finished site's design (its slug and version) instead of a fresh one. */
   reuse?: { slug: string; version: string };
 }
@@ -723,7 +732,7 @@ const need = (parts: Record<string, string>, names: string[]) => {
 };
 
 /** Stage 1: the design system (fonts, CSS, header, footer, script) for the given pages. */
-export async function designKit(env: Env, brief: string, pages: PageSpec[], style: Style = "standard", concept?: string): Promise<{ kit: Kit; usage: unknown }> {
+export async function designKit(env: Env, brief: string, pages: PageSpec[], style: Style = "standard", concept?: string, draw?: Draw): Promise<{ kit: Kit; usage: unknown }> {
   // Low effort: the brief already makes the design decisions explicit, and thinking is the costliest part.
   // A Studio site thinks harder about its art direction: that is where the budget goes.
   const studio = style === "studio";
@@ -754,7 +763,7 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[], styl
       components: p.COMPONENTS ?? "",
       brief,
       pages,
-      ...(studio ? { style: "studio" as const, ...(conceptById(concept) ? { concept } : {}) } : {}),
+      ...(studio ? { style: "studio" as const, ...(conceptById(concept) ? { concept } : {}), ...(draw ? { draw: draw.print } : {}) } : {}),
     },
     usage,
   };

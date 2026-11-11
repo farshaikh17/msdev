@@ -138,7 +138,7 @@ export const CONCEPTS: Concept[] = [
     blurb: "Soft shapes, arches, earthy warm colour, human touch",
     brief:
       "ORGANIC. Warm, human, tactile. Soft arched and blob-shaped image masks, overlapping cut-outs, rounded cards with generous padding, earthy warm palette (clay, sage, oat, deep forest or ink for text, one bright accent), subtle paper or linen texture, hand-drawn underline and squiggle accents drawn as small inline SVG, a friendly soft display face (Fraunces soft, Young Serif, Gloock, Bricolage Grotesque) with a humanist text face (Figtree, Nunito Sans). Asymmetric layouts with curved section dividers. Gentle motion: floating shapes, soft parallax. Do NOT use sharp 90-degree boxes, neon, monospace labels or giant condensed type.",
-    hero: "Soft and hand-made, NOT a dark photo with text on it. A warm, light background colour. The headline in the soft serif on the left with one key word underlined by a hand-drawn squiggle (inline SVG). On the right, a large arched picture frame with a smaller round picture overlapping its lower corner; the moving picture plays inside the arch. Two or three soft floating shapes drift slowly. A rounded button and a quiet text link. A curved bottom edge leads into the next section.",
+    hero: "Soft and hand-made, NOT a dark photo with text on it. A warm, light background colour. The headline in the soft serif on the left with a hand-drawn squiggle (inline SVG) beneath the whole last line. On the right, a large arched picture frame with a smaller round picture overlapping its lower corner; the moving picture plays inside the arch. Two or three soft floating shapes drift slowly. A rounded button and a quiet text link. A curved bottom edge leads into the next section.",
     scenes: [
       "What the business does as a winding path: the items alternate left and right along a drawn dashed line, each with a small arched picture and a short paragraph.",
       "A letter from the business: the story set as a personal note beside an arched portrait, ending with the owner's or business's name.",
@@ -182,7 +182,7 @@ export const CONCEPTS: Concept[] = [
     blurb: "Bright colour, chunky rounded type, friendly shapes",
     brief:
       "PLAYFUL POP. Friendly and bright. Chunky rounded display type (Unbounded, Dela Gothic One, Fredoka, Bricolage Grotesque extra bold) with a simple rounded sans for text; a cheerful multi-colour palette (the brand colour plus three supporting brights on a warm white or deep violet), big pill buttons, sticker shapes, wobbling blobs and stars drawn as inline SVG, emoji-free iconography, cards that tilt and bounce on hover, rounded photo frames. Generous, easy copy. Motion is bouncy: magnetic buttons, tilt, marquees. Do NOT use serifs, thin type, hairline rules or a serious dark mood.",
-    hero: "Bright and bouncy, NOT a dark photo with text on it. A saturated flat background colour. The headline centred in chunky rounded type, with two or three of its words set inside differently coloured pills. Stickers, stars and blobs (inline SVG) float around it at different depths. The picture sits in a rounded blob-shaped frame that tilts with the pointer; the moving picture plays inside it. One big pill button that follows the pointer.",
+    hero: "Bright and bouncy, NOT a dark photo with text on it. A saturated flat background colour. The headline centred in chunky rounded type, set whole on a slightly tilted sticker-shaped block of a second bright colour. Stickers, stars and blobs (inline SVG) float around it at different depths. The picture sits in a rounded blob-shaped frame that tilts with the pointer; the moving picture plays inside it. One big pill button that follows the pointer.",
     scenes: [
       "A bouncing marquee of words and small drawn icons.",
       "The offer as a grid of chunky cards, each a different bright colour with a big simple drawn icon, which tilt and lift on hover.",
@@ -291,19 +291,77 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
-/** The concept for a Studio build: the one asked for, else one that suits the trade, varied by site. */
-export function pickConcept(
-  intake: {
-    concept?: string;
-    industry?: string;
-    businessName?: string;
-    services?: string;
-  },
-  slug: string,
-): Concept {
+/**
+ * The concept for a Studio build: the one asked for, else one that suits the trade, varied by site,
+ * and not one the account's last two Studio sites used (when the trade leaves a choice).
+ */
+export function pickConcept(intake: { concept?: string; industry?: string; businessName?: string; services?: string }, slug: string, recent: string[] = []): Concept {
   const asked = conceptById(intake.concept);
   if (asked) return asked;
   const text = `${intake.industry ?? ""} ${intake.businessName ?? ""} ${intake.services ?? ""}`;
   const shortlist = SUITS.find(([re]) => re.test(text))?.[1] ?? CONCEPT_IDS;
-  return conceptById(shortlist[hash(slug) % shortlist.length])!;
+  const fresh = shortlist.filter((id) => !recent.slice(0, 2).includes(id));
+  const from = fresh.length ? fresh : shortlist;
+  return conceptById(from[hash(slug) % from.length])!;
+}
+
+/**
+ * The deal for one site within its look. A look is a material (type, colour, picture frames, its
+ * own scenes); the deal decides how this particular page is put together from it, so two sites in
+ * the same look don't share a skeleton: the order of the middle scenes, which one is made the
+ * biggest moment, whether the first screen is mirrored, and the kind of menu and footer.
+ */
+export interface Draw {
+  /** Scene indexes in the order to build them (the first and last scenes keep their places). */
+  order: number[];
+  /** The scene given the most room. */
+  feature: number;
+  mirror: boolean;
+  nav: string;
+  footer: string;
+  /** What makes two deals the same: compared against the account's recent sites. */
+  print: string;
+}
+
+const NAVS = [
+  "a floating bar inset from the edges",
+  "a full-width bar with one hairline under it",
+  "only the name on the left and a Menu button on the right, with every link in the full-screen menu",
+];
+const FOOTERS = [
+  "tall, led by the business name set large above the link columns",
+  "one compact band of columns",
+  "a single centred column: the name, the links in a row, the details beneath",
+];
+
+export function drawFor(c: Concept, seed: string, recent: string[] = []): Draw {
+  const last = c.scenes.length - 1;
+  let draw: Draw | null = null;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    let h = hash(`${seed}:${c.id}:${attempt}`);
+    const next = (n: number) => {
+      h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
+      h = Math.imul(h ^ (h >>> 13), 3266489917) >>> 0;
+      return ((h ^ (h >>> 16)) >>> 0) % n;
+    };
+    const middle = Array.from({ length: last - 1 }, (_, i) => i + 1);
+    for (let i = middle.length - 1; i > 0; i--) {
+      const j = next(i + 1);
+      [middle[i], middle[j]] = [middle[j]!, middle[i]!];
+    }
+    const order = [0, ...middle, last];
+    const feature = middle[next(middle.length)]!;
+    const mirror = next(2) === 1;
+    const nav = next(NAVS.length);
+    const footer = next(FOOTERS.length);
+    const print = `${c.id}:${order.join("")}:${feature}:${mirror ? 1 : 0}:${nav}${footer}`;
+    draw = { order, feature, mirror, nav: NAVS[nav]!, footer: FOOTERS[footer]!, print };
+    // Different enough from a recent site in the same look: not the same order, and not the same opening scenes with the same mirroring.
+    const clash = recent.some((r) => {
+      const [id, o, , m] = r.split(":");
+      return id === c.id && (o === order.join("") || (o?.slice(0, 4) === order.join("").slice(0, 4) && m === (mirror ? "1" : "0")));
+    });
+    if (!clash) break;
+  }
+  return draw!;
 }

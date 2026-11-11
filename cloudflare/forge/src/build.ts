@@ -10,6 +10,7 @@ import {
   getKit,
   getPage,
   pairsDue,
+  recentLooks,
   saveChrome,
   saveQa,
   setTrade,
@@ -33,7 +34,7 @@ import { adaptKit, fixChrome, designKit, designSitePage, factsBlock, Fatal, page
 import type { BuildJob, Env } from "./env";
 import { beforeAfterImages, previewImages } from "./images";
 import { privacyPage, termsPage } from "./legal";
-import { pickConcept } from "./concepts";
+import { drawFor, pickConcept } from "./concepts";
 import { mergeIntake } from "./places";
 import { readWebsite } from "./scrape";
 import { buildCost, chargeBuild, getTenant, recordBuildCost, type Tenant } from "./tenants";
@@ -240,9 +241,13 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       });
       const pages = sitemapFor(intake, plan?.services);
       // A Studio home page takes its order and layouts from its art direction, not the standard section list.
-      const concept = intake.style === "studio" ? pickConcept(intake, slug).id : undefined;
-      if (concept && pages[0]) pages[0] = { ...pages[0], brief: studioHome(pages, concept) };
-      const facts = factsBlock(intake, site, slug, plan, previews, pairs) + profileNote(intake);
+      const looks = intake.style === "studio" ? await recentLooks(env, demo.tenantId, slug).catch(() => []) : [];
+      const look = intake.style === "studio" ? pickConcept(intake, slug, looks.map((l) => l.concept).filter(Boolean)) : undefined;
+      const concept = look?.id;
+      // The deal within the look: scene order, the biggest moment, mirroring, menu and footer, unlike the account's recent sites.
+      const draw = look ? drawFor(look, slug, looks.map((l) => l.draw).filter(Boolean)) : undefined;
+      if (concept && pages[0]) pages[0] = { ...pages[0], brief: studioHome(pages, concept, draw) };
+      const facts = factsBlock(intake, site, slug, plan, previews, pairs) + profileNote(intake) + (draw ? `\n\nFor this site the menu is ${draw.nav}, and the footer is ${draw.footer}.` : "");
       // Built on another of the account's finished sites: reuse its design (far cheaper than a new one).
       let base: { slug: string; version: string; kit: Kit } | null = null;
       if (intake.reuseFrom && intake.reuseFrom !== slug) {
@@ -252,7 +257,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       }
       const { kit, usage } = base
         ? await adaptKit(env, base.kit, { slug: base.slug, version: base.version }, facts, pages)
-        : await designKit(env, facts, pages, intake.style, concept);
+        : await designKit(env, facts, pages, intake.style, concept, draw);
       // The planning call is counted with the design.
       const u = usage as Record<string, unknown>;
       await saveKit(env, slug, version, kit, { ...u, cost_usd: (Number(u.cost_usd) || 0) + (plan?.cost ?? 0) });

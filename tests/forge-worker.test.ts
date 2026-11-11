@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { Intake } from "@/forge/schema";
 import { profileFor } from "../cloudflare/forge/src/profiles";
-import { CONCEPTS } from "../cloudflare/forge/src/concepts";
+import { CONCEPTS, drawFor, pickConcept } from "../cloudflare/forge/src/concepts";
 import { costOf, CREDIT_MARKER, factsBlock, mapEmbed, parseParts, profileNote, sitemapFor, studioHome, systemFor, tidyCss, type Kit } from "../cloudflare/forge/src/designer";
 import { clearAttempts, makeSlug, pruneThrottle, recordAttempt, throttled } from "../cloudflare/forge/src/db";
 import { formatPhone, mergeIntake, parseMapsUrl, pickBusiness } from "../cloudflare/forge/src/places";
@@ -83,6 +83,36 @@ describe("Forge worker — multi-page sites", () => {
     expect(uses(/data-stack/)).toEqual(["kinetic"]);
     // The old one-recipe-for-all wording is gone.
     expect(systemFor("studio", "luxe")).not.toContain("use most of these on the home page");
+  });
+
+  it("deals each site its own structure within a look, and avoids what the account built recently", () => {
+    const look = CONCEPTS.find((c) => c.id === "cinematic")!;
+    const last = look.scenes.length - 1;
+    const a = drawFor(look, "el-rodeo-1a2b");
+    // The opening and closing scenes keep their places; every scene is used exactly once.
+    expect(a.order[0]).toBe(0);
+    expect(a.order.at(-1)).toBe(last);
+    expect([...a.order].sort((x, y) => x - y)).toEqual(look.scenes.map((_, i) => i));
+    expect(a.order).toContain(a.feature);
+    // The same site always gets the same deal; another site in the same look gets a different one once the first is on record.
+    expect(drawFor(look, "el-rodeo-1a2b").print).toBe(a.print);
+    const seen = [a.print];
+    for (const slug of ["la-playa-9f8e", "casa-luna-77aa", "mar-y-sol-31c0", "el-faro-5d5d"]) {
+      const d = drawFor(look, slug, seen);
+      expect(seen.map((p) => p.split(":")[1])).not.toContain(d.print.split(":")[1]);
+      seen.push(d.print);
+    }
+    // The deal reaches the page plan: the dealt order, the biggest moment and the mirroring are all in it.
+    const pages = sitemapFor(Intake.parse({ businessName: "El Rodeo", industry: "Mexican Restaurant" }), ["Tacos", "Seafood Platters", "Margaritas", "Appetizers"]);
+    const plan = studioHome(pages, "cinematic", a);
+    const at = a.order.map((i) => plan.indexOf(look.scenes[i]!));
+    expect(at.every((x) => x > 0)).toBe(true);
+    expect([...at].sort((x, y) => x - y)).toEqual(at);
+    expect(plan).toContain("biggest moment");
+    // With a choice of looks for the trade, the two most recent are passed over.
+    const first = pickConcept({ industry: "Restaurant" }, "x-1").id;
+    expect(pickConcept({ industry: "Restaurant" }, "x-1", [first]).id).not.toBe(first);
+    expect(pickConcept({ industry: "Restaurant", concept: "luxe" }, "x-1", ["luxe"]).id).toBe("luxe");
   });
 
   it("caps service pages at six", () => {
