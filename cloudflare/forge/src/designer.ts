@@ -153,7 +153,7 @@ ${p.home.length + 6}. Final call to action band.`,
 1. Hero: full-bleed, with the motion layer described in the design system as its background (not a photo beside the text): niche-specific headline, one sentence of promise, primary and secondary buttons (Get a quote → /quote, and the phone), trust points.
 2. Trust strip: only verified facts (licence, years, guarantees given to you); otherwise qualitative points without numbers. The marquee ticker may sit here.
 3. Services overview: a card for each service page, each card linking to its own page (${services.map((s) => s.path).join(", ")}), plus "All services" → /services.
-4. Before and after / results: genuine paired photos only if supplied (none are paired, so use the business's own work photos as results, or clearly-marked "Your project photos appear here at launch" tiles), linking to /gallery.
+4. Before and after / results: genuine paired photos only if supplied (none are paired unless the facts list illustrative pairs, so show results with the business's own photos or the preview photos; never an empty photo box), linking to /gallery.
 5. Why choose us: 4–6 specific, supportable benefits.
 6. About the business: a short introduction to the company and the people behind it, linking to /about.
 7. How it works: 3–5 steps from inquiry to completion, linking to /process.
@@ -189,7 +189,7 @@ ${p.home.length + 6}. Final call to action band.`,
     ai(
       "/gallery",
       "Our Work",
-      "Page hero; a gallery grid of the business's own photos (only the supplied photo links) with captions, or, without photos, a designed grid of clearly-marked tiles 'Project photo coming soon — your photos appear here at launch'; a before/after area clearly marked for genuine pairs to be added; the kinds of projects the business takes on; a review; closing CTA.",
+      "Page hero; a gallery grid of the business's own photos (only the supplied photo links) with captions, or, without them, of the preview photos (every one of them, at varied sizes, with one small note for the whole grid: 'Sample photos. Your own photos replace these at launch'); the illustrative before/after pairs if the facts list any (no before/after area otherwise); the kinds of projects the business takes on; a review; closing CTA.",
     ),
     ai(
       "/reviews",
@@ -268,7 +268,7 @@ What kind of business this is, in 1 to 3 words, title case (e.g. Restaurant, Plu
 @@@ SERVICES
 4 to 6 things this business offers, one per line (2–4 words each, title case). For a trade or service business these are its services; for a restaurant, bar or cafe its menu sections (e.g. Burgers & Sandwiches, Steaks, Starters, Drinks); for a gym or studio its classes; for a shop its product ranges; for a clinic its treatments. Use the ones given or on their website when there are any; otherwise what a business of this kind typically offers.
 @@@ PHOTOS
-6 photo descriptions for an image generator, one per line (15–30 words each): realistic scenes for this business's website. The first is the hero picture, and it must show the thing customers come for, close up and at its best: for a restaurant, bar or cafe the signature dish or drink being made or served (never an empty room or a building); for a trade the work being done by a person; for a salon or clinic the result or the care being given; for a place to stay the room at its most inviting. The second and third are also shown large behind the first screen, so make them equally strong and on the same subject. The rest show the main services, the setting and a happy customer moment. Concrete and visual (subject, setting, light), e.g. "A wildlife technician in uniform inspecting a roof vent on a Florida home at golden hour, ladder against the wall". No text, signs or brand names in the scene.
+8 photo descriptions for an image generator, one per line (15–30 words each): realistic scenes for this business's website. The first is the hero picture, and it must show the thing customers come for, close up and at its best: for a restaurant, bar or cafe the signature dish or drink being made or served (never an empty room or a building); for a trade the work being done by a person; for a salon or clinic the result or the care being given; for a place to stay the room at its most inviting. The second and third are also shown large behind the first screen, so make them equally strong and on the same subject. The rest show the main services, the setting and a happy customer moment. Concrete and visual (subject, setting, light), e.g. "A wildlife technician in uniform inspecting a roof vent on a Florida home at golden hour, ladder against the wall". No text, signs or brand names in the scene.
 ${PAIRS_PROMPT}
 
 ${facts}`,
@@ -288,7 +288,7 @@ ${facts}`,
     .flatMap((m) => (m ? [{ before: m[1]!.slice(0, 300), after: m[2]!.slice(0, 300) }] : []))
     .slice(0, 2);
   const trade = lines(p.TRADE)[0]?.replace(/[^\p{L}\p{N} &\-/']/gu, "").trim().slice(0, 40);
-  return { services: lines(p.SERVICES).filter((l) => l.length <= 60).slice(0, 6), imagePrompts: lines(p.PHOTOS).slice(0, 6), pairs, ...(trade ? { trade } : {}), cost: Number(usage.cost_usd) || 0 };
+  return { services: lines(p.SERVICES).filter((l) => l.length <= 60).slice(0, 6), imagePrompts: lines(p.PHOTOS).slice(0, 8), pairs, ...(trade ? { trade } : {}), cost: Number(usage.cost_usd) || 0 };
 }
 
 const PAIRS_PROMPT = `@@@ PAIRS
@@ -395,7 +395,7 @@ Our system assembles each page as: <!doctype html><html data-theme="light|dark">
 
 ## Technical rules (must follow)
 - External resources allowed: Google Fonts (<link> to fonts.googleapis.com / fonts.gstatic.com), the image URLs you are given, and the Google map embed URL you are given (as an <iframe> with title, loading="lazy" and referrerpolicy="no-referrer-when-downgrade"). Nothing else: no frameworks, icon fonts or CDNs. Draw icons as small inline SVGs.
-- Never invent image URLs. Use only the photo links supplied (the business's own, and preview photos when given). Without photos, design with typography, colour, gradients, soft glows, inline-SVG illustrations and patterns; where a photo genuinely belongs (gallery, before/after), use a designed tile clearly labelled as a space for the business's real photos — never a bare grey box and never a fake photo.
+- Never invent image URLs. Use only the photo links supplied (the business's own, and preview photos when given). Every picture frame on every page holds a real picture from those links. NEVER draw an empty photo box, a camera icon, a grey tile or a 'your photos appear here' / 'photo coming soon' / 'space for your photos' placeholder, anywhere: if you run out of different photos, use one again with a different crop (object-position) or make the layout need fewer pictures. Only when no photo links were supplied at all, design that area with typography, colour and pattern instead of a picture frame.
 - Light AND dark mode: define every colour as a CSS custom property on :root for the light palette and on [data-theme="dark"] for the dark palette. Both modes must be fully designed and readable. A sun/moon toggle button in the header switches modes by setting document.documentElement.dataset.theme and saving it to localStorage under the key you are given, inside try/catch (a saved choice is applied before the page renders by our own head script).
 - The accent colour is the brand's primary colour: use it for primary buttons, icons and highlights in both modes (adjust lightness slightly per mode for contrast). Choose palettes that suit the real niche; don't default to dark mode, electric blue or yellow unless asked or clearly right.
 - Every phone number is a tel: link (US numbers as +1XXXXXXXXXX). Only show an email address if one was given.
@@ -490,7 +490,7 @@ the primary colour as #rrggbb
 @@@ FONTS
 the Google Fonts <link> tags (preconnects + one stylesheet)
 @@@ CSS
-the whole site's stylesheet (no <style> tag): tokens for both modes, base, header (with a ${drop} dropdown that works on hover, keyboard focus and tap), footer, buttons, and every component the pages will use — home hero (with the motion layer and overlay described above), page hero with breadcrumb, marquee ticker, service cards, feature/why-us cards, process timeline, before/after and gallery tiles (including the labelled photo-space tile), map embed frame with place list, review cards, area cards, checklists, contact cards, forms (with .form-thanks, .form-error and the privacy note), FAQ accordion, CTA band, and legal pages (.legal: a readable article up to 760px wide with h1, h2, p, ul and a .legal-note callout).${index ? " Also what this kind of business needs: an opening-hours table, and a designed list for its offer (for a menu: rows of dish name, short description and an optional price slot, grouped under headings)." : ""}${style === "studio" ? " Also the Studio components this art direction needs: its display type scale, the hero composition it describes, and one component for each scene in its home page sequence (named after what it is in this direction, e.g. contents list, film strip, sign board, spec table), plus the full-screen menu overlay. Do not build components the direction rules out. Under about 60 KB." : " Under about 45 KB."}
+the whole site's stylesheet (no <style> tag): tokens for both modes, base, header (with a ${drop} dropdown that works on hover, keyboard focus and tap), footer, buttons, and every component the pages will use — home hero (with the motion layer and overlay described above), page hero with breadcrumb, marquee ticker, service cards, feature/why-us cards, process timeline, before/after and gallery tiles (always holding a photograph: there is no empty photo-space tile), map embed frame with place list, review cards, area cards, checklists, contact cards, forms (with .form-thanks, .form-error and the privacy note), FAQ accordion, CTA band, and legal pages (.legal: a readable article up to 760px wide with h1, h2, p, ul and a .legal-note callout).${index ? " Also what this kind of business needs: an opening-hours table, and a designed list for its offer (for a menu: rows of dish name, short description and an optional price slot, grouped under headings)." : ""}${style === "studio" ? " Also the Studio components this art direction needs: its display type scale, the hero composition it describes, and one component for each scene in its home page sequence (named after what it is in this direction, e.g. contents list, film strip, sign board, spec table), plus the full-screen menu overlay. Do not build components the direction rules out. Under about 60 KB." : " Under about 45 KB."}
 @@@ HEADER
 the <header> element: logo/name linking to /, the main nav (${nav}), a phone link, a "${cta?.name ?? "Get a Quote"}" button to ${cta?.path ?? "/quote"}, the theme toggle, and the mobile menu (which lists every page above except the legal ones).
 @@@ FOOTER
@@ -591,12 +591,12 @@ export function factsBlock(i: Intake, site: SiteFacts | null, slug: string, plan
   lines.push(
     photos.length
       ? `The business's own photos (pick the best, skip any that look like logos or tiny graphics; use these in the gallery and anywhere showing their work):\n${[...new Set(photos)].slice(0, 20).map((u) => `- ${u}`).join("\n")}`
-      : "The business's own photos: none. In the gallery and before/after, use clearly-labelled 'your photos appear here' tiles.",
+      : "The business's own photos: none. Fill every picture frame with the preview photos below (never an empty photo box or a 'photos appear here' placeholder).",
   );
   if (pairs.length) lines.push(pairsRule(pairs));
   if (previews.length)
     lines.push(
-      `Preview photos made for this site (1024x768; the first is the hero shot). Use them generously: the hero, service cards and service pages, about and section imagery, with object-fit: cover. They are illustrative, so never present them as this business's own projects or team; in the gallery you may show them as clearly labelled "Sample photo" tiles (never captioned as a real job); give each a descriptive alt:\n${previews.map((p) => `- ${p.url} — ${p.description}`).join("\n")}`,
+      `Preview photos made for this site (1024x768; the first is the hero shot). Use them generously: the hero, service cards and service pages, about and section imagery, with object-fit: cover. They are illustrative, so never present them as this business's own projects or team; in the gallery show all of them, with one small note for the grid ("Sample photos. Your own photos replace these at launch") rather than a label on every tile, and never caption one as a real job; they fill every picture frame on the site, so use each more than once (with a different crop) rather than leave a frame empty; give each a descriptive alt:\n${previews.map((p) => `- ${p.url} — ${p.description}`).join("\n")}`,
     );
   if (i.logoUrl) lines.push(`Logo image: ${i.logoUrl}`);
   const map = mapEmbed(i);

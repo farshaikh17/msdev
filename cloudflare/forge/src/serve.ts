@@ -66,6 +66,7 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
   let current: string | null = null;
   let motion = "";
   let ogImage: string | null = null;
+  let photos: string[] = [];
   let ogTitle = `${demo.intake.businessName}${demo.content.industry ? ` | ${demo.content.industry}` : ""}${demo.intake.city ? ` in ${demo.intake.city}` : ""}`;
   let ogDesc = `A new website for ${demo.intake.businessName}.`;
   if (demo.liveVersion) {
@@ -79,6 +80,7 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
     accent = kit.accent || demo.intake.primaryColor;
     current = path;
     const names = await imageNames(env, slug, demo.liveVersion);
+    photos = names.filter((n) => /^photo-\d+\.jpg$/.test(n)).map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`);
     ogImage = names.includes("og.jpg") ? "og.jpg" : names.includes("photo-1.jpg") ? "photo-1.jpg" : null;
     if (ogImage) ogImage = new URL(`${prefix}/_img/${demo.liveVersion}/${ogImage}`, req.url).toString();
     ogTitle = page.title;
@@ -107,6 +109,7 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
     widget,
     leadUrl: `${prefix}/_lead`,
     heroMotion: motion,
+    photos,
     legacyHero: !!motion && !html.includes('class="hero-motion"'),
     og: { title: ogTitle, description: ogDesc, url: pageUrl.toString(), image: ogImage },
   });

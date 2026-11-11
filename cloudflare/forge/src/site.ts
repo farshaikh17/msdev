@@ -131,7 +131,7 @@ export function ogHtml(og: OgTags): string {
   }`;
 }
 
-export function finish(res: Response, opts: { prefix: string; current: string | null; widget: string; leadUrl: string; heroMotion?: string; legacyHero?: boolean; og?: OgTags }): Response {
+export function finish(res: Response, opts: { prefix: string; current: string | null; widget: string; leadUrl: string; heroMotion?: string; legacyHero?: boolean; og?: OgTags; photos?: string[] }): Response {
   const local = (v: string | null) => !!v && v.startsWith("/") && !v.startsWith("//");
   const move = (v: string) => {
     const [, path, rest] = v.match(/^([^?#]*)(.*)$/)!;
@@ -169,6 +169,8 @@ export function finish(res: Response, opts: { prefix: string; current: string | 
     r = r.on(".hero-motion", { element: (e) => fill(e, false) });
     if (opts.legacyHero) r = r.on(LEGACY_HERO_BG, { element: (e) => fill(e, true) });
   }
-  r = r.on("body", { element: (e) => e.append(formScript(opts.leadUrl) + opts.widget, { html: true }) });
+  // The site's own photo links, for the guard that fills any empty photo box left on a page.
+  const fill = opts.photos?.length ? `<script>window.__fgFill&&window.__fgFill(${JSON.stringify(opts.photos).replace(/</g, "\\u003c")})</script>` : "";
+  r = r.on("body", { element: (e) => e.append(fill + formScript(opts.leadUrl) + opts.widget, { html: true }) });
   return r.transform(res);
 }

@@ -42,6 +42,16 @@ describe("the QA lint", () => {
     expect(lintSite(kit(), specs, good, { phone: "(305) 555-0100" })).toEqual([]);
   });
 
+  it("no empty photo boxes: every wording of the placeholder is caught, and notes about samples are not", () => {
+    const tile = (words: string) => `<main><h1>Acme</h1><div class="photo-space"><svg></svg><p>${words}</p></div><form></form></main>`;
+    for (const words of ["Your photos appear here", "Project photo coming soon — your photos appear here at launch", "Space for your photos", "Real shop photos go here at launch", "Your before photo appears here"])
+      expect(rules(kit(), withHome(tile(words))), words).toContain("/:pictures");
+    for (const words of ["Sample photos. Your own photos replace these at launch", "Sample reviews — your Google reviews appear here at launch.", "Photos of the shop"])
+      expect(rules(kit(), withHome(tile(words))), words).not.toContain("/:pictures");
+    const found = lintSite(kit(), specs, withHome(tile("Your photos appear here") + tile("Space for your photos")));
+    expect(found.find((i) => i.rule === "pictures")!.what).toContain("2 empty photo boxes");
+  });
+
   it("the logo must link home, in the header and in the footer", () => {
     expect(rules(kit({ header: '<header><span class="logo">Acme</span><a href="/services">Services</a></header>' }))).toContain("site:logo");
     expect(rules(kit({ footer: '<footer><img src="logo.png" alt="Acme"><a href="/privacy">Privacy</a><a href="/terms">Terms</a></footer>' }))).toContain("site:logo");

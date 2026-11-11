@@ -18,9 +18,10 @@ export interface QaIssue {
   what: string;
 }
 
-export type QaRule = "logo" | "footer-links" | "legal" | "dead-link" | "dead-anchor" | "button" | "social" | "heading-twice" | "heading-empty" | "h1" | "title" | "form" | "phone";
+export type QaRule = "pictures" | "logo" | "footer-links" | "legal" | "dead-link" | "dead-anchor" | "button" | "social" | "heading-twice" | "heading-empty" | "h1" | "title" | "form" | "phone";
 
 export const QA_RULES: Record<QaRule, string> = {
+  pictures: "Every picture frame holds a picture (no empty photo boxes)",
   logo: "Logo links to the home page (header and footer)",
   "footer-links": "Every footer link goes to the right page",
   legal: "Privacy Policy and Terms are in the footer and open",
@@ -73,6 +74,9 @@ function links(html: string): Link[] {
   }
   return out;
 }
+
+/** The wording of an empty photo box ("Your photos appear here", "Space for your photos", "Photo coming soon"). */
+export const EMPTY_PHOTO = /(photos?|pictures?|images?)\b[^.!?<]{0,60}\b(appears?|go|goes|added)\b[^.!?<]{0,20}\bhere|space for (your|real|the)\b[^.!?<]{0,20}(photos?|pictures?)|(photos?|pictures?) coming soon/i;
 
 const SOCIAL = /\b(facebook|instagram|twitter|linkedin|pinterest|tiktok|youtube|yelp|whatsapp|snapchat|threads)\b|^(x|fb|ig|social( link)?)$/i;
 const isSocial = (l: Link) => SOCIAL.test(l.label) || SOCIAL.test(l.tag) || /(facebook|instagram|twitter|x|linkedin|pinterest|tiktok|youtube)\.com/i.test(l.href ?? "");
@@ -137,6 +141,8 @@ export function lintSite(kit: Kit, specs: PageSpec[], pages: { path: string; pag
     if (!spec) continue;
     const ids = idsIn(page.body);
     checkLinks(path, page.body, ids, "dead-link");
+    const empty = (page.body.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, " ").match(new RegExp(EMPTY_PHOTO.source, "gi")) ?? []).length;
+    if (empty) add(path, "pictures", `The page has ${empty} empty photo box${empty === 1 ? "" : "es"} ("photos appear here" placeholders). Put one of the site's photos (listed in the business facts) in each, as an <img> with object-fit: cover and a descriptive alt, using different photos or crops; remove the placeholder icon and wording. An empty before/after area with no pair of pictures is removed entirely.`);
     const heads = [...page.body.matchAll(/<h([1-3])\b[^>]*>([\s\S]*?)<\/h\1>/gi)].map((m) => ({ level: Number(m[1]), text: text(m[2] ?? "") }));
     const h1 = heads.filter((h) => h.level === 1).length;
     if (h1 !== 1) add(path, "h1", `The page has ${h1} main headings (h1); it needs exactly one.`);
@@ -189,6 +195,8 @@ export function qaFixHtml(html: string, footer: { hasPrivacy: boolean; hasTerms:
 
 export const QA_CSS = `.fg-legal{text-align:center;font-size:.85rem;opacity:.85;margin:14px 0 0}.fg-legal a{color:inherit;text-decoration:underline;text-underline-offset:3px}
 main img[data-fg-zoom]{cursor:zoom-in}
+[data-fg-filled]{position:relative;overflow:hidden;padding:0!important}[data-fg-filled]>img{display:block;width:100%;height:100%;min-height:200px;object-fit:cover}
+[data-fg-filled]>span{position:absolute;left:10px;bottom:10px;font:600 11px/1 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:5px 8px;border-radius:4px}
 .fg-zoom{position:fixed;inset:0;z-index:2147483640;background:rgba(8,10,14,.92);display:grid;place-items:center;padding:4vmin;cursor:zoom-out;opacity:0;transition:opacity .2s}
 .fg-zoom.on{opacity:1}.fg-zoom img{max-width:100%;max-height:92vh;border-radius:8px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
 .fg-zoom button{position:absolute;top:16px;right:16px;width:44px;height:44px;border-radius:50%;border:0;background:#fff;color:#111;font:600 20px/1 system-ui,sans-serif;cursor:pointer}
@@ -224,4 +232,18 @@ var big=document.createElement("img");big.src=i.currentSrc||i.src;big.alt=i.alt|
 o.appendChild(big);o.appendChild(b);document.body.appendChild(o);requestAnimationFrame(function(){o.classList.add("on")});b.focus();
 function close(){o.remove();document.removeEventListener("keydown",key)}function key(k){if(k.key==="Escape")close()}
 o.addEventListener("click",close);document.addEventListener("keydown",key)});
-}catch(x){}})();`;
+}catch(x){}})();
+/* Any empty photo box left on a page ("Your photos appear here") is filled with one of the site's photos. */
+window.__fgFill=function(urls){try{if(!urls||!urls.length)return;
+var P=/(photos?|pictures?|images?)\\b[^.!?]{0,60}\\b(appears?|go|goes|added)\\b[^.!?]{0,20}\\bhere|space for (your|real|the)\\b[^.!?]{0,20}(photos?|pictures?)|(photos?|pictures?) coming soon/i;
+var abs=function(u){try{return new URL(u,location.href).href}catch(e){return u}},used={};
+[].forEach.call(document.images,function(i){used[i.currentSrc||i.src]=1});
+var pool=urls.filter(function(u){return !used[abs(u)]}).concat(urls),k=0,done=[];
+[].slice.call(document.querySelectorAll("main p,main span,main div,main figcaption,main h3,main h4,main small,main strong")).forEach(function(el){
+var t=(el.textContent||"").trim();if(!t||t.length>170||!P.test(t)||/before|after|review/i.test(t))return;
+var box=el;while(box.parentElement&&!/^(MAIN|SECTION|ARTICLE|BODY)$/.test(box.parentElement.tagName)&&(box.parentElement.textContent||"").trim().length<=t.length+110&&!box.parentElement.querySelector("img,video,iframe,form,a[href]"))box=box.parentElement;
+if(box.querySelector("img,video")||done.indexOf(box)>=0||done.some(function(d){return d.contains(box)}))return;done.push(box);
+var img=document.createElement("img");img.src=pool[k++%pool.length];img.alt="Sample photo";img.loading="lazy";img.setAttribute("data-fg-zoom","");
+var tag=document.createElement("span");tag.textContent="Sample photo";
+box.innerHTML="";box.setAttribute("data-fg-filled","");box.appendChild(img);box.appendChild(tag)});
+}catch(x){}};`;

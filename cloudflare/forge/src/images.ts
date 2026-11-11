@@ -54,7 +54,7 @@ async function generate(env: Env, description: string, opts: { reference?: Uint8
 /** One image per description, generated side by side; failures are left out. */
 export async function previewImages(env: Env, descriptions: string[]): Promise<PreviewImage[]> {
   if (!env.AI || !descriptions.length) return [];
-  const wanted = descriptions.slice(0, 6);
+  const wanted = descriptions.slice(0, 8);
   // Past today's allowance the site is designed with fewer (or no) photos rather than risk a bill.
   const made = await Promise.all(wanted.map(async (d) => ((await spendImages(env, 1)) ? generate(env, d) : null)));
   return made.flatMap((bytes, n) => (bytes ? [{ name: `photo-${n + 1}.jpg`, description: descriptions[n], bytes }] : []));

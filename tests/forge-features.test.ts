@@ -545,7 +545,7 @@ describe("the QA standards pass", () => {
     expect((await getKit(h.env, slug, version))!.footer).toContain('<a href="/">Bravo</a>');
     expect((await getPage(h.env, slug, version, "/about"))!.body).toContain("REPAIRED");
     const shown = await html(await call(h, `/demos/${slug}`, { cookie: b.cookie }));
-    expect(shown).toContain("QA standards: all 13 met");
+    expect(shown).toContain("QA standards: all 14 met");
     expect(shown).toContain("repaired 2 places automatically");
   });
 
