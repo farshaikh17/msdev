@@ -76,12 +76,16 @@ describe("Studio media", () => {
   it("makes a clip with the best model, falls back on failure, and stops at once without credits", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(new Uint8Array([1, 2, 3])));
     const calls: string[] = [];
-    const ok = { AI: { run: async (m: string) => (calls.push(m), m.startsWith("minimax") ? { result: { status: "Fail" } } : { state: "Completed", result: { video: "https://x/v.mp4" } }) } };
+    // Off by default: nothing is asked of any model.
+    const off = { AI: { run: vi.fn() } };
+    expect(await makeClip(off as never, new Uint8Array([9]), "push in")).toBeNull();
+    expect(off.AI.run).not.toHaveBeenCalled();
+    const ok = { FORGE_VIDEO_GEN: "on", AI: { run: async (m: string) => (calls.push(m), m.startsWith("minimax") ? { result: { status: "Fail" } } : { state: "Completed", result: { video: "https://x/v.mp4" } }) } };
     const clip = await makeClip(ok as never, new Uint8Array([9]), "push in");
     expect(calls).toEqual(["minimax/hailuo-2.3", "pruna/p-video"]);
     expect(clip?.cost).toBe(0.1);
     expect(Array.from(clip!.bytes)).toEqual([1, 2, 3]);
-    const broke = { AI: { run: vi.fn(async () => { throw new Error("2021: Insufficient AI Gateway credits"); }) } };
+    const broke = { FORGE_VIDEO_GEN: "on", AI: { run: vi.fn(async () => { throw new Error("2021: Insufficient AI Gateway credits"); }) } };
     expect(await makeClip(broke as never, new Uint8Array([9]), "push in")).toBeNull();
     expect(broke.AI.run).toHaveBeenCalledTimes(1);
     fetchSpy.mockRestore();
@@ -92,6 +96,7 @@ describe("Studio media", () => {
     const kv: Record<string, number> = {};
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(new Uint8Array(50)));
     const env = {
+      FORGE_VIDEO_GEN: "on",
       AI: { run: async () => ({ state: "Completed", result: { video: "https://x/v.mp4" } }) },
       VIDEOS: { put: async (k: string, v: Uint8Array) => void (kv[k] = v.length) },
       // Background removal works; frame extraction is not bound here, so the object stays a still.

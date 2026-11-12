@@ -9,8 +9,9 @@
  *   - The hero subject: the hero photo's subject cut out, so the headline can sit behind it.
  *
  * Cut-outs use Cloudflare Images (background removal); frames come from Media Transformations; the
- * clips come from video models billed to the account's AI Gateway credits. Every step is optional:
- * without credits (or if a model fails) the build carries on with what it has.
+ * clips come from video models billed to the account's AI Gateway credits, and are OFF unless the
+ * FORGE_VIDEO_GEN variable is "on" (by default moving heroes come from the video library). Every step
+ * is optional: the build carries on with what it has.
  */
 import type { Env } from "./env";
 
@@ -55,7 +56,9 @@ export function clipUrl(out: unknown): string | null {
  * rewriting the prompt (a turntable must stay a turntable). Null when no model could make it.
  */
 export async function makeClip(env: Env, image: Uint8Array, prompt: string, literal = false): Promise<Clip | null> {
-  if (!env.AI) return null;
+  // Off unless the owner turns it on (FORGE_VIDEO_GEN=on): clips are billed outside the Workers plan.
+  // Moving heroes come from the video library instead (clips made in GHL Creator Studio, dropped in the Drive folder).
+  if (!env.AI || (env as unknown as { FORGE_VIDEO_GEN?: string }).FORGE_VIDEO_GEN !== "on") return null;
   const dataUri = `data:image/jpeg;base64,${b64(image)}`;
   for (const m of VIDEO_MODELS) {
     try {
