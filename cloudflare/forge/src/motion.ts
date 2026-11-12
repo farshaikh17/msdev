@@ -216,6 +216,15 @@ all("[data-orbit]").forEach(function(box){
   }
   requestAnimationFrame(frame);
 });
+// --- headlines over a picture: light type gets a soft shadow so it reads over the brightest part of any photo
+all("section").forEach(function(sec){
+  if(!sec.querySelector(":scope > .hero-motion, :scope .hero-motion"))return;
+  all("h1, h2",sec).forEach(function(h){
+    if(h.closest("[data-front-text]")||getComputedStyle(h).textShadow!=="none")return;
+    var m=(getComputedStyle(h).color.match(/\d+(\.\d+)?/g)||[]).map(Number);if(m.length<3)return;
+    if(.2126*m[0]+.7152*m[1]+.0722*m[2]>170)h.style.textShadow="0 2px 26px rgba(0,0,0,.38), 0 1px 3px rgba(0,0,0,.22)";
+  });
+});
 // --- turning showcase: the object turns by itself; a pinned stage drives it with the scroll instead
 all(".m-spin").forEach(function(box){
   var urls=(box.getAttribute("data-spin-frames")||"").split("|").filter(Boolean),img=box.querySelector("img"),cv=null,set=null,last=-1,manual=false,t0=performance.now(),vis=true;
