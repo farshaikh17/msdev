@@ -72,3 +72,38 @@ instead of the business's own photos), which is a product decision, not a bug.
 - Phone numbers are not read from a Google Maps link, so sites built from one have no phone unless it
   is typed in or the business has a website we can read.
 - The Standard home page still has twelve or more sections (the design SOP); only Studio was cut to nine.
+
+## Update, 2026-11-12: after the first two proving builds
+
+Two Studio sites were built on the new pipeline (a paint store in Cinematic, a thrift shop in
+Neo-brutalist). Both finished unaided, both follow their look, and they do not resemble each other.
+
+**What they showed, now fixed for every site**
+- The pinned sideways photo strip was broken on every Studio site (panels collapsed to zero width).
+- Empty "Your photos appear here" boxes: 54 across eight sites. The designer is no longer told to
+  draw them, a guard fills any that remain with the site's sample photos, and a 14th QA rule catches them.
+- Sites built from a Google Maps link had no town. The town now comes from the map position.
+- The phone field is on the main form. Thrift and resale shops get a Donate page.
+- A phone menu parked off-screen made Standard sites twice as wide as a phone.
+- The automatic home page rewrite cost $0.50 to $0.80 and moved neither score. It now runs only when
+  a measured check fails, and keeps the original if a rewrite scores lower.
+
+**Where the five goals stand**
+
+| | Status |
+|---|---|
+| 1. Reliable | Met. Every build since the retry fix has finished; 273 tests, 38 browser steps, 71-page crawl and a phone-width scan of every page of 13 live sites pass. |
+| 2. Good | Partly. The looks are distinct and the checks pass, but both proving builds scored 6 on our own critique, which holds Studio to an award-site bar. The remaining gap is mostly the pictures: AI samples in place of the business's own photos. |
+| 3. Meets QA | Met for new builds (both passed with nothing open). Sites built before 2026-11-11 get the full check when "Check again" is pressed. |
+| 4. Usable | Not yet proven: nobody but the owner has used it. |
+| 5. Sellable | Owner decisions outstanding: domain, prices, payment links, legal review. |
+
+**Cost of the two proving builds:** $3.15 and $4.26 all in (build, QA repairs, quality check). With
+the rewrite change, expect about $2.60 to $3.50 for Studio.
+
+**What is left before calling it complete**
+1. Two people other than the owner each build and send a site with GUIDE.md and nothing else.
+2. Press "Check again" on any older site that will be shown to a customer.
+3. Decide whether the Studio score target stays at 8. If it does, the lever is real photos: paste the
+   business's photo links (or its website) into the form.
+4. The owner decisions in goal 5.

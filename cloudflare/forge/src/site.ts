@@ -47,7 +47,9 @@ const BASE_CSS = `.legal{max-width:760px;margin:0 auto;padding:clamp(48px,8vw,11
  * QA guard after the kit's CSS: the header stays on one line. Nav labels, phone and buttons never
  * wrap, and between tablet and wide desktop the header row scales down a little so it fits.
  */
-export const HEADER_CSS = `header a,header button,header summary,header li,header [class*="phone"],header [class*="btn"]{white-space:nowrap}
+export const HEADER_CSS = `/* Nothing parked off-screen (a phone menu waiting to slide in) may widen the page. */
+html,body{overflow-x:clip}
+header a,header button,header summary,header li,header [class*="phone"],header [class*="btn"]{white-space:nowrap}
 @media (min-width:900px) and (max-width:1279px){header>*{zoom:.88}}
 /* The chat bubble sits bottom-right: leave room under the footer so it never covers the credit line. */
 body>footer::after{content:"";display:block;height:84px}`;
@@ -97,7 +99,7 @@ export function assemble(kit: Kit, page: PageDraft, slug: string, credit: string
 <title>${esc(page.title)}</title>${icon}<meta name="description" content="${esc(page.description)}"><meta name="robots" content="noindex">
 ${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${HEADER_CSS}\n${HERO_CSS}\n${CREDIT_CSS}\n${QA_CSS}${studio ? MOTION_CSS : ""}</style></head><body>
 ${kit.header}
-${page.body}
+${/<main\b[^>]*\sid\s*=/i.test(page.body) ? page.body : page.body.replace(/<main\b/i, '<main id="main"')}
 ${kit.footer.split(CREDIT_MARKER).join(credit)}
 <script>${kit.script}</script><script>${QA_JS}</script>${studio ? motionScripts() : ""}</body></html>`;
   // The QA standards that need no judgement: +1 on phone links, legal links always in the footer.
