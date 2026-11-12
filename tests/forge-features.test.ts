@@ -415,6 +415,21 @@ describe("Studio art directions", () => {
     expect(vi.mocked(designKit).mock.calls[0]![4]).toBeUndefined();
   });
 
+  it("a Studio page whose first screen was reviewed during the build isn't rewritten on score alone", async () => {
+    const { slug, demo } = await liveDemo();
+    const version = demo.liveVersion!;
+    const row = h.db.prepare("SELECT kit FROM site_versions WHERE slug = ? AND version = ?").get(slug, version) as { kit: string };
+    h.db.prepare("UPDATE site_versions SET kit = ? WHERE slug = ? AND version = ?").run(JSON.stringify({ ...JSON.parse(row.kit), style: "studio" }), slug, version);
+    h.db.prepare("INSERT INTO site_pages (slug, version, path, title, description, css, body) VALUES (?, ?, '/_hero', 't', 'd', '', '<main><h1>Home</h1></main>')").run(slug, version);
+    const critique = vi.fn<ReviewDeps["critique"]>(async () => ({ score: 6, verdict: "Competent.", strengths: [], issues: [{ what: "Safe", fix: "Be bolder", severity: "high" as const }], costUsd: 0.01 }));
+    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => fakeBrowser(goodFacts([`/${slug}/about`])).browser, critique, sleep: async () => undefined });
+    expect(r.score).toBe(6);
+    expect(r.fixed).toBeUndefined();
+    expect(critique).toHaveBeenCalledTimes(1);
+    // The notes are kept for the fix buttons.
+    expect(r.issues).toHaveLength(1);
+  });
+
   it("keeps the original home page when the rewrite scores lower", async () => {
     const { slug, demo } = await liveDemo();
     const version = demo.liveVersion!;

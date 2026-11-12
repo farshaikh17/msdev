@@ -480,7 +480,11 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
       ...failed.map((c) => `${c.label}: FAILED${c.detail ? ` (${c.detail})` : ""}. Fix this.`),
       ...crit.issues.filter((i) => i.severity !== "low").map((i) => `${i.what} → ${i.fix}`),
     ];
-    if ((crit.score < (studio ? FIX_BELOW_STUDIO : FIX_BELOW) || failed.length) && notes.length) {
+    // A Studio page whose first screen was already built alone, looked at and revised during the build
+    // isn't rewritten again on score alone (in production that cost $0.50 to $0.80 a site and moved no
+    // score): only a measured failure does it. The notes stay, with the fix buttons, for whoever wants them.
+    const heroFirst = studio && !!(await getPage(env, slug, version, "/_hero"));
+    if (((crit.score < (studio ? FIX_BELOW_STUDIO : FIX_BELOW) && !heroFirst) || failed.length) && notes.length) {
       const spec = pagesOf(kit).find((p) => p.path === "/");
       const current = await getPage(env, slug, version, "/");
       if (spec && current) {
