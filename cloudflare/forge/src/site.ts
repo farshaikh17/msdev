@@ -147,7 +147,7 @@ export function finish(
     /** A cut-out of the hero photo's subject, laid over the hero's headline (the "subject in front" hero). */
     heroSubject?: string;
     /** The signature object that flies from perch to perch down the page. */
-    floatObject?: { frames: string[]; still: string };
+    floatObject?: { frames: string[]; still: string; path?: string };
     /** No object could be made: the perches show these photos instead. */
     perchPhotos?: string[];
   },
@@ -201,7 +201,7 @@ export function finish(
     const pics = opts.perchPhotos;
     r = r.on("[data-perch]", { element: (e) => e.setInnerContent(`<img src="${esc(pics[n++ % pics.length]!)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:24px">`, { html: true }) });
   }
-  const float = opts.floatObject ? `<div class="m-float" aria-hidden="true" data-still="${esc(opts.floatObject.still)}"${opts.floatObject.frames.length ? ` data-frames="${esc(opts.floatObject.frames.join("|"))}"` : ""}><canvas></canvas></div>` : "";
+  const float = opts.floatObject ? `<div class="m-float" aria-hidden="true" data-path="${esc(opts.floatObject.path ?? "arc")}" data-still="${esc(opts.floatObject.still)}"${opts.floatObject.frames.length ? ` data-frames="${esc(opts.floatObject.frames.join("|"))}"` : ""}><canvas></canvas></div>` : "";
   // The site's own photo links, for the guard that fills any empty photo box left on a page.
   const fill = opts.photos?.length ? `<script>window.__fgFill&&window.__fgFill(${JSON.stringify(opts.photos).replace(/</g, "\\u003c")})</script>` : "";
   r = r.on("body", { element: (e) => {

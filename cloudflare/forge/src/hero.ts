@@ -81,7 +81,7 @@ export function heroMotion(video: string | null, photos: string[], reveal = "", 
     return `<div class="m-spin"${sig.frames?.length ? ` data-spin-frames="${esc(sig.frames.join("|"))}"` : ""}><img src="${esc(first)}" alt="" fetchpriority="high"></div>`;
   }
   // The magazine cover: the hero photo, still (the cut-out of its subject is laid over it, so the two must line up).
-  if (sig?.media === "front" && poster) return `<img src="${esc(poster)}" alt="" fetchpriority="high">`;
+  if ((sig?.media === "front" || sig?.media === "breakout") && poster) return `<img src="${esc(poster)}" alt="" fetchpriority="high">`;
   // Signature heroes (Studio): the scene switcher shows several scenes (library video first, then photographs);
   // the camera dive puts a second, closer scene behind the first for the camera to land in.
   if (sig?.media === "switch") {

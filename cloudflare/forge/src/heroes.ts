@@ -12,12 +12,12 @@
  */
 
 export interface Hero {
-  id: "spotlight" | "dive" | "switcher" | "slides" | "hangtag" | "float" | "front" | "spin";
+  id: "spotlight" | "dive" | "switcher" | "slides" | "hangtag" | "float" | "front" | "spin" | "breakout" | "orbit";
   name: string;
   /** One line for the build form. */
   blurb: string;
   /** What our system fills the hero's picture layer with. */
-  media: "pair" | "dive" | "switch" | "photo" | "object" | "front" | "spin";
+  media: "pair" | "dive" | "switch" | "photo" | "object" | "front" | "spin" | "breakout" | "orbit";
   /** The designer's exact brief for the first screen (placeholders are filled per site). */
   spec: string;
   /** What the quality check compares the first screen against. */
@@ -158,6 +158,33 @@ export const HEROES: Hero[] = [
 - A scroll cue at the bottom left in the first beat: "Scroll to turn" at 11px letter-spacing .2em with a small rotating ring icon.
 - On phones the stage is not pinned (our engine turns the object by itself): the beats stack in reading order under the object, the word behind shrinks to 30vw.`,
   },
+  {
+    id: "breakout",
+    name: "Breakout (3D depth)",
+    blurb: "The photo sits in a card and its subject breaks out of the frame, tilting in 3D with the pointer",
+    media: "breakout",
+    check: "a large headline beside a photo card whose main subject breaks out over the top edge of the card (the subject is cut out and overlaps the frame), with the card tilting in 3D",
+    spec: `SIGNATURE HERO: BREAKOUT (3D depth). Build this first screen exactly; dress it in the art direction's fonts and colours.
+- Section: full screen (100dvh), position relative, overflow hidden, a solid colour from the palette (or a living gradient: <div data-shader="flow" data-colors="#hex,#hex,#hex"> absolutely filling it), with data-grain.
+- Two columns from 900px (stacked on phones, the card after the text):
+  left, vertically centred, max-width 560px: the headline (h1) at clamp(48px, 6.6vw, 108px), the display face, letter-spacing -.04em, line-height .95, data-split="words", six words at most; one sentence at 17px line-height 1.6 at 80%, data-reveal="blur"; the primary action as a pill (the accent colour) with data-magnetic and a secondary text link, data-reveal="blur"; a row of three short TRUE facts.
+  right: the card: a <div data-breakout> with position relative, width min(44vw, 620px) (88vw on phones), aspect-ratio 4/3, NO overflow hidden, NO border, NO background, margin-top 6vh. Its first child is exactly <div class="hero-motion" aria-hidden="true"></div> (empty, unstyled). Our system puts the hero photo in it, shows it as a rounded card (cut 16% from the top), and lays the photo's subject, cut out, over it so the subject's head and shoulders break out above the card. Our engine tilts the card in 3D toward the pointer with the subject floating in front of it.
+- A small caption under the card in 12px letter-spacing .08em at 60%: what the photo shows (true).
+- Nothing of yours may sit on top of the card or in the 20% of space above it.`,
+  },
+  {
+    id: "orbit",
+    name: "Orbit",
+    blurb: "A giant centred headline with the trade's own object circling it, passing behind the letters and in front",
+    media: "orbit",
+    check: "a giant centred headline with the business's own object (cut out) circling around it, passing behind the letters and then in front",
+    spec: `SIGNATURE HERO: ORBIT. Build this first screen exactly; dress it in the art direction's fonts and colours.
+- Section: full screen (100dvh), position relative, overflow hidden, display grid, place-items centre, a deep colour field from the palette (a living gradient with <div data-shader="flow" data-colors="#hex,#hex,#hex"> absolutely filling it is ideal) with data-grain. No photograph.
+- In the middle: <div data-orbit> (position relative, display inline-block, padding 6vh 4vw) holding the headline (h1, position relative, z-index 2): the display face at clamp(64px, 10.5vw, 176px), weight 700, letter-spacing -.05em, line-height .88, centred, the lightest tint, data-split="chars", two short lines, five words at most. Our engine circles the business's signature object (OBJECT in the facts, cut out) around this block on a tilted ellipse, passing behind the letters and then in front of them, faster while the visitor scrolls.
+- Under it (outside data-orbit), centred: one sentence at 18px max-width 520px at 80%, data-reveal="blur"; the primary action as a pill (the accent colour) with data-magnetic and the phone number as a second pill outlined in white at 40%, data-reveal="blur".
+- Header: transparent, the business name on the left, a few links and a solid pill action on the right.
+- A row of four short TRUE facts along the bottom, 12px, letter-spacing .06em, at 65%, separated by thin rules.`,
+  },
 ];
 
 export const HERO_IDS = HEROES.map((h) => h.id);
@@ -184,4 +211,31 @@ export function pickHero(intake: { hero?: string }, slug: string, recent: string
   const fresh = HERO_IDS.filter((id) => !recent.slice(0, 2).includes(id) && (id !== "switcher" || clips >= 1));
   const from = fresh.length ? fresh : HERO_IDS.filter((id) => id !== "switcher" || clips >= 1);
   return heroById(from[hash(slug) % from.length])!;
+}
+
+/** Heroes that already carry the signature object in their first screen (so no separate flight is planned for them). */
+const OBJECT_IN_HERO = ["spin"];
+
+/** Every Studio site's object flies down the home page (the flying-object hero plans its own perches; the turning showcase keeps it in the hero). */
+export const companionFor = (heroId: string | undefined) => !OBJECT_IN_HERO.includes(heroId ?? "") && heroId !== "float";
+
+/** The site's brand moment, a pinned scene in the middle of the home page: a word filled with a photo, or the object bursting into the business's name. */
+export const brandMoment = (slug: string): "mask" | "particles" => (hash(`${slug}:moment`) % 2 ? "particles" : "mask");
+
+/** The flying object's path for this site, so two sites with the same object still fly differently. */
+export const flightPath = (slug: string): "arc" | "loop" | "zig" => (["arc", "loop", "zig"] as const)[hash(`${slug}:path`) % 3]!;
+
+/** What the home page's writer is told about the flight and the brand moment (Studio only). */
+export function studioExtras(heroId: string | undefined, slug: string): string {
+  const parts: string[] = [];
+  if (companionFor(heroId))
+    parts.push(
+      `FLYING OBJECT: our system flies the business's signature object (OBJECT in the facts, cut out) down this home page as the visitor scrolls. Place TWO empty perches for it to land in: each exactly <div data-perch aria-hidden="true"></div> with an explicit width and aspect-ratio:1, in the normal flow (never position:absolute, never inside a pinned, horizontal-scroll or stacked section), with nothing inside it or on top of it and clear space around it. One in the second or third scene beside a statement or the list of what the business offers (width min(24vw, 300px); 46vw on phones), and one in the final call-to-action scene beside the action (width min(18vw, 220px); 36vw on phones).`,
+    );
+  parts.push(
+    brandMoment(slug) === "mask"
+      ? `BRAND MOMENT (its own scene, placed right after the third scene): <section data-mask-zoom data-word="WORD"> where WORD is ONE short word of 4 to 8 letters, in capitals, that sums up the business (e.g. BLOOM, TIRES, FRESH, SMILE). Inside it, first, one <img> of the most striking preview photo other than the hero photo (src from the facts, alt describing it), then one <div data-mask-after> holding an h2 (a short line, at most six words) and one sentence, white, centred. Give the section the page's own background colour and nothing else. Our engine pins it, shows the photo only through the giant word, flies the camera through the word into the full photo and writes the block in over it.`
+      : `BRAND MOMENT (its own scene, placed right after the third scene): <section data-particles data-word="NAME"> where NAME is the business's name or its short form, at most 14 characters. Inside it, only one <div data-particles-after> holding an h2 (a short line, at most six words) and one sentence, centred. Give the section a deep colour from the palette as its background, the lightest tint as its text colour, and a height of 100vh. Our engine pins it: the business's object bursts into thousands of glowing dots that re-form as the name, and then the block writes in under it.`,
+  );
+  return `\n\n${parts.join("\n\n")}`;
 }

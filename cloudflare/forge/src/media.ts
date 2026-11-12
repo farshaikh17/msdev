@@ -241,13 +241,14 @@ export async function studioMedia(
   const out: StudioMedia = { cost: 0, made: [] };
   const { media } = hero;
   // The signature object: drawn, cut out, and (when video can be made) turned once for the frames.
-  if ((media === "object" || media === "spin") && plan?.object) {
+  // Every Studio site gets it now: it flies down the home page and feeds the brand moment, whatever the first screen.
+  if (plan?.object) {
     const drawn = await deps.drawObject(objectPrompt(plan.object));
     const cut = drawn ? await cutOut(env, drawn, 900) : null;
     if (drawn && cut) {
       await deps.save("object.webp", plan.object, cut);
       out.made.push("object.webp");
-      const clip = await makeClip(env, drawn, turntablePrompt(plan.object), true);
+      const clip = media === "spin" || media === "object" ? await makeClip(env, drawn, turntablePrompt(plan.object), true) : null;
       if (clip) {
         out.cost += clip.cost;
         const frames = await spinFrames(env, clip.bytes, 6).catch(() => []);
@@ -257,7 +258,7 @@ export async function studioMedia(
     }
   }
   // The hero subject, cut out of the hero photo so the headline can pass behind it.
-  if (media === "front" && photo1) {
+  if ((media === "front" || media === "breakout") && photo1) {
     const cut = await cutOut(env, photo1);
     if (cut) {
       await deps.save("subject.webp", "The hero photo's subject, cut out", cut);

@@ -22,7 +22,7 @@ import { pagesOf, type Kit } from "./designer";
 import type { Stored } from "./db";
 import type { Ctx, Env } from "./env";
 import { heroMotion, matchClips, matchVideo, type LibraryEntry } from "./hero";
-import { heroById } from "./heroes";
+import { companionFor, flightPath, heroById } from "./heroes";
 import { HERO_CLIP, heroClipId } from "./media";
 import { assemble, chatWidget, creditFor, finish, templateCredit, widgetFor } from "./site";
 import { sha256Hex } from "./crypto";
@@ -133,18 +133,21 @@ function heroFor(kit: Kit, library: LibraryEntry[], intake: Stored["intake"], sl
   const video = matchVideo(library, intake, slug, services) ?? made;
   const frames = names.filter((n) => /^spin-\d{2}\.webp$/.test(n)).map((n) => base + n);
   const object = names.includes("object.webp") ? base + "object.webp" : undefined;
+  // The signature object flies down the page in its own layer (perches with photos instead when no object could be made).
+  const flight: Pick<HeroFill, "float" | "perchPhotos"> = companionFor(kit.hero) || sig?.media === "object" ? (object ? { float: { frames, still: object, path: flightPath(slug) } } : { perchPhotos: photos.slice(0, 3) }) : {};
   if (sig?.media === "switch") {
     const items = pagesOf(kit).filter((p) => p.role === "item" || p.path.startsWith("/services/")).map((p) => p.name);
     const clips = [...matchClips(library, intake, services), ...(made ? [made] : [])].slice(0, 4);
-    return { motion: heroMotion(null, photos.slice(0, 4), "", { media: "switch", clips, labels: items }) };
+    return { motion: heroMotion(null, photos.slice(0, 4), "", { media: "switch", clips, labels: items }), ...flight };
   }
-  if (sig?.media === "dive") return { motion: heroMotion(video, photos.slice(0, 2), "", { media: "dive" }) };
+  if (sig?.media === "dive") return { motion: heroMotion(video, photos.slice(0, 2), "", { media: "dive" }), ...flight };
   if (sig?.media === "spin") return { motion: heroMotion(null, photos.slice(0, 1), "", { media: "spin", frames, object }) };
-  if (sig?.media === "front") return { motion: heroMotion(null, photos.slice(0, 1), "", { media: "front" }), subject: names.includes("subject.webp") ? base + "subject.webp" : undefined };
-  // The flying object lives in its own layer over the page; the hero itself has no picture.
-  if (sig?.media === "object") return { motion: "", float: object ? { frames, still: object } : undefined, perchPhotos: object ? undefined : photos.slice(0, 3) };
+  const subject = names.includes("subject.webp") ? base + "subject.webp" : undefined;
+  if (sig?.media === "front" || sig?.media === "breakout") return { motion: heroMotion(null, photos.slice(0, 1), "", { media: sig.media }), subject, ...flight };
+  // These first screens have no picture of their own: the object flies (or circles the headline) in its own layer.
+  if (sig?.media === "object" || sig?.media === "orbit") return { motion: "", ...flight };
   // A Studio first screen holds one picture (a slow drift); a crossfade between different shots reads as two unrelated images.
-  return { motion: heroMotion(video, photos.slice(0, 1), names.includes("reveal-1.jpg") ? base + "reveal-1.jpg" : "") };
+  return { motion: heroMotion(video, photos.slice(0, 1), names.includes("reveal-1.jpg") ? base + "reveal-1.jpg" : ""), ...flight };
 }
 
 /** What a home page's first screen is filled with. */
@@ -154,7 +157,7 @@ interface HeroFill {
   /** A cut-out of the hero photo's subject, laid over the headline. */
   subject?: string;
   /** The signature object that flies from perch to perch (its turning frames, if any, and a still). */
-  float?: { frames: string[]; still: string };
+  float?: { frames: string[]; still: string; path?: string };
   /** No object could be made: the perches show photos instead of standing empty. */
   perchPhotos?: string[];
 }

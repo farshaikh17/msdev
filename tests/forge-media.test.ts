@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { clipUrl, faststart, heroClipId, HERO_CLIP, makeClip, studioMedia } from "../cloudflare/forge/src/media";
 import { heroMotion } from "../cloudflare/forge/src/hero";
-import { HEROES } from "../cloudflare/forge/src/heroes";
+import { brandMoment, companionFor, flightPath, HEROES, studioExtras } from "../cloudflare/forge/src/heroes";
 import { IMAGE_PATH } from "../cloudflare/forge/src/index";
 
 /** A box: 4-byte size, 4-byte type, then the payload. */
@@ -109,23 +109,24 @@ describe("Studio media", () => {
     const float = await studioMedia(env as never, deps, "v1", { id: "float", media: "object" }, plan, photo, false);
     expect(Object.keys(saved)).toEqual(["object.webp"]);
     expect(float.cost).toBeGreaterThan(0);
-    // Subject in front: a cut-out of the hero photo, no video.
+    // Subject in front (and the breakout card): a cut-out of the hero photo besides the object; no video, no turning clip.
     for (const k of Object.keys(saved)) delete saved[k];
     const front = await studioMedia(env as never, deps, "v1", { id: "front", media: "front" }, plan, photo, false);
-    expect(Object.keys(saved)).toEqual(["subject.webp"]);
+    expect(Object.keys(saved).sort()).toEqual(["object.webp", "subject.webp"]);
     expect(front.cost).toBe(0);
     // Camera dive with no library clip: the hero photo brought to life, kept in the video store with a marker.
     for (const k of Object.keys(saved)) delete saved[k];
     const dive = await studioMedia(env as never, deps, "v1", { id: "dive", media: "dive" }, plan, photo, false);
-    expect(Object.keys(saved)).toEqual([HERO_CLIP]);
+    expect(Object.keys(saved).sort()).toEqual([HERO_CLIP, "object.webp"]);
     expect(kv[`v:${heroClipId("v1")}`]).toBe(50);
     expect(dive.made).toContain(HERO_CLIP);
-    // A library clip already exists, or the hero shows stills only: nothing is generated.
+    // A library clip already exists, or the hero shows stills only: only the object (every Studio site flies it).
     for (const k of Object.keys(saved)) delete saved[k];
     await studioMedia(env as never, deps, "v1", { id: "dive", media: "dive" }, plan, photo, true);
     await studioMedia(env as never, deps, "v1", { id: "slides", media: "photo" }, plan, photo, false);
     await studioMedia(env as never, deps, "v1", { id: "spotlight", media: "pair" }, plan, photo, false);
-    expect(Object.keys(saved)).toEqual([]);
+    expect(Object.keys(saved)).toEqual(["object.webp"]);
+    expect(kv[`v:${heroClipId("v2")}`]).toBeUndefined();
     fetchSpy.mockRestore();
   });
 
@@ -146,5 +147,25 @@ describe("Studio media", () => {
     expect(by("float")).toContain("data-perch");
     expect(by("front")).toContain("data-front-text");
     expect(by("spin")).toContain('data-pin="2.5"');
+  });
+
+  it("flies the object on every Studio first screen, and deals each site its brand moment and flight path", () => {
+    // The flying-object hero plans its own perches and the turning showcase keeps the object in the hero; every other gets two perches.
+    expect(companionFor("float")).toBe(false);
+    expect(companionFor("spin")).toBe(false);
+    for (const id of ["spotlight", "dive", "switcher", "slides", "hangtag", "front", "breakout", "orbit", undefined]) expect(companionFor(id)).toBe(true);
+    expect(studioExtras("dive", "a-1")).toContain("data-perch");
+    expect(studioExtras("float", "a-1")).not.toContain("FLYING OBJECT");
+    // Both brand moments and all three paths turn up across sites, and a site always gets the same one.
+    const slugs = Array.from({ length: 30 }, (_, i) => `site-${i}`);
+    expect(new Set(slugs.map(brandMoment)).size).toBe(2);
+    expect(new Set(slugs.map(flightPath)).size).toBe(3);
+    expect(brandMoment("site-3")).toBe(brandMoment("site-3"));
+    const mask = slugs.find((s) => brandMoment(s) === "mask")!;
+    const parts = slugs.find((s) => brandMoment(s) === "particles")!;
+    expect(studioExtras("dive", mask)).toContain("data-mask-zoom");
+    expect(studioExtras("dive", parts)).toContain("data-particles");
+    // The breakout card holds the hero photo still, like the cover (its cut-out subject must line up).
+    expect(heroMotion(null, ["/p.jpg"], "", { media: "breakout" })).toBe('<img src="/p.jpg" alt="" fetchpriority="high">');
   });
 });

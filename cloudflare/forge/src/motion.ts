@@ -35,7 +35,7 @@ export const MOTION_API = `Our motion engine is loaded on every page (GSAP + Scr
 - data-reveal="blur" on first-screen copy (the paragraph, the buttons): rises 28px out of a 12px blur, staggered after the headline. The premium load-in.
 - data-depth="0.02" (0.01 to 0.06) on layered first-screen elements (a badge, a floating card, a picture frame): each drifts against the pointer by its own amount, so the layers separate. Bigger numbers sit "closer".
 - data-pin="3" on a <section> that contains one <div data-pin-stage> (exactly one screen tall: 100vh, overflow hidden): the stage pins while the visitor scrolls 3 more screens, and that scroll drives everything inside it. Inside the stage: data-at="0.2" on a block makes it write in (rise out of blur) when the scroll reaches 20%, and data-until="0.55" makes it leave again; data-write on a paragraph inside such a block writes it in word by word; data-pin-zoom="1.25" on the stage's background picture pushes the camera in from 1 to 1.25 across the whole scroll; data-pin-count="24" on a number counts up across its block's span. Lay the blocks out absolutely in different corners of the stage so that those sharing the screen never overlap, and give 3 to 5 beats. On phones the stage is not pinned and the blocks simply stack, so write them in reading order.
-- Signature-hero mechanics (use only when this site's signature hero calls for them; its spec says exactly how): data-dive on a hero section with a data-dive-stage inside (camera dive on scroll; data-dive-out / data-dive-in on its text blocks; data-dive-origin="x% y%" on the stage); data-switch on a hero section with an empty data-switch-nav (scene switcher); data-slides on a section of data-slide children with data-color and data-title, plus an empty data-slides-tabs (colour-field slider); data-sway on a hanging badge (drops in on its strap, sways, swings on hover); data-perch on the empty boxes the flying object lands in; data-front on a hero whose giant word carries data-front-text (it passes behind the photo's cut-out subject); the turning showcase is a data-pin hero whose stage holds our object.
+- Signature-hero mechanics (use only when this site's signature hero calls for them; its spec says exactly how): data-dive on a hero section with a data-dive-stage inside (camera dive on scroll; data-dive-out / data-dive-in on its text blocks; data-dive-origin="x% y%" on the stage); data-switch on a hero section with an empty data-switch-nav (scene switcher); data-slides on a section of data-slide children with data-color and data-title, plus an empty data-slides-tabs (colour-field slider); data-sway on a hanging badge (drops in on its strap, sways, swings on hover); data-perch on the empty boxes the flying object lands in; data-front on a hero whose giant word carries data-front-text (it passes behind the photo's cut-out subject); the turning showcase is a data-pin hero whose stage holds our object; data-breakout on the photo card whose subject breaks out of it; data-orbit around the headline our object circles; data-mask-zoom (with data-word, one img and a data-mask-after block) and data-particles (with data-word and a data-particles-after block) for the brand moment.
 Our engine also adds a short preloader (first visit), smooth page-to-page transitions, and smooth scrolling. Links to other pages just work.`;
 
 export const MOTION_CSS = `
@@ -81,6 +81,15 @@ html.m-on .m-cursor,html.m-on .m-ring{opacity:1}
 .hero-subject img,.hero-motion[data-front-layer] img{position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:cover;animation:none!important;opacity:1!important;transform:none}
 .hero-subject,.hero-motion[data-front-layer]{transform-origin:50% 62%}
 [data-front] [data-front-text]{text-shadow:0 4px 40px rgba(0,0,0,.32),0 1px 3px rgba(0,0,0,.18)}
+[data-breakout]{position:relative;perspective:1100px}[data-breakout]>.m-tilt{position:absolute;inset:0;transform-style:preserve-3d;will-change:transform}
+[data-breakout] .hero-motion{clip-path:inset(16% 3% 0 3% round 22px);filter:drop-shadow(0 30px 40px rgba(0,0,0,.35))}
+[data-breakout] .hero-subject{overflow:visible;filter:drop-shadow(0 24px 28px rgba(0,0,0,.35))}
+[data-orbit]{position:relative}[data-orbit] .m-orb{position:absolute;left:0;top:0;pointer-events:none;will-change:transform;filter:drop-shadow(0 18px 22px rgba(0,0,0,.35))}[data-orbit] .m-orb.back{z-index:1}[data-orbit] .m-orb.front{z-index:3}
+.m-mask{position:relative;height:100vh;overflow:hidden;padding:0!important}.m-mask>img{position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:cover;border-radius:0;margin:0}
+.m-mask .m-mask-svg{position:absolute;inset:-2px;width:calc(100% + 4px);height:calc(100% + 4px);z-index:1;will-change:transform}
+.m-mask [data-mask-after]{position:absolute;left:0;right:0;bottom:12vh;z-index:2;text-align:center;padding:0 20px;color:#fff;text-shadow:0 2px 24px rgba(0,0,0,.45)}
+.m-parts{position:relative;height:100vh;overflow:hidden}.m-parts canvas.m-parts-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.m-parts [data-particles-after]{position:absolute;left:0;right:0;bottom:10vh;z-index:2;text-align:center;padding:0 20px}
 html.m-wait [data-split],html.m-wait [data-reveal]{visibility:hidden}
 html.m-on,html.m-on body{overflow-x:clip}html.lenis,html.lenis body{height:auto}.lenis.lenis-smooth{scroll-behavior:auto!important}.lenis.lenis-stopped{overflow:hidden}
 @media (prefers-reduced-motion:reduce){[data-grain]::after{animation:none}}
@@ -128,11 +137,19 @@ all("[data-slides]").forEach(function(sec){
 });
 // --- frames: a set of transparent pictures drawn into a canvas (fitted, centred), for objects that turn
 function frameSet(urls){var imgs=urls.map(function(u){var im=new Image();im.decoding="async";im.src=u;return im});return {imgs:imgs,n:imgs.length,ready:function(i){var im=imgs[i];return !!(im&&im.complete&&im.naturalWidth)}}}
+// The part of a cut-out that isn't empty (cut-outs keep a wide transparent margin), measured once per picture.
+function bbox(im){
+  if(im.__bb)return im.__bb;var nw=im.naturalWidth,nh=im.naturalHeight,bb={x:0,y:0,w:nw,h:nh};
+  try{var n=64,cv=d.createElement("canvas");cv.width=n;cv.height=n;var c=cv.getContext("2d");c.drawImage(im,0,0,n,n);var p=c.getImageData(0,0,n,n).data,x0=n,y0=n,x1=-1,y1=-1;
+    for(var y=0;y<n;y++)for(var x=0;x<n;x++)if(p[(y*n+x)*4+3]>24){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}
+    if(x1>=x0&&y1>=y0){var pad=1;x0=Math.max(0,x0-pad);y0=Math.max(0,y0-pad);x1=Math.min(n-1,x1+pad);y1=Math.min(n-1,y1+pad);bb={x:x0/n*nw,y:y0/n*nh,w:(x1-x0+1)/n*nw,h:(y1-y0+1)/n*nh}}}catch(e){}
+  im.__bb=bb;return bb;
+}
+function draw(c,im,w,h){var b=bbox(im),sc=Math.min(w/b.w,h/b.h),dw=b.w*sc,dh=b.h*sc;c.drawImage(im,b.x,b.y,b.w,b.h,(w-dw)/2,(h-dh)/2,dw,dh)}
 function paint(cv,set,i){
   var w=cv.width,h=cv.height,k=i;if(!w||!h)return false;
   for(var j=0;j<set.n&&!set.ready(k);j++)k=(k+1)%set.n;if(!set.ready(k))return false;
-  var im=set.imgs[k],sc=Math.min(w/im.naturalWidth,h/im.naturalHeight),dw=im.naturalWidth*sc,dh=im.naturalHeight*sc,c=cv.getContext("2d");
-  c.clearRect(0,0,w,h);c.drawImage(im,(w-dw)/2,(h-dh)/2,dw,dh);return true;
+  var c=cv.getContext("2d");c.clearRect(0,0,w,h);draw(c,set.imgs[k],w,h);return true;
 }
 function fit(cv){var r=Math.min(W.devicePixelRatio||1,2),w=Math.round(cv.clientWidth*r),h=Math.round(cv.clientHeight*r);if(w&&h&&(cv.width!==w||cv.height!==h)){cv.width=w;cv.height=h;return true}return false}
 // --- subject in front: place the giant word so the subject overlaps part of it (the magazine-cover look) but it stays readable.
@@ -161,6 +178,44 @@ all(".hero-subject").forEach(function(sub){
   if(img.complete)place();else img.addEventListener("load",place);
   var rt;W.addEventListener("resize",function(){clearTimeout(rt);rt=setTimeout(place,150)});
 });
+// --- breakout: the photo card and its cut-out subject tilt together in 3D, the subject floating in front of the card
+all("[data-breakout]").forEach(function(card){
+  var layer=card.querySelector(".hero-motion"),sub=card.querySelector(".hero-subject");if(!layer)return;
+  var t=d.createElement("div");t.className="m-tilt";card.insertBefore(t,layer);t.appendChild(layer);if(sub){t.appendChild(sub);sub.style.transform="translateZ(70px) scale(.94)"}
+  layer.style.transform="translateZ(0)";
+  // The card's top edge goes just below the subject's head, so the head and shoulders break out over it.
+  var simg=sub&&sub.querySelector("img");
+  function edge(){try{var b=bbox(simg),nw=simg.naturalWidth,nh=simg.naturalHeight,cw=card.clientWidth,ch=card.clientHeight,sc=Math.max(cw/nw,ch/nh),oy=(ch-nh*sc)/2,top=(oy+b.y*sc)/ch,cut=Math.max(.12,Math.min(.45,top+(b.h*sc/ch)*.24));layer.style.clipPath="inset("+(cut*100).toFixed(1)+"% 3% 0 3% round 22px)"}catch(e){}}
+  if(simg){if(simg.complete)edge();else simg.addEventListener("load",edge);W.addEventListener("resize",edge)}
+  var rx=0,ry=0,tx=0,ty=0,lift=0;
+  if(fine)W.addEventListener("pointermove",function(e){var r=card.getBoundingClientRect();tx=((e.clientX-r.left)/r.width-.5)*16;ty=-((e.clientY-r.top)/r.height-.5)*12},{passive:true});
+  function frame(now){
+    if(!fine&&!reduce){var k=now/1000;tx=Math.sin(k*.6)*7;ty=Math.cos(k*.5)*5}
+    var r=card.getBoundingClientRect();lift=Math.max(0,Math.min(1,-r.top/Math.max(1,r.height)));
+    rx+=(ty-rx)*.08;ry+=(tx-ry)*.08;
+    t.style.transform="rotateX("+rx.toFixed(2)+"deg) rotateY("+ry.toFixed(2)+"deg)";
+    if(sub)sub.style.transform="translateZ(70px) translateY("+(-lift*40).toFixed(1)+"px) scale("+(.94+lift*.06).toFixed(3)+")";
+    if(!reduce)requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+});
+// --- orbit: the signature object circles the headline on a tilted ellipse, behind the letters and then in front
+all("[data-orbit]").forEach(function(box){
+  var src=(d.querySelector(".m-float")||{getAttribute:function(){return ""}}).getAttribute("data-still");if(!src)return;
+  var back=d.createElement("canvas"),front=d.createElement("canvas"),im=new Image(),drawn=0;back.className="m-orb back";front.className="m-orb front";box.appendChild(back);box.appendChild(front);im.src=src;
+  var ang=-.6,last=performance.now(),sy=scrollY,boost=0;
+  function frame(now){
+    var dt=Math.min(.05,(now-last)/1000);last=now;var dy=Math.abs(scrollY-sy);sy=scrollY;boost=Math.min(4,boost*.92+dy*.02);
+    if(!reduce)ang+=dt*(.55+boost);
+    var w=box.clientWidth,h=box.clientHeight,size=Math.min(h*.62,w*.26,260),z=Math.sin(ang),sc=.62+.38*(z+1)/2;
+    var px=Math.round(size*Math.min(W.devicePixelRatio||1,2));if(im.complete&&im.naturalWidth&&drawn!==px){drawn=px;[back,front].forEach(function(cv){cv.width=cv.height=px;var c=cv.getContext("2d");c.clearRect(0,0,px,px);draw(c,im,px,px)})}
+    var x=w/2+Math.cos(ang)*w*.56-size/2,y=h/2+Math.sin(ang)*h*.34-Math.cos(ang)*h*.12-size/2;
+    [back,front].forEach(function(im){im.style.width=im.style.height=size+"px";im.style.transform="translate3d("+x.toFixed(1)+"px,"+y.toFixed(1)+"px,0) scale("+sc.toFixed(3)+") rotate("+(Math.cos(ang)*-14).toFixed(1)+"deg)"});
+    front.style.opacity=z>0?1:0;back.style.opacity=z>0?0:.85;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+});
 // --- turning showcase: the object turns by itself; a pinned stage drives it with the scroll instead
 all(".m-spin").forEach(function(box){
   var urls=(box.getAttribute("data-spin-frames")||"").split("|").filter(Boolean),img=box.querySelector("img"),cv=null,set=null,last=-1,manual=false,t0=performance.now(),vis=true;
@@ -177,7 +232,7 @@ all(".m-spin").forEach(function(box){
   var perches=all("[data-perch]"),still=layer.getAttribute("data-still")||"";
   if(!perches.length||!still){layer.remove();return}
   if(reduce){var im=d.createElement("img");im.src=still;im.alt="";im.className="m-perch-still";perches[0].appendChild(im);layer.remove();return}
-  var urls=(layer.getAttribute("data-frames")||"").split("|").filter(Boolean),set=frameSet(urls.length>1?urls:[still]),cv=layer.querySelector("canvas");
+  var urls=(layer.getAttribute("data-frames")||"").split("|").filter(Boolean),set=frameSet(urls.length>1?urls:[still]),cv=layer.querySelector("canvas"),path=layer.getAttribute("data-path")||"arc";
   var px=0,tilt=0,cx=null,cy=0,cs=0,born=null,last=-1,t0=performance.now(),max=0;
   if(fine)W.addEventListener("pointermove",function(e){px=e.clientX/innerWidth-.5},{passive:true});
   function rects(){return perches.map(function(p){var r=p.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2,s:Math.min(r.width,r.height)}}).filter(function(r){return r.s>8})}
@@ -191,7 +246,11 @@ all(".m-spin").forEach(function(box){
       if(b!==a&&R[0].y<=focus)t=Math.max(0,Math.min(1,(focus-a.y)/(b.y-a.y)));
       // The arc swings toward the middle of the screen, and the object never leaves it sideways.
       var e=t*t*(3-2*t),mid=(a.x+b.x)/2,dir=mid>innerWidth/2?-1:1,lift=Math.sin(Math.PI*e);
-      var ts=(a.s+(b.s-a.s)*e)*(1+lift*.12),tx=a.x+(b.x-a.x)*e+lift*Math.min(innerWidth*.2,280)*dir,ty=a.y+(b.y-a.y)*e;
+      var amp=Math.min(innerWidth*.2,280),ts=(a.s+(b.s-a.s)*e)*(1+lift*.12),tx=a.x+(b.x-a.x)*e,ty=a.y+(b.y-a.y)*e;
+      // Each site has its own flight: a swooping arc, an arc with a loop in the middle, or a zigzag.
+      if(path==="loop"){tx+=lift*amp*dir+Math.sin(e*Math.PI*2)*amp*.35*dir;ty-=(1-Math.cos(e*Math.PI*2))*amp*.3}
+      else if(path==="zig")tx+=Math.sin(e*Math.PI*3)*amp*.8*dir;
+      else tx+=lift*amp*dir;
       tx=Math.max(ts*.45,Math.min(innerWidth-ts*.45,tx));
       var time=(now-t0)/1000;ty+=Math.sin(time*1.3)*Math.min(12,ts*.025)*(1-lift);
       if(cx===null){cx=tx;cy=ty;cs=ts}
@@ -316,6 +375,54 @@ all(".hero-subject").forEach(function(sub){
   intro.to(txt,{yPercent:0,opacity:1,duration:1.5,ease:"expo.out"},.05);
   G.timeline({scrollTrigger:{trigger:sec,start:"top top",end:"bottom top",scrub:.5}}).to(txt,{yPercent:-60,ease:"none"},0).to([layer,sub],{scale:1.1,ease:"none"},0);
   if(fine){var tx=G.quickTo(txt,"x",{duration:.9,ease:"power3"});W.addEventListener("pointermove",function(e){tx((e.clientX/innerWidth-.5)*-26)},{passive:true})}
+});
+// --- brand moment, word zoom: the photo shows only through a giant word, then the camera flies through the word into it
+all("[data-mask-zoom]").forEach(function(sec){
+  var img=sec.querySelector("img"),word=(sec.getAttribute("data-word")||"").trim().slice(0,12),after=sec.querySelector("[data-mask-after]");if(!img||!word)return;
+  var cs=getComputedStyle(sec),bg=cs.backgroundColor;if(!bg||/rgba\(0, 0, 0, 0\)|transparent/.test(bg))bg=getComputedStyle(d.body).backgroundColor||"#fff";
+  var font=getComputedStyle(sec.querySelector("h2")||d.body).fontFamily,NS="http://www.w3.org/2000/svg",id="m-mask-"+Math.random().toString(36).slice(2,8);
+  var svg=d.createElementNS(NS,"svg");svg.setAttribute("class","m-mask-svg");svg.setAttribute("viewBox","0 0 1600 900");svg.setAttribute("preserveAspectRatio","xMidYMid slice");svg.setAttribute("aria-hidden","true");
+  svg.innerHTML='<defs><mask id="'+id+'"><rect width="1600" height="900" fill="#fff"/><text x="800" y="470" text-anchor="middle" dominant-baseline="middle" font-weight="900" font-size="400" textLength="1360" lengthAdjust="spacingAndGlyphs" fill="#000"></text></mask></defs><rect width="1600" height="900" fill="'+bg+'" mask="url(#'+id+')"/>';
+  var tx=svg.querySelector("text");tx.textContent=word.toUpperCase();tx.setAttribute("font-family",font);
+  sec.classList.add("m-mask");if(img.parentNode!==sec)sec.insertBefore(img,sec.firstChild);sec.insertBefore(svg,img.nextSibling);
+  var ox=50,oy=52;try{var n=word.length,ce=tx.getExtentOfChar(Math.floor((n-1)/2));ox=(ce.x+ce.width/2)/16;oy=(ce.y+ce.height*.55)/9}catch(e){}
+  svg.style.transformOrigin=ox+"% "+oy+"%";
+  if(after)G.set(after,{opacity:0,y:30});
+  G.timeline({scrollTrigger:{trigger:sec,start:"top top",end:function(){return "+="+innerHeight*2},pin:true,scrub:.6,invalidateOnRefresh:true}})
+    .fromTo(svg,{scale:1},{scale:28,ease:"power3.in",duration:.75},0).to(svg,{opacity:0,duration:.12},.66)
+    .fromTo(img,{scale:1.25},{scale:1,ease:"none",duration:1},0)
+    .to(after||{},{opacity:1,y:0,duration:.2},.8);
+});
+// --- brand moment, particles: the object bursts into dots that re-form as the business's name
+all("[data-particles]").forEach(function(sec){
+  var word=(sec.getAttribute("data-word")||"").trim().slice(0,16),after=sec.querySelector("[data-particles-after]");if(!word)return;
+  var src=(d.querySelector(".m-float")||d.querySelector(".m-spin img")||{getAttribute:function(){return ""}}),url=src.getAttribute(src.tagName==="IMG"?"src":"data-still")||"";
+  sec.classList.add("m-parts");var cv=d.createElement("canvas");cv.className="m-parts-cv";cv.setAttribute("aria-hidden","true");sec.insertBefore(cv,sec.firstChild);
+  var c=cv.getContext("2d"),P=[],prog=0,ink=getComputedStyle(sec).color||"#fff",accent=getComputedStyle(root).getPropertyValue("--m-accent").trim()||ink;
+  function rgb(v){var m=String(v).match(/\d+(\.\d+)?/g);return m&&m.length>=3?[+m[0],+m[1],+m[2]]:[255,255,255]}
+  function sample(draw,w,h,step){var o=d.createElement("canvas");o.width=w;o.height=h;var x=o.getContext("2d");draw(x,w,h);var data=x.getImageData(0,0,w,h).data,pts=[];for(var j=0;j<h;j+=step)for(var i=0;i<w;i+=step){var k=(j*w+i)*4;if(data[k+3]>140)pts.push([i,j,data[k],data[k+1],data[k+2]])}return pts}
+  function build(im){
+    var r=Math.min(W.devicePixelRatio||1,2),w=sec.clientWidth,h=sec.clientHeight;cv.width=w*r;cv.height=h*r;c.setTransform(r,0,0,r,0,0);
+    var fam=getComputedStyle(sec.querySelector("h2")||d.body).fontFamily,tw=Math.round(w*.9),fs=h*.26,mc=d.createElement("canvas").getContext("2d");
+    mc.font="800 "+fs+"px "+fam;var mw=mc.measureText(word).width;if(mw>tw*.94)fs*=tw*.94/mw;var th=Math.round(fs*1.4);
+    var tgt=sample(function(x,W2,H2){x.fillStyle="#fff";x.font="800 "+fs+"px "+fam;x.textAlign="center";x.textBaseline="middle";x.fillText(word,W2/2,H2/2)},tw,th,Math.max(3,Math.round(fs/38)));
+    var S=Math.round(Math.min(w,h)*.55),srcp=im?sample(function(x,W2,H2){draw(x,im,W2,H2)},S,S,Math.max(3,Math.round(S/70))):[];
+    if(!srcp.length)for(var q=0;q<1400;q++){var a=Math.random()*6.283,rr=Math.sqrt(Math.random())*S*.4;srcp.push([S/2+Math.cos(a)*rr,S/2+Math.sin(a)*rr].concat(rgb(accent)))}
+    var N=Math.min(3200,Math.max(tgt.length,srcp.length)),ac=rgb(ink);P=[];
+    for(var i=0;i<N;i++){var s0=srcp[i%srcp.length],t0=tgt.length?tgt[(i*7919)%tgt.length]:s0,ang=Math.random()*6.283,dist=(.25+Math.random()*.45)*Math.min(w,h);
+      P.push({sx:(w-S)/2+s0[0],sy:(h-S)/2+s0[1]-h*.06,ex:Math.cos(ang)*dist,ey:Math.sin(ang)*dist,tx:(w-tw)/2+t0[0],ty:h*.42-th/2+t0[1],c0:[s0[2]+(ac[0]-s0[2])*.35,s0[3]+(ac[1]-s0[3])*.35,s0[4]+(ac[2]-s0[4])*.35],c1:ac,sz:1.6+Math.random()*1.8})}
+    paint();
+  }
+  function ease(t){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2}
+  function paint(){
+    var w=sec.clientWidth,h=sec.clientHeight;c.clearRect(0,0,w,h);var p=prog,a=ease(Math.min(1,p/.42)),b=ease(Math.max(0,(p-.42)/.5));
+    for(var i=0;i<P.length;i++){var q=P[i],x=q.sx+q.ex*a,y=q.sy+q.ey*a;x+=(q.tx-x)*b;y+=(q.ty-y)*b;
+      var cr=q.c0[0]+(q.c1[0]-q.c0[0])*b,cg=q.c0[1]+(q.c1[1]-q.c0[1])*b,cb=q.c0[2]+(q.c1[2]-q.c0[2])*b;c.fillStyle="rgb("+(cr|0)+","+(cg|0)+","+(cb|0)+")";c.fillRect(x,y,q.sz,q.sz)}
+  }
+  var im=null;if(url){im=new Image();im.onload=function(){build(im)};im.onerror=function(){im=null;build(null)};im.src=url}else build(null);
+  W.addEventListener("resize",function(){build(im&&im.complete?im:null)});
+  if(after)G.set(after,{opacity:0,y:30});
+  ST.create({trigger:sec,start:"top top",end:function(){return "+="+innerHeight*1.8},pin:true,scrub:.5,invalidateOnRefresh:true,onUpdate:function(self){prog=self.progress;paint();if(after){var k=Math.max(0,Math.min(1,(prog-.82)/.15));after.style.opacity=k;after.style.transform="translateY("+(1-k)*30+"px)"}}});
 });
 // --- hanging badge: drops in on its strap, sways, and swings when touched
 all("[data-sway]").forEach(function(el){

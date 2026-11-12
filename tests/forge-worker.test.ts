@@ -133,12 +133,12 @@ describe("Forge worker — multi-page sites", () => {
 
   it("deals Studio sites a signature hero: video scenes when the trade has clips, otherwise one the account hasn't used lately", () => {
     // Every hero has a precise spec, its own mechanic and a check line.
-    expect(HEROES.length).toBe(8);
+    expect(HEROES.length).toBe(10);
     expect(new Set(HEROES.map((x) => x.media)).size).toBeGreaterThanOrEqual(4);
     for (const x of HEROES) {
       expect(x.spec.length).toBeGreaterThan(600);
       // Every hero but the slider (whose slides carry their own pictures) and the flying object (its own layer) has the picture layer our system fills.
-      if (x.id !== "slides" && x.id !== "float") expect(x.spec).toContain('class="hero-motion"');
+      if (!["slides", "float", "orbit"].includes(x.id)) expect(x.spec).toContain('class="hero-motion"');
       expect(x.check.length).toBeGreaterThan(40);
     }
     // Asked for: always that one.
@@ -150,7 +150,7 @@ describe("Forge worker — multi-page sites", () => {
     const seen = new Set<string>();
     for (const slug of ["a-1", "b-2", "c-3", "d-4", "e-5", "f-6", "g-7", "h-8", "i-9", "j-10", "k-11", "l-12"]) {
       const x = pickHero({}, slug, ["spotlight", "dive"], 0);
-      expect(["slides", "hangtag", "float", "front", "spin"]).toContain(x.id);
+      expect(["slides", "hangtag", "float", "front", "spin", "breakout", "orbit"]).toContain(x.id);
       seen.add(x.id);
     }
     expect(seen.size).toBeGreaterThanOrEqual(4);

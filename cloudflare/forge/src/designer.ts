@@ -8,7 +8,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { splitList, parseReviews } from "../../../src/forge/copy";
 import { GENERIC, presetFor } from "../../../src/forge/presets";
 import { profileFor, type Profile } from "./profiles";
-import { heroById } from "./heroes";
+import { heroById, studioExtras } from "./heroes";
 import type { Intake } from "../../../src/forge/schema";
 import type { Env } from "./env";
 import { conceptById, type Draw } from "./concepts";
@@ -327,7 +327,7 @@ export async function planPairs(env: Env, i: Intake): Promise<{ pairs: { before:
  * A Studio home page: what it must contain, and the order and layout of its scenes, which come
  * from the art direction (so two Studio sites don't share a skeleton).
  */
-export function studioHome(pages: PageSpec[], conceptId: string, draw?: Draw, heroId?: string): string {
+export function studioHome(pages: PageSpec[], conceptId: string, draw?: Draw, heroId?: string, slug = ""): string {
   const c = conceptById(conceptId);
   const sig = heroById(heroId);
   if (!c) return pages[0]?.brief ?? "";
@@ -355,7 +355,7 @@ What the scenes must carry between them (fit each into the scene that suits it; 
 - If illustrative before/after pairs are in the facts, show them inside the photographs scene, in this direction's picture frames.
 
 Motion: ${c.moves}
-Ruled out: ${c.never}`;
+Ruled out: ${c.never}${slug ? studioExtras(heroId, slug) : ""}`;
 }
 
 /** Told to the designer and every page writer when the site isn't a contractor's: use its own words and pages. */

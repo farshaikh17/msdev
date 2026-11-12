@@ -254,7 +254,8 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       const sig = look ? pickHero(intake, slug, looks.map((l) => l.hero).filter(Boolean), clips) : undefined;
       // The magazine-cover hero needs room above its subject for the giant word to pass behind.
       const prompts = [...(plan?.imagePrompts ?? [])];
-      if (sig?.media === "front" && prompts[0]) prompts[0] = `${prompts[0].replace(/[.\s]+$/, "")}. Shot from a little further back: the main subject stands in the lower two-thirds of the frame, slightly off-centre, with plain open background above and around their head and shoulders.`;
+      if (sig?.media === "breakout" && prompts[0]) prompts[0] = `${prompts[0].replace(/[.\s]+$/, "")}. The main subject is large and close, its head and shoulders near the top of the frame and clearly separated from a plain background.`;
+      else if (sig?.media === "front" && prompts[0]) prompts[0] = `${prompts[0].replace(/[.\s]+$/, "")}. Shot from a little further back: the main subject stands in the lower two-thirds of the frame, slightly off-centre, with plain open background above and around their head and shoulders.`;
       const [images, pairImages] = await Promise.all([previewImages(env, prompts), beforeAfterImages(env, plan?.pairs ?? []).catch(() => [])]);
       // (The framing note is for the image generator, not the photo's description.)
       if (images[0]?.name === "photo-1.jpg" && plan?.imagePrompts[0]) images[0] = { ...images[0], description: plan.imagePrompts[0] };
@@ -277,7 +278,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       });
       const pages = sitemapFor(intake, plan?.services);
       // A Studio home page takes its order and layouts from its art direction, not the standard section list.
-      if (concept && pages[0]) pages[0] = { ...pages[0], brief: studioHome(pages, concept, draw, sig?.id) };
+      if (concept && pages[0]) pages[0] = { ...pages[0], brief: studioHome(pages, concept, draw, sig?.id, slug) };
       // Built on another of the account's finished sites: reuse its design (far cheaper than a new one).
       let base: { slug: string; version: string; kit: Kit } | null = null;
       if (intake.reuseFrom && intake.reuseFrom !== slug) {
@@ -287,7 +288,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       }
       // The hero this site will open with (a reused design keeps the one it was designed around).
       const heroSig = base ? heroById(base.kit.hero) : sig;
-      const objectNote = heroSig && (heroSig.media === "object" || heroSig.media === "spin") && plan?.object ? `\n\nOBJECT (the signature object our system supplies, cut out): ${plan.object}.` : "";
+      const objectNote = intake.style === "studio" && plan?.object ? `\n\nOBJECT (the signature object our system supplies, cut out): ${plan.object}.` : "";
       const facts = factsBlock(intake, site, slug, plan, previews, pairs) + profileNote(intake) + (draw ? `\n\nFor this site the menu is ${draw.nav}, and the footer is ${draw.footer}.` : "") + objectNote;
       // A Studio hero's own media (its object and turning frames, a cut-out subject, a moving hero) is made while the design is written.
       const photo1 = images.find((img) => img.name === "photo-1.jpg")?.bytes ?? null;
