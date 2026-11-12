@@ -1,6 +1,6 @@
 # Forge: the plan from here
 
-Version 3, 2026-11-12. Reviewed by ten judges under the tenth-man rule: nine specialists approve or amend, the tenth must show how the plan fails, the nine fix it, and the tenth attacks again. The record is at the end.
+Version 4, 2026-11-12. Reviewed by ten judges under the tenth-man rule: nine specialists approve or amend, the tenth must show how the plan fails, the nine fix it, and the tenth attacks again. The record is at the end.
 
 ## North Star
 
@@ -26,7 +26,7 @@ Three honest tiers, shown on the build form before building:
 
 - **Has a website:** we read it. To add: keep the logo (today discarded), the site's main colours, and any reviews it publishes.
 - **Facebook only, or nothing online:** we do not fetch Facebook. The rep adds what they can see.
-- **Nothing given:** name, town, trade only. The site is built honestly on that.
+- **Nothing given:** name, town, trade only. The site is built honestly on that, but a brief has almost nothing to reason from: five plumbers in one town with no details can honestly yield about three different ideas, not five. So **Studio needs at least one real thing about the business**: a website, or one line of "What you saw". Without it the form says so and offers Standard instead.
 
 The build form gains, all optional except where marked: phone (the site is flagged **"not ready to send"** until there is one), address, hours, logo link or upload, one brand colour, a storefront or van photo, and one line: **"What you saw"** (the sign colour, the van, how long they have been there). Bulk lines become `name | city | link | phone`.
 
@@ -42,7 +42,7 @@ Rules for thin data, enforced in the prompts and checked after:
 
 ### A. The brief: the AI reasons before it designs
 
-`src/brief.ts`, run before design.
+`src/brief.ts`, run **first**: before the look and the first screen are chosen (today `build.ts` picks both by formula before anything is known about the business).
 
 - **Three concepts from three separate calls** (Sonnet), none seeing the others, each given a different lens dealt by code from about eight: the place, the owner's story, the material or craft, the customer's moment, the name, what rivals never do. With thin identity: two calls, using only place, name and trade.
 - Each concept must give: **the one true thing** about this business, quoting where in the facts it comes from; **the idea** in one sentence; **what it refuses**. Everything else is optional: colour and type direction, the voice, the home page's arc, and whether the business has an object worth following or a moment worth stopping the scroll for. **The default for both effects is no.**
@@ -51,21 +51,31 @@ Rules for thin data, enforced in the prompts and checked after:
 - The chosen brief is stored with the site and shown on its page, so anyone can read why the site looks the way it does.
 - About $0.11 a site (estimate).
 
+**The idea outranks the look.** Today each of the nine looks arrives marked "fixed: hold every page to it" and brings its own fonts, colours and a list of eight scenes; a brief added beside that would survive only as a headline. So, when a brief exists:
+
+- The brief decides the palette, the type character, the scenes of the page and their order, the big moment, the voice and the photography.
+- A look becomes **materials**, not orders: its layout habits, frames, density and its "never" list. Its font names, colour sentences and scene list become examples ("one way this has been used"). The winning concept picks the look by name with a reason, from the ones that fit the trade, or picks none.
+- The first screen: the concept picks one of the ten signature first screens that fits, or describes its own in three sentences using only motion the engine already has. "Its own" is limited to one site in three until it has proven reliable.
+- The brief is the first block every writer sees (the kit, the home page and every inner page share it), headed "This site's idea (decides everything below)", with: "Where the idea and the materials disagree, the idea wins." Each inner page also gets one line from the brief: the idea on this page.
+
 Hard rules in code (small, not a table of everything): a real brand colour or logo given on the form is used as it is; bereavement, legal, health and childcare get no flying object, no brand moment and no wit; no button or page the trade does not have.
 
 ### B. The prompt stops causing sameness
 
-When a brief exists, remove from the standing prompt: the accent colour ban and the warm-neutrals sentence; the font pairing list; the fixed widths and spacing numbers; the beat-by-beat pinned story; the single voice; the fixed "must carry" list of blocks. The brief supplies colour, type, voice and the page's arc instead. The home page call first writes a one-screen **score** (the arc, where the one loud moment sits, where it is quiet) and then writes the sections to it.
+When a brief exists, remove from the standing prompt: the accent colour ban and the warm-neutrals sentence; the font pairing list; the fixed widths and spacing numbers; the beat-by-beat pinned story; the single voice. The fixed "must carry" list shrinks to four things every home page needs (what they offer, proof, where they are, the action); the rest live on their own pages unless the brief wants them. The brief supplies colour, type, voice and the page's arc instead. The home page call first writes a one-screen **score** (the arc, where the one loud moment sits, where it is quiet) and then writes the sections to it.
+
+**Pages must still move, but not all in the same way.** The rule that every Studio page has one pinned photo story, one brightening statement and four drifting pictures was added because early Studio sites stood still, and a measured check enforces it, so it cannot simply be deleted. It is replaced in the same slice, prompt and check together: the engine has six kinds of scroll motion (a held scene, a sideways gallery, stacking cards, a statement that brightens, pictures that drift, a band that runs with the scroll). The brief picks **one held piece and two other kinds**; the check passes when at least three kinds are present, one of them held, at least two pictures drift, and something measurably moves between frames at three points down the page. Using the same held piece as the account's last two sites raises a note, not a failure.
 
 The flying object and the brand moment appear only when the brief asked for them. The signature first screens stay (they work); a first screen that needs an object is only offered when the brief found one.
 
 ### C. The designer sees its own page and revises once
 
-- **Settled capture** (`review.ts`): scroll for real in screen-height steps, wait for the engine at each, take a frame (up to 14 desktop, 8 phone), lay them out as one sheet. A full-page screenshot shows pinned scenes as blanks; this shows what a visitor sees. A near-blank frame is then a real fault and is flagged.
+- **Settled capture** (`review.ts`): scroll for real in screen-height steps, wait for the engine at each, take a frame (8 on desktop, 3 on a phone), and keep the frames as separate pictures (one big sheet shrinks the text until it cannot be read). The frames are taken once and reused for the checks, the critic and the art-director pass. A full-page screenshot shows pinned scenes as blanks; this shows what a visitor sees. A near-blank frame is then a real fault and is flagged.
 - **One art-director pass** on the home page: Opus gets the frames, its own page and the brief; it says where the page stops being about this business, where it is empty, what to cut; and returns replacements for the weakest sections only. It replaces today's score-driven rewrite (which cost $0.50 to $0.80 and moved no score, because the writer never saw the page).
 - Accepted only if the measured checks still pass.
+- **Browser time is finite** (5 hours a month on the current plan, and today the review is skipped silently when it runs out). Estimated at about 110 seconds a Studio site, that is roughly 160 sites a month. Seconds per site are logged from Slice 2, and a skipped review or pass shows on the site page as "skipped: browser time used up".
 - **This is unproven.** It stays only if you prefer the revised page, shown blind beside the original, on at least 4 of 5 trial sites.
-- The critic is told "a website for a local business; you do not know who made it", sees the sheet, and returns notes only. No score is used as a gate.
+- The critic is told "a website for a local business; you do not know who made it", sees the frames, and returns notes only. No score is used as a gate.
 
 ### D. Real identity on the form
 
@@ -75,9 +85,9 @@ As set out above: the fields, the tiers, the "not ready to send" flag, the wordm
 
 Small slices. Each is one session for a cheaper model, and nothing starts until the slice before has passed.
 
-**Slice 1. Read five briefs (no builds, about $0.60).** Build `brief.ts` and run it on five businesses already built (the museum, the florist, the tree service, the diner, the Cajun restaurant). You read the five chosen briefs and the two rejected ones for each. **Pass: you say each is about that business, and no two share an idea.** If not, the brief prompt is fixed and re-run; nothing else starts.
+**Slice 1. Read ten briefs (no builds, about $1.20).** Build `brief.ts` and run it on five businesses already built (the museum, the florist, the tree service, the diner, the Cajun restaurant) **and on five plumbers in one town with only a name and one line of "what you saw" each**, because that is what the pilot will really look like. You read the chosen brief and the rejected ones for each. **Pass: you say each is about that business, and no two share an idea, including among the five plumbers.** If not, the brief prompt is fixed and re-run; nothing else starts.
 
-**Slice 2. Three rebuilds (3 real builds, about $10).** Feed the brief into the design; make the prompt deletions (B); add the identity fields and thin-data rules (D); add settled capture. Rebuild three of the existing sites and show old beside new. **Pass: you see different, and more "them".**
+**Slice 2. Three rebuilds (3 real builds, about $10).** Run the brief first and give it precedence over the look (A); make the prompt changes, including the new movement rule and its check together (B); add the identity fields and thin-data rules (D); add settled capture. Rebuild three of the existing sites and show old beside new. **Pass, all three:** you see different, and more "them"; the brief's colours and type are visibly the page's colours and type; and someone shown the finished home page beside three briefs (the real one and two decoys from the same trade) picks the real one.
 
 **Slice 3. The revision pass (5 real builds, about $17).** Add the art-director pass (C). Five builds in the pilot trade, each shown to you blind, with and without the revision. **Pass: you prefer the revised page on 4 of 5**; otherwise the pass is removed and the plan continues without it.
 
@@ -140,3 +150,10 @@ Ten sites across ten trades and five towns with "Let Forge choose", including th
 5. Too much machinery. *Fixed:* four changes in three small slices; everything else waits for a named problem or is dropped.
 6. The free first test proved the wrong thing. *Fixed:* the first test is five real briefs you read.
 7. Variety per campaign would run out. *Fixed:* a three-part rule with pool sizes and a reuse rule, built only when campaigns need it.
+
+**Round 2, the tenth man: "still fails, on one point only".** Four of the seven round-1 fixes held outright.
+1. FATAL as written, cheap to fix: the brief did not own the design; the nine looks did, chosen before it and marked "fixed". *Fixed:* the brief runs first and outranks the look; a look is materials; the concept picks the look and the first screen; the idea heads every writer's instructions.
+2. SERIOUS: a measured check forces the same pinned scene on every page, so "effects off by default" would fail it or change nothing. *Fixed:* one held piece and two other kinds from six, chosen by the brief; prompt and check replaced together.
+3. SERIOUS: Slice 1 tested briefs on easy businesses. *Fixed:* five thin-data plumbers in one town are in the test; Slice 2 passes only if a reader can match the page to its brief; Studio needs one real fact.
+4. SERIOUS: the art-director pass leans on a browser allowance that runs out silently. *Fixed:* fewer frames, captured once; seconds logged; a skipped pass is shown.
+
