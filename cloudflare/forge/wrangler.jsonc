@@ -16,6 +16,10 @@
   // Browser Run: screenshots for the automatic review after each build (capped in code at half the
   // included monthly browser time, so it never bills extra).
   "browser": { "binding": "BROWSER" },
+  // Studio heroes: Cloudflare Images cuts objects and subjects out of their backgrounds (5,000 free a
+  // month), and Media Transformations takes the frames of a turning object out of its clip (free in beta).
+  "images": { "binding": "IMAGES" },
+  "media": { "binding": "MEDIA" },
   // Hourly: copy new hero videos from the team's Google Drive folder.
   "triggers": { "crons": ["23 * * * *"] },
   // Background builds: the app queues a job, the same Worker consumes it (each may run up to

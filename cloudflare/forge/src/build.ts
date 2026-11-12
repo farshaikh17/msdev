@@ -34,11 +34,12 @@ import type { Kit } from "./designer";
 import { lintSite, repairNote, type QaIssue, type QaResult } from "./qa";
 import { adaptKit, fixChrome, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, studioHome, TryLater, type Plan } from "./designer";
 import type { BuildJob, Env } from "./env";
-import { heroPair, beforeAfterImages, previewImages } from "./images";
+import { heroPair, beforeAfterImages, objectImage, previewImages } from "./images";
+import { studioMedia, type StudioMedia } from "./media";
 import { privacyPage, termsPage } from "./legal";
 import { drawFor, pickConcept } from "./concepts";
 import { mergeIntake, reverseGeocode } from "./places";
-import { pickHero } from "./heroes";
+import { heroById, pickHero } from "./heroes";
 import { matchClips } from "./hero";
 import { readWebsite } from "./scrape";
 import { buildCost, chargeBuild, getTenant, recordBuildCost, type Tenant } from "./tenants";
@@ -251,7 +252,12 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       // The signature hero: video scenes when the trade has library clips, otherwise one the account hasn't used lately.
       const clips = look ? matchClips(await listLibrary(env, demo.tenantId).catch(() => []), intake, plan?.services.join(" ") ?? "").length : 0;
       const sig = look ? pickHero(intake, slug, looks.map((l) => l.hero).filter(Boolean), clips) : undefined;
-      const [images, pairImages] = await Promise.all([previewImages(env, plan?.imagePrompts ?? []), beforeAfterImages(env, plan?.pairs ?? []).catch(() => [])]);
+      // The magazine-cover hero needs room above its subject for the giant word to pass behind.
+      const prompts = [...(plan?.imagePrompts ?? [])];
+      if (sig?.media === "front" && prompts[0]) prompts[0] = `${prompts[0].replace(/[.\s]+$/, "")}. Shot from a little further back: the main subject stands in the lower two-thirds of the frame, slightly off-centre, with plain open background above and around their head and shoulders.`;
+      const [images, pairImages] = await Promise.all([previewImages(env, prompts), beforeAfterImages(env, plan?.pairs ?? []).catch(() => [])]);
+      // (The framing note is for the image generator, not the photo's description.)
+      if (images[0]?.name === "photo-1.jpg" && plan?.imagePrompts[0]) images[0] = { ...images[0], description: plan.imagePrompts[0] };
       // A Studio first screen gets a matched second picture that shows through a spotlight; it replaces the first photo with its aligned twin.
       if (intake.style === "studio" && plan?.reveal && images[0] && sig?.media === "pair") {
         const pair = await heroPair(env, plan.imagePrompts[0] ?? "", plan.reveal).catch(() => null);
@@ -272,7 +278,6 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       const pages = sitemapFor(intake, plan?.services);
       // A Studio home page takes its order and layouts from its art direction, not the standard section list.
       if (concept && pages[0]) pages[0] = { ...pages[0], brief: studioHome(pages, concept, draw, sig?.id) };
-      const facts = factsBlock(intake, site, slug, plan, previews, pairs) + profileNote(intake) + (draw ? `\n\nFor this site the menu is ${draw.nav}, and the footer is ${draw.footer}.` : "");
       // Built on another of the account's finished sites: reuse its design (far cheaper than a new one).
       let base: { slug: string; version: string; kit: Kit } | null = null;
       if (intake.reuseFrom && intake.reuseFrom !== slug) {
@@ -280,12 +285,24 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
         const srcKit = src && src.tenantId === demo.tenantId && src.liveVersion ? await getKit(env, src.slug, src.liveVersion) : null;
         if (src && srcKit && src.liveVersion) base = { slug: src.slug, version: src.liveVersion, kit: srcKit };
       }
-      const { kit, usage } = base
-        ? await adaptKit(env, base.kit, { slug: base.slug, version: base.version }, facts, pages)
-        : await designKit(env, facts, pages, intake.style, concept, draw, sig?.id);
-      // The planning call is counted with the design.
+      // The hero this site will open with (a reused design keeps the one it was designed around).
+      const heroSig = base ? heroById(base.kit.hero) : sig;
+      const objectNote = heroSig && (heroSig.media === "object" || heroSig.media === "spin") && plan?.object ? `\n\nOBJECT (the signature object our system supplies, cut out): ${plan.object}.` : "";
+      const facts = factsBlock(intake, site, slug, plan, previews, pairs) + profileNote(intake) + (draw ? `\n\nFor this site the menu is ${draw.nav}, and the footer is ${draw.footer}.` : "") + objectNote;
+      // A Studio hero's own media (its object and turning frames, a cut-out subject, a moving hero) is made while the design is written.
+      const photo1 = images.find((img) => img.name === "photo-1.jpg")?.bytes ?? null;
+      const mediaJob: Promise<StudioMedia | null> =
+        intake.style === "studio" && heroSig
+          ? studioMedia(env, { save: (n, d, b) => saveImage(env, slug, version, n, d, b), drawObject: (p) => objectImage(env, p) }, version, heroSig, plan, photo1, clips > 0).catch((e) => (console.error("studio media failed", slug, errText(e)), null))
+          : Promise.resolve(null);
+      const [{ kit, usage }, made] = await Promise.all([
+        base ? adaptKit(env, base.kit, { slug: base.slug, version: base.version }, facts, pages) : designKit(env, facts, pages, intake.style, concept, draw, sig?.id),
+        mediaJob,
+      ]);
+      if (made?.made.length) console.log("studio media", slug, JSON.stringify(made));
+      // The planning call and any generated video are counted with the design.
       const u = usage as Record<string, unknown>;
-      await saveKit(env, slug, version, kit, { ...u, cost_usd: (Number(u.cost_usd) || 0) + (plan?.cost ?? 0) });
+      await saveKit(env, slug, version, kit, { ...u, cost_usd: (Number(u.cost_usd) || 0) + (plan?.cost ?? 0) + (made?.cost ?? 0) });
       await savePage(env, slug, version, "/privacy", privacyPage(intake), null);
       await savePage(env, slug, version, "/terms", termsPage(intake), null);
       await touchBuild(env, slug, version, "pages");

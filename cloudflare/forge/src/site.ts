@@ -133,7 +133,25 @@ export function ogHtml(og: OgTags): string {
   }`;
 }
 
-export function finish(res: Response, opts: { prefix: string; current: string | null; widget: string; leadUrl: string; heroMotion?: string; legacyHero?: boolean; og?: OgTags; photos?: string[] }): Response {
+export function finish(
+  res: Response,
+  opts: {
+    prefix: string;
+    current: string | null;
+    widget: string;
+    leadUrl: string;
+    heroMotion?: string;
+    legacyHero?: boolean;
+    og?: OgTags;
+    photos?: string[];
+    /** A cut-out of the hero photo's subject, laid over the hero's headline (the "subject in front" hero). */
+    heroSubject?: string;
+    /** The signature object that flies from perch to perch down the page. */
+    floatObject?: { frames: string[]; still: string };
+    /** No object could be made: the perches show these photos instead. */
+    perchPhotos?: string[];
+  },
+): Response {
   const local = (v: string | null) => !!v && v.startsWith("/") && !v.startsWith("//");
   const move = (v: string) => {
     const [, path, rest] = v.match(/^([^?#]*)(.*)$/)!;
@@ -168,12 +186,24 @@ export function finish(res: Response, opts: { prefix: string; current: string | 
       if (legacy) e.setAttribute("class", `${e.getAttribute("class") ?? ""} hero-motion-fill`);
       if (opts.heroMotion!.includes("data-spotlight-reveal")) e.setAttribute("data-spotlight", "");
       e.setInnerContent(opts.heroMotion!, { html: true });
+      // The subject, cut out, goes right after the picture layer (same box, so the two line up) and above the headline.
+      if (opts.heroSubject && !legacy) {
+        e.setAttribute("data-front-layer", "");
+        e.after(`<div class="hero-subject" aria-hidden="true"><img src="${esc(opts.heroSubject)}" alt=""></div>`, { html: true });
+      }
     };
     r = r.on(".hero-motion", { element: (e) => fill(e, false) });
     if (opts.legacyHero) r = r.on(LEGACY_HERO_BG, { element: (e) => fill(e, true) });
   }
+  // No signature object: the perches it would have landed in show photos rather than standing empty.
+  if (opts.perchPhotos?.length) {
+    let n = 0;
+    const pics = opts.perchPhotos;
+    r = r.on("[data-perch]", { element: (e) => e.setInnerContent(`<img src="${esc(pics[n++ % pics.length]!)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:24px">`, { html: true }) });
+  }
+  const float = opts.floatObject ? `<div class="m-float" aria-hidden="true" data-still="${esc(opts.floatObject.still)}"${opts.floatObject.frames.length ? ` data-frames="${esc(opts.floatObject.frames.join("|"))}"` : ""}><canvas></canvas></div>` : "";
   // The site's own photo links, for the guard that fills any empty photo box left on a page.
   const fill = opts.photos?.length ? `<script>window.__fgFill&&window.__fgFill(${JSON.stringify(opts.photos).replace(/</g, "\\u003c")})</script>` : "";
-  r = r.on("body", { element: (e) => e.append(fill + formScript(opts.leadUrl) + opts.widget, { html: true }) });
+  r = r.on("body", { element: (e) => e.append(float + fill + formScript(opts.leadUrl) + opts.widget, { html: true }) });
   return r.transform(res);
 }

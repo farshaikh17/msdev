@@ -35,7 +35,7 @@ export const MOTION_API = `Our motion engine is loaded on every page (GSAP + Scr
 - data-reveal="blur" on first-screen copy (the paragraph, the buttons): rises 28px out of a 12px blur, staggered after the headline. The premium load-in.
 - data-depth="0.02" (0.01 to 0.06) on layered first-screen elements (a badge, a floating card, a picture frame): each drifts against the pointer by its own amount, so the layers separate. Bigger numbers sit "closer".
 - data-pin="3" on a <section> that contains one <div data-pin-stage> (exactly one screen tall: 100vh, overflow hidden): the stage pins while the visitor scrolls 3 more screens, and that scroll drives everything inside it. Inside the stage: data-at="0.2" on a block makes it write in (rise out of blur) when the scroll reaches 20%, and data-until="0.55" makes it leave again; data-write on a paragraph inside such a block writes it in word by word; data-pin-zoom="1.25" on the stage's background picture pushes the camera in from 1 to 1.25 across the whole scroll; data-pin-count="24" on a number counts up across its block's span. Lay the blocks out absolutely in different corners of the stage so that those sharing the screen never overlap, and give 3 to 5 beats. On phones the stage is not pinned and the blocks simply stack, so write them in reading order.
-- Signature-hero mechanics (use only when this site's signature hero calls for them; its spec says exactly how): data-dive on a hero section with a data-dive-stage inside (camera dive on scroll; data-dive-out / data-dive-in on its text blocks; data-dive-origin="x% y%" on the stage); data-switch on a hero section with an empty data-switch-nav (scene switcher); data-slides on a section of data-slide children with data-color and data-title, plus an empty data-slides-tabs (colour-field slider); data-sway on a hanging badge (drops in on its strap, sways, swings on hover).
+- Signature-hero mechanics (use only when this site's signature hero calls for them; its spec says exactly how): data-dive on a hero section with a data-dive-stage inside (camera dive on scroll; data-dive-out / data-dive-in on its text blocks; data-dive-origin="x% y%" on the stage); data-switch on a hero section with an empty data-switch-nav (scene switcher); data-slides on a section of data-slide children with data-color and data-title, plus an empty data-slides-tabs (colour-field slider); data-sway on a hanging badge (drops in on its strap, sways, swings on hover); data-perch on the empty boxes the flying object lands in; data-front on a hero whose giant word carries data-front-text (it passes behind the photo's cut-out subject); the turning showcase is a data-pin hero whose stage holds our object.
 Our engine also adds a short preloader (first visit), smooth page-to-page transitions, and smooth scrolling. Links to other pages just work.`;
 
 export const MOTION_CSS = `
@@ -71,6 +71,15 @@ html.m-on .m-cursor,html.m-on .m-ring{opacity:1}
 [data-pin].m-pinned [data-pin-stage]{position:relative;height:100vh;overflow:hidden}
 .m-pin-bar{position:absolute;left:50%;bottom:22px;width:120px;height:2px;margin-left:-60px;background:rgba(128,128,128,.3);border-radius:2px;z-index:5;pointer-events:none}.m-pin-bar i{display:block;height:100%;background:var(--m-accent,#111);transform-origin:0 50%;transform:scaleX(0)}
 [data-follow]{pointer-events:none;display:none}html.m-on.m-fine [data-follow]{display:block}
+.m-float{position:fixed;left:0;top:0;z-index:30;pointer-events:none;opacity:0;transform-origin:0 0;will-change:transform,opacity;filter:drop-shadow(0 30px 34px rgba(0,0,0,.32)) drop-shadow(0 6px 10px rgba(0,0,0,.16))}
+.m-float canvas{width:100%;height:100%;display:block}
+[data-perch]{pointer-events:none}[data-perch] .m-perch-still{width:100%;height:100%;object-fit:contain;display:block}
+.hero-motion:has(.m-spin){z-index:1}
+.hero-motion .m-spin{position:absolute;inset:7% 10%;filter:drop-shadow(0 44px 50px rgba(0,0,0,.45));will-change:transform}
+.hero-motion .m-spin img,.hero-motion .m-spin canvas{position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:contain!important;animation:none!important;opacity:1!important;transform:none!important}
+.hero-subject{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden}
+.hero-subject img,.hero-motion[data-front-layer] img{position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:cover;animation:none!important;opacity:1!important;transform:none}
+.hero-subject,.hero-motion[data-front-layer]{transform-origin:50% 62%}
 html.m-wait [data-split],html.m-wait [data-reveal]{visibility:hidden}
 html.m-on,html.m-on body{overflow-x:clip}html.lenis,html.lenis body{height:auto}.lenis.lenis-smooth{scroll-behavior:auto!important}.lenis.lenis-stopped{overflow:hidden}
 @media (prefers-reduced-motion:reduce){[data-grain]::after{animation:none}}
@@ -116,6 +125,62 @@ all("[data-slides]").forEach(function(sec){
   sec.addEventListener("touchend",function(e){if(sy===null)return;var dy=e.changedTouches[0].clientY-sy;sy=null;if(Math.abs(dy)>50&&Math.abs(dy)<innerHeight*.6)go(cur+(dy<0?1:-1))},{passive:true});
   paint(0,-1);restart();
 });
+// --- frames: a set of transparent pictures drawn into a canvas (fitted, centred), for objects that turn
+function frameSet(urls){var imgs=urls.map(function(u){var im=new Image();im.decoding="async";im.src=u;return im});return {imgs:imgs,n:imgs.length,ready:function(i){var im=imgs[i];return !!(im&&im.complete&&im.naturalWidth)}}}
+function paint(cv,set,i){
+  var w=cv.width,h=cv.height,k=i;if(!w||!h)return false;
+  for(var j=0;j<set.n&&!set.ready(k);j++)k=(k+1)%set.n;if(!set.ready(k))return false;
+  var im=set.imgs[k],sc=Math.min(w/im.naturalWidth,h/im.naturalHeight),dw=im.naturalWidth*sc,dh=im.naturalHeight*sc,c=cv.getContext("2d");
+  c.clearRect(0,0,w,h);c.drawImage(im,(w-dw)/2,(h-dh)/2,dw,dh);return true;
+}
+function fit(cv){var r=Math.min(W.devicePixelRatio||1,2),w=Math.round(cv.clientWidth*r),h=Math.round(cv.clientHeight*r);if(w&&h&&(cv.width!==w||cv.height!==h)){cv.width=w;cv.height=h;return true}return false}
+// --- turning showcase: the object turns by itself; a pinned stage drives it with the scroll instead
+all(".m-spin").forEach(function(box){
+  var urls=(box.getAttribute("data-spin-frames")||"").split("|").filter(Boolean),img=box.querySelector("img"),cv=null,set=null,last=-1,manual=false,t0=performance.now(),vis=true;
+  if(urls.length>1){cv=d.createElement("canvas");box.appendChild(cv);set=frameSet(urls)}
+  function show(i){if(!set)return;i=((i%set.n)+set.n)%set.n;var grown=fit(cv);if(i===last&&!grown)return;if(paint(cv,set,i)){last=i;if(img)img.style.visibility="hidden"}}
+  box.__spin={set:function(p){manual=true;if(set)show(Math.round(p*(set.n-1)));box.style.transform="translate3d(0,"+((.5-p)*24).toFixed(1)+"px,0) scale("+(.92+.12*p).toFixed(3)+")"+(set?"":" rotate("+((p-.5)*26).toFixed(2)+"deg)")},auto:function(){manual=false;box.style.transform=""}};
+  if("IntersectionObserver" in W)new IntersectionObserver(function(es){vis=es[0].isIntersecting}).observe(box);
+  function tick(now){if(!manual&&vis){var t=(now-t0)/1000;if(set)show(reduce?0:Math.floor(t*9));else if(!reduce)box.style.transform="rotate("+(Math.sin(t*.7)*7).toFixed(2)+"deg)"}requestAnimationFrame(tick)}
+  requestAnimationFrame(tick);
+});
+// --- flying object: it rests in an empty perch, and the scroll carries it in an arc to the next one, turning and tilting
+(function(){
+  var layer=d.querySelector(".m-float");if(!layer)return;
+  var perches=all("[data-perch]"),still=layer.getAttribute("data-still")||"";
+  if(!perches.length||!still){layer.remove();return}
+  if(reduce){var im=d.createElement("img");im.src=still;im.alt="";im.className="m-perch-still";perches[0].appendChild(im);layer.remove();return}
+  var urls=(layer.getAttribute("data-frames")||"").split("|").filter(Boolean),set=frameSet(urls.length>1?urls:[still]),cv=layer.querySelector("canvas");
+  var px=0,tilt=0,cx=null,cy=0,cs=0,born=null,last=-1,t0=performance.now(),max=0;
+  if(fine)W.addEventListener("pointermove",function(e){px=e.clientX/innerWidth-.5},{passive:true});
+  function rects(){return perches.map(function(p){var r=p.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2,s:Math.min(r.width,r.height)}}).filter(function(r){return r.s>8})}
+  function size(){var R=rects(),m=0;R.forEach(function(r){if(r.s>m)m=r.s});if(m&&Math.abs(m-max)>2){max=m;layer.style.width=layer.style.height=m+"px";fit(cv);last=-1}}
+  size();W.addEventListener("resize",size);
+  function frame(now){
+    var R=rects();
+    if(R.length&&max){
+      var focus=innerHeight*.55,i=0,k;for(k=0;k<R.length;k++)if(R[k].y<=focus)i=k;
+      var a=R[i],b=R[Math.min(i+1,R.length-1)],t=0;
+      if(b!==a&&R[0].y<=focus)t=Math.max(0,Math.min(1,(focus-a.y)/(b.y-a.y)));
+      // The arc swings toward the middle of the screen, and the object never leaves it sideways.
+      var e=t*t*(3-2*t),mid=(a.x+b.x)/2,dir=mid>innerWidth/2?-1:1,lift=Math.sin(Math.PI*e);
+      var ts=(a.s+(b.s-a.s)*e)*(1+lift*.12),tx=a.x+(b.x-a.x)*e+lift*Math.min(innerWidth*.2,280)*dir,ty=a.y+(b.y-a.y)*e;
+      tx=Math.max(ts*.45,Math.min(innerWidth-ts*.45,tx));
+      var time=(now-t0)/1000;ty+=Math.sin(time*1.3)*Math.min(12,ts*.025)*(1-lift);
+      if(cx===null){cx=tx;cy=ty;cs=ts}
+      cx+=(tx-cx)*.18;cy+=(ty-cy)*.18;cs+=(ts-cs)*.18;
+      tilt+=(lift*-18*dir+px*10+Math.sin(time*.9)*2-tilt)*.08;
+      // It rocks either side of its best angle (frame 0), further while it flies, rather than showing its thin side.
+      var swing=Math.sin((i+t)*Math.PI*2+time*.5)*(.08+.1*lift),f=set.n>1?Math.round(((swing%1)+1)%1*set.n)%set.n:0;
+      if(f!==last&&paint(cv,set,f)){last=f;if(born===null)born=now}
+      var grow=born===null?0:Math.min(1,(now-born)/1100),ge=1-Math.pow(1-grow,3);
+      layer.style.opacity=ge;
+      layer.style.transform="translate3d("+(cx-cs/2).toFixed(1)+"px,"+(cy-cs/2+(1-ge)*40).toFixed(1)+"px,0) scale("+(cs/max*(.8+.2*ge)).toFixed(4)+") rotate("+tilt.toFixed(2)+"deg)";
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
 if(!G||!ST||reduce){root.classList.add("m-static");all("[data-counter]").forEach(function(el){el.textContent=(el.dataset.prefix||"")+el.dataset.counter+(el.dataset.suffix||"")});return}
 // Lines are measured with the real fonts: wait for them (briefly), keeping the animated text hidden meanwhile.
 root.classList.add("m-wait");
@@ -172,7 +237,7 @@ mm0.add("(min-width: 900px)",function(){
       var c=el.hasAttribute("data-pin-count")?el:el.querySelector("[data-pin-count]");
       return {el:el,at:num(el.dataset.at,0),until:el.hasAttribute("data-until")?num(el.dataset.until,1):null,words:words,count:c,end:c?num(c.dataset.pinCount,0):0};
     });
-    var zoom=stage.querySelector("[data-pin-zoom]"),z=zoom?num(zoom.dataset.pinZoom,1.2):1;
+    var zoom=stage.querySelector("[data-pin-zoom]"),z=zoom?num(zoom.dataset.pinZoom,1.2):1,spin=stage.querySelector(".m-spin");
     var bar=d.createElement("div");bar.className="m-pin-bar";bar.innerHTML="<i></i>";stage.appendChild(bar);
     function cl(v){return v<0?0:v>1?1:v}
     function apply(p){
@@ -185,12 +250,13 @@ mm0.add("(min-width: 900px)",function(){
         if(b.count){var q2=cl((p-b.at)/Math.max(.12,((b.until===null?1:b.until)-b.at)*.6));b.count.textContent=(b.count.dataset.prefix||"")+Math.round(b.end*q2).toLocaleString()+(b.count.dataset.suffix||"")}
       });
       if(zoom)zoom.style.transform="scale("+(1+(z-1)*p)+")";
+      if(spin&&spin.__spin)spin.__spin.set(p);
       bar.firstChild.style.transform="scaleX("+p+")";
     }
     sec.classList.add("m-pinned");apply(0);
     ST.create({trigger:sec,start:"top top",end:function(){return "+="+screens*innerHeight},pin:sec,scrub:.6,invalidateOnRefresh:true,onUpdate:function(self){apply(self.progress)}});
   });
-  return function(){all("[data-pin]").forEach(function(sec){sec.classList.remove("m-pinned");all("[data-at]",sec).forEach(function(el){el.style.cssText=""})})};
+  return function(){all("[data-pin]").forEach(function(sec){sec.classList.remove("m-pinned");all("[data-at]",sec).forEach(function(el){el.style.cssText=""});all(".m-spin",sec).forEach(function(b){if(b.__spin)b.__spin.auto()})})};
 });
 // --- camera dive: the hero pins while the scroll pushes the camera into the picture and lands in a second scene
 mm0.add("(min-width: 900px)",function(){
@@ -215,6 +281,14 @@ mm0.add("(min-width: 900px)",function(){
     ST.create({trigger:sec,start:"top top",end:function(){return "+="+screens*innerHeight},pin:sec,scrub:.6,invalidateOnRefresh:true,onUpdate:function(self){apply(self.progress)}});
   });
   return function(){all("[data-dive]").forEach(function(sec){sec.classList.remove("m-diving");all("[data-dive-out],[data-dive-in],.hero-motion img,.hero-motion video",sec).forEach(function(el){el.style.opacity="";el.style.transform="";el.style.filter="";el.style.visibility=""})})};
+});
+// --- subject in front: the giant word rises from behind the cut-out subject, then slides up behind it as the page scrolls
+all(".hero-subject").forEach(function(sub){
+  var sec=sub.parentElement,layer=sec&&sec.querySelector(".hero-motion"),txt=sec&&(sec.querySelector("[data-front-text]")||sec.querySelector("h1"));if(!txt||!layer)return;
+  G.set(txt,{yPercent:30,opacity:0});
+  intro.to(txt,{yPercent:0,opacity:1,duration:1.5,ease:"expo.out"},.05);
+  G.timeline({scrollTrigger:{trigger:sec,start:"top top",end:"bottom top",scrub:.5}}).to(txt,{yPercent:-60,ease:"none"},0).to([layer,sub],{scale:1.1,ease:"none"},0);
+  if(fine){var tx=G.quickTo(txt,"x",{duration:.9,ease:"power3"});W.addEventListener("pointermove",function(e){tx((e.clientX/innerWidth-.5)*-26)},{passive:true})}
 });
 // --- hanging badge: drops in on its strap, sways, and swings when touched
 all("[data-sway]").forEach(function(el){

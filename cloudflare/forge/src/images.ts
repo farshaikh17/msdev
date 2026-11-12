@@ -32,12 +32,12 @@ async function spendImages(env: Env, n: number, weight = 1): Promise<boolean> {
   return true;
 }
 
-async function generate(env: Env, description: string, opts: { reference?: Uint8Array; small?: boolean } = {}): Promise<Uint8Array | null> {
+async function generate(env: Env, description: string, opts: { reference?: Uint8Array; small?: boolean; square?: boolean; raw?: boolean } = {}): Promise<Uint8Array | null> {
   try {
     const form = new FormData();
-    form.append("prompt", opts.reference ? description : `${description}. ${STYLE}`);
+    form.append("prompt", opts.reference || opts.raw ? description : `${description}. ${STYLE}`);
     form.append("width", String(opts.small ? PAIR_SIZE.w : 1024));
-    form.append("height", String(opts.small ? PAIR_SIZE.h : 768));
+    form.append("height", String(opts.small ? PAIR_SIZE.h : opts.square ? 1024 : 768));
     if (opts.reference) form.append("input_image_0", new Blob([new Uint8Array(opts.reference)], { type: "image/jpeg" }), "reference.jpg");
     // The binding takes multipart input; a Response serialises the form and gives its boundary.
     const body = new Response(form);
@@ -75,6 +75,12 @@ export async function heroPair(env: Env, hero: string, reveal: string): Promise<
     generate(env, `Edit image 0. Keep the same place, composition, camera angle and framing exactly, so the two pictures line up. Transform it into: ${reveal}. Make the transformation bold and obvious across the whole picture. No text, no logos.`, { reference: seed }),
   ]);
   return base && top ? { base, reveal: top } : null;
+}
+
+/** One studio shot of a single object on a plain backdrop (square), ready to be cut out. Counts as one photo. */
+export async function objectImage(env: Env, prompt: string): Promise<Uint8Array | null> {
+  if (!env.AI || !prompt || !(await spendImages(env, 1))) return null;
+  return generate(env, prompt, { square: true, raw: true });
 }
 
 export interface BeforeAfter {

@@ -325,7 +325,9 @@ export async function getImage(env: Env, slug: string, version: string, name: st
 /** The preview photos made for a site version, in order (photo-1 is the hero shot). */
 export async function imageNames(env: Env, slug: string, version: string): Promise<string[]> {
   const { results } = await env.DB.prepare("SELECT name FROM site_images WHERE slug = ? AND version = ?").bind(slug, version).all<{ name: string }>();
-  return results.map((r) => r.name).sort((a, b) => Number(a.match(/\d+/)?.[0]) - Number(b.match(/\d+/)?.[0]));
+  // Photos first in their order (photo-1 is the hero shot), then everything else by name.
+  const rank = (n: string) => (/^photo-\d+\./.test(n) ? Number(n.match(/\d+/)![0]) : 1000);
+  return results.map((r) => r.name).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 }
 
 interface VideoRow {

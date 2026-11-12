@@ -12,12 +12,12 @@
  */
 
 export interface Hero {
-  id: "spotlight" | "dive" | "switcher" | "slides" | "hangtag";
+  id: "spotlight" | "dive" | "switcher" | "slides" | "hangtag" | "float" | "front" | "spin";
   name: string;
   /** One line for the build form. */
   blurb: string;
   /** What our system fills the hero's picture layer with. */
-  media: "pair" | "dive" | "switch" | "photo";
+  media: "pair" | "dive" | "switch" | "photo" | "object" | "front" | "spin";
   /** The designer's exact brief for the first screen (placeholders are filled per site). */
   spec: string;
   /** What the quality check compares the first screen against. */
@@ -108,6 +108,55 @@ export const HEROES: Hero[] = [
 - Menu: white rectangular tags (no radius) with the ink colour text at 16px weight 600, height 37px, padding 0 18px, a hard 3px ledge shadow plus a soft drop (box-shadow 0 3px 0 rgba(0,0,0,.18), 0 6px 14px rgba(0,0,0,.18)); on hover they lift 2px and tilt -1.5deg.
 - Bottom centre: "Scroll" in 12px uppercase with a thin 22px line above it in which a white bead drips down every 1.6 seconds.
 - On phones the wordmark spans 94vw at the top, the badge is 27vw wide at the top right, and the picture is 70vw wide.`,
+  },
+  {
+    id: "float",
+    name: "Flying object",
+    blurb: "The trade's own object floats beside the headline, then flies down the page as you scroll",
+    media: "object",
+    check: "a large headline on the left and the business's own object (cut out, no background) floating large on the right over a rich colour field; as the page is scrolled the object flies down to sit beside later sections",
+    spec: `SIGNATURE HERO: FLYING OBJECT. Build this first screen exactly; dress it in the art direction's fonts and colours.
+- Our system supplies the business's signature object (OBJECT below), cut out with no background, and flies it through the page: it rests in one empty "perch" box, and as the visitor scrolls it lifts off, swoops and turns, and lands in the next perch. You only place the perches: each is an empty <div data-perch aria-hidden="true"></div> with an explicit width and aspect-ratio:1, in the normal flow (never position:absolute, never inside a pinned or horizontal-scroll section), with nothing inside it and nothing of yours on top of it.
+- Section: full screen (100dvh), position relative, overflow hidden, no photograph: a rich deep colour field from the palette, ideally a living gradient (<div data-shader="flow" data-colors="#hex,#hex,#hex"> absolutely filling it, in the palette's deep and accent colours) with data-grain.
+- Two columns from 900px (one column on phones, the perch after the text): left, vertically centred, max-width 560px:
+  - Headline (h1): clamp(52px, 7.6vw, 124px), the display face, weight 600, letter-spacing -.045em, line-height .92, colour the light tint, data-split="words". Six words at most.
+  - One sentence under it at 17px, line-height 1.6, max-width 440px, the light tint at 80%, data-reveal="blur".
+  - Two actions: the primary as a pill (the accent colour, 15px weight 600, padding 16px 30px) with data-magnetic, the secondary as a text link with an arrow, data-reveal="blur".
+  - A row of three short TRUE facts (12px, letter-spacing .04em, the light tint at 65%) separated by thin rules.
+  right: the first perch, width min(42vw, 600px) (78vw on phones), centred in the column, with a soft radial glow of the accent colour behind it (a separate absolutely placed element with blur, not inside the perch).
+- Add TWO more perches further down the home page: one in the second or third section, beside a statement or the services list (width min(24vw, 300px); 46vw on phones), and one in the final call-to-action section beside the action (width min(18vw, 220px); 36vw on phones). Leave the space around them clear: the object lands there.
+- A small scroll cue at the bottom centre: a 1px line 40px tall with a dot sliding down it, and "Scroll" at 11px letter-spacing .2em.`,
+  },
+  {
+    id: "front",
+    name: "Subject in front of the headline",
+    blurb: "A giant word sits behind the photo's subject, like a magazine cover, and slides away as you scroll",
+    media: "front",
+    check: "a full-screen photograph with an enormous one- or two-word headline that passes BEHIND the photo's main subject (the subject overlaps the letters), a short paragraph bottom-left and a button bottom-right",
+    spec: `SIGNATURE HERO: SUBJECT IN FRONT OF THE HEADLINE (a magazine cover). Build this first screen exactly; dress it in the art direction's fonts and colours.
+- Section: full screen (100dvh), position relative, overflow hidden, dark base colour, data-front. ${SLOT} Our system puts the hero photograph in it and lays a cut-out of the photograph's main subject exactly over it at z-index 3, so whatever sits at z-index 2 passes BEHIND the subject.
+- The headline (h1, data-front-text): ONE or TWO words only, the most striking word for this business (its trade or what it does: "TIRES", "BLOOM", "SMILES"), set ENORMOUS so the subject overlaps it: position absolute, left 0, right 0, top 22%, text-align centre, font-size clamp(96px, 19vw, 330px), the display face at its boldest, letter-spacing -.05em, line-height .8, colour white (or the palette's lightest tint), z-index 2, white-space nowrap, pointer-events none. The rest of the message goes in the h2-sized line below.
+- A second line (p, z-index 4): position absolute, left clamp(20px,4vw,56px), bottom clamp(110px,16vh,150px), max-width 340px, 17px line-height 1.5, white at 85%, data-reveal="blur": what the business does and where, in one sentence.
+- The primary action (z-index 4): position absolute, right clamp(20px,4vw,56px), bottom clamp(110px,16vh,150px), a pill button (the accent colour, 15px weight 600, padding 16px 30px) with data-magnetic and data-reveal="blur".
+- A row of four short TRUE facts along the bottom (z-index 4, 12px, letter-spacing .06em, white at 70%, separated by thin vertical rules, wrapping on phones), and a soft dark gradient (z-index 1, bottom 45% of the section) so the text reads.
+- The header and every other element in the section must have z-index 4 or more. Keep the middle of the picture clear apart from the giant word.
+- Our engine raises the word from behind the subject on load and slides it up behind the subject as the visitor scrolls.`,
+  },
+  {
+    id: "spin",
+    name: "Turning showcase",
+    blurb: "The trade's own object turns in the middle of the screen as you scroll, with callouts appearing around it",
+    media: "spin",
+    check: "the business's own object (cut out) large in the centre of a dark gradient with an enormous faint word behind it and the headline at the left; as the page is scrolled the object turns and short callouts appear beside it",
+    spec: `SIGNATURE HERO: TURNING SHOWCASE (a pinned product reveal). Build this first screen exactly; dress it in the art direction's fonts and colours.
+- The hero <section> carries data-pin="2.5" and holds exactly one <div data-pin-stage> (100vh, overflow hidden, position relative), background a deep radial gradient from the palette, lighter in the centre (e.g. radial-gradient(60% 60% at 50% 55%, a mid tone, the deepest tone)). ${SLOT.replace("first child of the hero section", "first child of the stage").replace(", width 100%, height 100dvh, with a dark base colour behind it", "")} Our system puts the business's signature object (OBJECT below), cut out, in the middle of it, and turns it once round as the visitor scrolls 2.5 screens.
+- Behind it: one enormous word (the trade, e.g. "WHEELS") in the display face at clamp(120px, 22vw, 360px), weight 800, letter-spacing -.04em, the lightest tint at 7% opacity, centred, position absolute, top 50% translateY(-50%), z-index 0, white-space nowrap, pointer-events none.
+- Beats (blocks laid out absolutely in the stage, z-index 2, each with data-at and data-until, so they write in and out as the object turns; never over the middle 40% of the stage):
+  1. data-at="0" data-until="0.3": at the left, vertically centred, max-width 420px: the headline (h1) at clamp(40px, 5vw, 76px), line-height 1, letter-spacing -.035em, the lightest tint; one sentence at 16px at 80%; the primary action as a pill button (the accent colour) with data-magnetic.
+  2. data-at="0.3" data-until="0.5", right side, top 30%; 3. data-at="0.5" data-until="0.7", left side, top 55%; 4. data-at="0.7" data-until="0.88", right side, top 60%: each a callout about one service or what the business is known for: a 1px line 80px long in the accent colour pointing toward the centre, a small number chip ("01"), a title at 22px weight 600 and one sentence at 14px at 75%, data-write on the sentence. TRUE things only.
+  5. data-at="0.88": centred near the bottom (bottom 9%): a pill button with the main action and the phone number beside it.
+- A scroll cue at the bottom left in the first beat: "Scroll to turn" at 11px letter-spacing .2em with a small rotating ring icon.
+- On phones the stage is not pinned (our engine turns the object by itself): the beats stack in reading order under the object, the word behind shrinks to 30vw.`,
   },
 ];
 

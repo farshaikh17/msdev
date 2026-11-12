@@ -73,8 +73,15 @@ export function matchClips(library: LibraryEntry[], i: Intake, siteServices = ""
 }
 
 /** What goes inside the hero's motion layer. Empty when there's neither a video nor a photo. */
-export function heroMotion(video: string | null, photos: string[], reveal = "", sig?: { media?: string; clips?: string[]; labels?: string[] }): string {
+export function heroMotion(video: string | null, photos: string[], reveal = "", sig?: { media?: string; clips?: string[]; labels?: string[]; frames?: string[]; object?: string }): string {
   const poster = photos[0] ?? "";
+  // The turning showcase: the signature object, cut out, in the middle of the stage; the engine turns it through its frames.
+  if (sig?.media === "spin" && (sig.frames?.length || sig.object)) {
+    const first = sig.frames?.[0] ?? sig.object!;
+    return `<div class="m-spin"${sig.frames?.length ? ` data-spin-frames="${esc(sig.frames.join("|"))}"` : ""}><img src="${esc(first)}" alt="" fetchpriority="high"></div>`;
+  }
+  // The magazine cover: the hero photo, still (the cut-out of its subject is laid over it, so the two must line up).
+  if (sig?.media === "front" && poster) return `<img src="${esc(poster)}" alt="" fetchpriority="high">`;
   // Signature heroes (Studio): the scene switcher shows several scenes (library video first, then photographs);
   // the camera dive puts a second, closer scene behind the first for the camera to land in.
   if (sig?.media === "switch") {

@@ -243,6 +243,10 @@ export interface Plan {
   reveal?: string;
   /** The business's trade in a word or two (used when none was typed). */
   trade?: string;
+  /** The one physical object that stands for the business (a Studio site can fly it through the page or turn it). */
+  object?: string;
+  /** How the hero photo moves when it is brought to life as a short video. */
+  move?: string;
   /** What the planning call cost (US$). */
   cost: number;
 }
@@ -271,8 +275,12 @@ What kind of business this is, in 1 to 3 words, title case (e.g. Restaurant, Plu
 @@@ SERVICES
 4 to 6 things this business offers, one per line (2–4 words each, title case). For a trade or service business these are its services; for a restaurant, bar or cafe its menu sections (e.g. Burgers & Sandwiches, Steaks, Starters, Drinks); for a gym or studio its classes; for a shop its product ranges; for a clinic its treatments. Use the ones given or on their website when there are any; otherwise what a business of this kind typically offers.
 @@@ PHOTOS
-8 photo descriptions for an image generator, one per line (15–30 words each): realistic scenes for this business's website. The first is the hero picture, and it must show the thing customers come for, close up and at its best: for a restaurant, bar or cafe the signature dish or drink being made or served (never an empty room or a building); for a trade the work being done by a person; for a salon or clinic the result or the care being given; for a place to stay the room at its most inviting. The second and third are also shown large behind the first screen, so make them equally strong and on the same subject. The rest show the main services, the setting and a happy customer moment. Concrete and visual (subject, setting, light), e.g. "A wildlife technician in uniform inspecting a roof vent on a Florida home at golden hour, ladder against the wall". No text, signs or brand names in the scene.
+8 photo descriptions for an image generator, one per line (15–30 words each): realistic scenes for this business's website. The first is the hero picture, and it must show the thing customers come for, close up and at its best: for a restaurant, bar or cafe the signature dish or drink being made or served (never an empty room or a building); for a trade the work being done by a person; for a salon or clinic the result or the care being given; for a place to stay the room at its most inviting. It has ONE clear main subject standing out from its background, near the middle of the frame and not cut off by the edges. The second and third are also shown large behind the first screen, so make them equally strong and on the same subject. The rest show the main services, the setting and a happy customer moment. Concrete and visual (subject, setting, light), e.g. "A wildlife technician in uniform inspecting a roof vent on a Florida home at golden hour, ladder against the wall". No text, signs or brand names in the scene.
 ${PAIRS_PROMPT}
+@@@ OBJECT
+One line (6–20 words): ONE physical object that stands for this business and would look superb cut out and turning slowly in a studio, described for an image generator with its material and colour, e.g. "a glossy black multi-spoke alloy wheel fitted with a new performance tyre", "a golden, flaky butter croissant", "a single glossy green maple leaf", "a polished chrome kitchen tap", "a tall iced latte in a clear glass with cream swirling through it", "a pair of white running shoes". A single solid thing a customer recognises at once: never a person, a building, a room, a logo or a pile of many things.
+@@@ MOVE
+One line (10–25 words): how the FIRST photo comes to life in a 6-second video: the camera move and the one natural motion in the scene, e.g. "slow push-in as the technician tightens the wheel nut, light gliding across the rim", "gentle drift past the counter as steam rises from the cup". Only motion the scene itself would have.
 @@@ REVEAL
 One line (15–30 words): the FIRST photo above, from exactly the same viewpoint, "seen through" to something a visitor would enjoy uncovering with a spotlight: what is underneath, how it is made, or what it becomes. Keep the same scene and subject and transform all of it boldly, e.g. the same engine bay as a glowing blue x-ray cutaway showing the parts inside; the same room at night, lit warm; the same plated dish as its raw ingredients laid out; the same garden in full summer bloom; the same wall finished in a deep rich colour.
 
@@ -294,7 +302,9 @@ ${facts}`,
     .slice(0, 2);
   const trade = lines(p.TRADE)[0]?.replace(/[^\p{L}\p{N} &\-/']/gu, "").trim().slice(0, 40);
   const reveal = lines(p.REVEAL)[0]?.slice(0, 300);
-  return { services: lines(p.SERVICES).filter((l) => l.length <= 60).slice(0, 6), imagePrompts: lines(p.PHOTOS).slice(0, 8), pairs, ...(trade ? { trade } : {}), ...(reveal ? { reveal } : {}), cost: Number(usage.cost_usd) || 0 };
+  const object = lines(p.OBJECT)[0]?.replace(/^["']|["'.]$/g, "").slice(0, 200);
+  const move = lines(p.MOVE)[0]?.replace(/^["']|["'.]$/g, "").slice(0, 240);
+  return { services: lines(p.SERVICES).filter((l) => l.length <= 60).slice(0, 6), imagePrompts: lines(p.PHOTOS).slice(0, 8), pairs, ...(trade ? { trade } : {}), ...(reveal ? { reveal } : {}), ...(object ? { object } : {}), ...(move ? { move } : {}), cost: Number(usage.cost_usd) || 0 };
 }
 
 const PAIRS_PROMPT = `@@@ PAIRS

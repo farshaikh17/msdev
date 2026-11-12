@@ -24,6 +24,9 @@ export interface Env {
   ROLE?: string;
   /** Where the forge-sites Worker lives, e.g. https://forge-sites.example.workers.dev. Unset: sites are served here at /s/<slug>. */
   SITES_ORIGIN?: string;
+  /** Cloudflare Images and Media Transformations (Studio cut-outs and turning frames; see media.ts). Absent: Studio heroes use stills. */
+  IMAGES?: unknown;
+  MEDIA?: unknown;
   /** Cloudflare Browser Run (screenshots for the automatic review). Absent: sites go live without a review. */
   BROWSER?: unknown;
 }
@@ -69,6 +72,7 @@ export interface HTMLElement {
   setAttribute(name: string, value: string): void;
   setInnerContent(content: string, opts?: { html: boolean }): void;
   append(content: string, opts?: { html: boolean }): void;
+  after(content: string, opts?: { html: boolean }): void;
   onEndTag(fn: () => void): void;
 }
 interface HTMLHandlers { element?(e: HTMLElement): void; text?(t: HTMLText): void }

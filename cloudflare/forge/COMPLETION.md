@@ -107,3 +107,16 @@ the rewrite change, expect about $2.60 to $3.50 for Studio.
 3. Decide whether the Studio score target stays at 8. If it does, the lever is real photos: paste the
    business's photo links (or its website) into the form.
 4. The owner decisions in goal 5.
+
+## Update, 2026-11-12: Studio heroes that go beyond photographs
+
+The motionsites prompts are now ideas the planner fills per business, not fixed layouts:
+
+- **Flying object** (the bee idea): the planner names one object for the trade (a wheel, a croissant, a leaf). It is drawn on a plain backdrop, cut out with Cloudflare Images, and flies from perch to perch down the home page as the visitor scrolls, rocking and tilting.
+- **Subject in front of the headline** (the model/car idea): the hero photo's subject is cut out and laid over a giant one-word headline, which rises from behind it and slides away on scroll.
+- **Turning showcase** (the 3D idea): a short generated clip of the object turning is cut into 24 transparent frames; a pinned first screen turns it as the visitor scrolls, with callouts writing in around it.
+- **Generated hero video**: when the library has no clip for the trade, the camera dive, scene switcher and hanging-badge heroes get the hero photo brought to life as a 6-second clip.
+
+Costs: cut-outs and frames sit in Cloudflare's free allowances (5,000 Images transformations a month; Media Transformations free in beta). Clips use video models (MiniMax Hailuo 2.3, about $0.28 a clip; Pruna P-Video, about $0.10, as the fallback) paid from **AI Gateway credits**, which must be loaded in the Cloudflare dashboard (AI → AI Gateway → Credits). At most one clip per Studio site. Without credits the build carries on: the turning object becomes a still that sways, and the heroes use library clips or photos.
+
+Needs the Images and Media bindings (in wrangler.jsonc) and a deploy.

@@ -23,6 +23,7 @@ import type { Stored } from "./db";
 import type { Ctx, Env } from "./env";
 import { heroMotion, matchClips, matchVideo, type LibraryEntry } from "./hero";
 import { heroById } from "./heroes";
+import { HERO_CLIP, heroClipId } from "./media";
 import { assemble, chatWidget, creditFor, finish, templateCredit, widgetFor } from "./site";
 import { sha256Hex } from "./crypto";
 import { pitchPage } from "./pitch";
@@ -66,7 +67,7 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
   let html: string;
   let accent: string;
   let current: string | null = null;
-  let motion = "";
+  let hero: HeroFill = { motion: "" };
   let ogImage: string | null = null;
   let photos: string[] = [];
   let ogTitle = `${demo.intake.businessName}${demo.content.industry ? ` | ${demo.content.industry}` : ""}${demo.intake.city ? ` in ${demo.intake.city}` : ""}`;
@@ -89,7 +90,7 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
     ogDesc = page.description;
     if (path === "/") {
       const library = await listLibrary(env, tenant.id);
-      motion = heroFor(kit, library, demo.intake, slug, names, `${prefix}/_img/${demo.liveVersion}/`);
+      hero = heroFor(kit, library, demo.intake, slug, demo.liveVersion, names, `${prefix}/_img/${demo.liveVersion}/`, clipOrigin(env));
     }
   } else {
     // A single-page design (or the template while the first design is built).
@@ -105,9 +106,12 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
     current,
     widget,
     leadUrl: `${prefix}/_lead`,
-    heroMotion: motion,
+    heroMotion: hero.motion,
+    heroSubject: hero.subject,
+    floatObject: hero.float,
+    perchPhotos: hero.perchPhotos,
     photos,
-    legacyHero: !!motion && !html.includes('class="hero-motion"'),
+    legacyHero: !!hero.motion && !html.includes('class="hero-motion"'),
     og: { title: ogTitle, description: ogDesc, url: pageUrl.toString(), image: ogImage },
   });
   ctx.waitUntil(cache.put(req, res.clone()));
@@ -119,19 +123,44 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
  * preview, review screenshots or before/after pairs). A Studio site's signature hero decides the
  * rest: one picture (or its spotlight twin), several scenes, or a second scene to dive into.
  */
-function heroFor(kit: Kit, library: LibraryEntry[], intake: Stored["intake"], slug: string, names: string[], base: string): string {
+function heroFor(kit: Kit, library: LibraryEntry[], intake: Stored["intake"], slug: string, version: string, names: string[], base: string, clipBase: string): HeroFill {
   const photos = names.filter((n) => /^photo-\d+\.jpg$/.test(n)).map((n) => base + n);
   const services = pagesOf(kit).map((p) => p.name).join(" ");
-  if (kit.style !== "studio") return heroMotion(matchVideo(library, intake, slug, services), photos.slice(0, 3));
+  if (kit.style !== "studio") return { motion: heroMotion(matchVideo(library, intake, slug, services), photos.slice(0, 3)) };
   const sig = heroById(kit.hero);
+  // A clip from the library for the trade, otherwise the hero photo brought to life for this site (if one was made).
+  const made = names.includes(HERO_CLIP) ? `${clipBase}/_v/${heroClipId(version)}.mp4` : null;
+  const video = matchVideo(library, intake, slug, services) ?? made;
+  const frames = names.filter((n) => /^spin-\d{2}\.webp$/.test(n)).map((n) => base + n);
+  const object = names.includes("object.webp") ? base + "object.webp" : undefined;
   if (sig?.media === "switch") {
     const items = pagesOf(kit).filter((p) => p.role === "item" || p.path.startsWith("/services/")).map((p) => p.name);
-    return heroMotion(null, photos.slice(0, 4), "", { media: "switch", clips: matchClips(library, intake, services).slice(0, 4), labels: items });
+    const clips = [...matchClips(library, intake, services), ...(made ? [made] : [])].slice(0, 4);
+    return { motion: heroMotion(null, photos.slice(0, 4), "", { media: "switch", clips, labels: items }) };
   }
-  if (sig?.media === "dive") return heroMotion(matchVideo(library, intake, slug, services), photos.slice(0, 2), "", { media: "dive" });
+  if (sig?.media === "dive") return { motion: heroMotion(video, photos.slice(0, 2), "", { media: "dive" }) };
+  if (sig?.media === "spin") return { motion: heroMotion(null, photos.slice(0, 1), "", { media: "spin", frames, object }) };
+  if (sig?.media === "front") return { motion: heroMotion(null, photos.slice(0, 1), "", { media: "front" }), subject: names.includes("subject.webp") ? base + "subject.webp" : undefined };
+  // The flying object lives in its own layer over the page; the hero itself has no picture.
+  if (sig?.media === "object") return { motion: "", float: object ? { frames, still: object } : undefined, perchPhotos: object ? undefined : photos.slice(0, 3) };
   // A Studio first screen holds one picture (a slow drift); a crossfade between different shots reads as two unrelated images.
-  return heroMotion(matchVideo(library, intake, slug, services), photos.slice(0, 1), names.includes("reveal-1.jpg") ? base + "reveal-1.jpg" : "");
+  return { motion: heroMotion(video, photos.slice(0, 1), names.includes("reveal-1.jpg") ? base + "reveal-1.jpg" : "") };
 }
+
+/** What a home page's first screen is filled with. */
+interface HeroFill {
+  /** The picture layer (.hero-motion). */
+  motion: string;
+  /** A cut-out of the hero photo's subject, laid over the headline. */
+  subject?: string;
+  /** The signature object that flies from perch to perch (its turning frames, if any, and a still). */
+  float?: { frames: string[]; still: string };
+  /** No object could be made: the perches show photos instead of standing empty. */
+  perchPhotos?: string[];
+}
+
+/** Where generated hero clips are served from (forge-sites; the same origin when it serves sites itself). */
+const clipOrigin = (env: Env) => (env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : "");
 
 /** The path a version's first-screen draft is kept under (never part of the site's own pages). */
 export const HERO_DRAFT = "/_hero";
@@ -147,9 +176,9 @@ export async function serveDraft(req: Request, env: Env, slug: string, version: 
   if (!found || !kit || !page) return text("Nothing here.", 404);
   const names = await imageNames(env, slug, version);
   const library = await listLibrary(env, found.tenant.id);
-  const motion = heroFor(kit, library, found.demo.intake, slug, names, `${prefix}/_img/${version}/`);
+  const hero = heroFor(kit, library, found.demo.intake, slug, version, names, `${prefix}/_img/${version}/`, clipOrigin(env));
   const res = new Response(assemble(kit, page, slug, creditFor(found.tenant)), { headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "no-store" } });
-  return finish(res, { prefix, current: "/", widget: "", leadUrl: `${prefix}/_lead`, heroMotion: motion });
+  return finish(res, { prefix, current: "/", widget: "", leadUrl: `${prefix}/_lead`, heroMotion: hero.motion, heroSubject: hero.subject, floatObject: hero.float, perchPhotos: hero.perchPhotos });
 }
 
 const BOT = /bot|crawl|spider|slurp|preview|facebookexternalhit|whatsapp|telegram|discord|slack|skype|twitterbot|linkedin|pinterest|curl|wget|python|java\/|headless|lighthouse|pagespeed|gtmetrix|uptime|monitor/i;
@@ -193,7 +222,7 @@ export async function serveImage(req: Request, env: Env, ctx: Ctx, slug: string,
   if (!(await publicDemo(env, slug))) return text("Not found", 404);
   const bytes = await getImage(env, slug, version, name);
   if (!bytes) return text("Not found", 404);
-  const res = new Response(bytes, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=31536000, immutable" } });
+  const res = new Response(bytes, { headers: { "content-type": name.endsWith(".webp") ? "image/webp" : "image/jpeg", "cache-control": "public, max-age=31536000, immutable" } });
   ctx.waitUntil(cache.put(req, res.clone()));
   return res;
 }
