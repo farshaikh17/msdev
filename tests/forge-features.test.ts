@@ -295,7 +295,7 @@ describe("illustrative before/after pairs", () => {
     expect(out.map((x) => x.name)).toEqual(["ba-1-before.jpg", "ba-1-after.jpg", "ba-2-before.jpg", "ba-2-after.jpg"]);
     expect(calls.filter((c) => c.hasRef)).toHaveLength(2);
     expect(calls.every((c) => c.w === "512")).toBe(true);
-    expect(calls.find((c) => c.hasRef)!.prompt).toContain("image 0 as the exact reference");
+    expect(calls.find((c) => c.hasRef)!.prompt).toContain("Edit image 0. Keep the same place");
     // A failed "after" drops the whole pair; nothing is half-shown.
     let k = 0;
     const flaky = { run: async (_m: string, input: { multipart: { body: ReadableStream; contentType: string } }) => {
