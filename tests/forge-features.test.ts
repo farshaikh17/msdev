@@ -21,7 +21,8 @@ vi.mock("../cloudflare/forge/src/designer", async (orig) => {
   const real = await orig<typeof import("../cloudflare/forge/src/designer")>();
   return { ...real, planSite: vi.fn(), planPairs: vi.fn(), designKit: vi.fn(), designSitePage: vi.fn(), fixChrome: vi.fn() };
 });
-vi.mock("../cloudflare/forge/src/images", () => ({ beforeAfterImages: vi.fn(async () => []), previewImages: vi.fn(async () => [{ name: "photo-1.jpg", description: "a shop", bytes: new Uint8Array([1]) }]) }));
+vi.mock("../cloudflare/forge/src/images", () => ({ beforeAfterImages: vi.fn(async () => []),
+  heroPair: vi.fn(async () => null), previewImages: vi.fn(async () => [{ name: "photo-1.jpg", description: "a shop", bytes: new Uint8Array([1]) }]) }));
 vi.mock("../cloudflare/forge/src/scrape", () => ({ readWebsite: vi.fn() }));
 vi.mock("../cloudflare/forge/src/outreach", async (orig) => {
   const real = await orig<typeof import("../cloudflare/forge/src/outreach")>();
@@ -60,7 +61,7 @@ function fakeBrowser(facts: Record<string, unknown>, opts: { failOld?: boolean }
   };
   return { browser: { newPage: async () => page as never, close: async () => undefined }, visited };
 }
-const goodFacts = (links: string[]) => ({ overflow: false, h1: 1, noAlt: 0, brokenImgs: 0, links, hasViewport: true, tel: true, forms: 1, textPx: 16, words: 400, https: true });
+const goodFacts = (links: string[]) => ({ overflow: false, h1: 1, noAlt: 0, brokenImgs: 0, links, hasViewport: true, tel: true, forms: 1, textPx: 16, words: 400, https: true, parallax: 4, pins: 1, scrubs: 1 });
 
 let h: Harness;
 beforeEach(() => {
@@ -428,6 +429,22 @@ describe("Studio art directions", () => {
     expect(critique).toHaveBeenCalledTimes(1);
     // The notes are kept for the fix buttons.
     expect(r.issues).toHaveLength(1);
+  });
+
+  it("a Studio page with no scroll-driven motion fails the check and is rewritten with that note", async () => {
+    const { slug, demo } = await liveDemo();
+    const version = demo.liveVersion!;
+    const row = h.db.prepare("SELECT kit FROM site_versions WHERE slug = ? AND version = ?").get(slug, version) as { kit: string };
+    h.db.prepare("UPDATE site_versions SET kit = ? WHERE slug = ? AND version = ?").run(JSON.stringify({ ...JSON.parse(row.kit), style: "studio" }), slug, version);
+    h.db.prepare("INSERT INTO site_pages (slug, version, path, title, description, css, body) VALUES (?, ?, '/_hero', 't', 'd', '', '<main><h1>Home</h1></main>')").run(slug, version);
+    const still = { ...goodFacts([`/${slug}/about`]), parallax: 0, pins: 0, scrubs: 0 };
+    const critique = vi.fn<ReviewDeps["critique"]>(async () => ({ score: 9, verdict: "Lovely.", strengths: [], issues: [], costUsd: 0.01 }));
+    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => fakeBrowser(still).browser, critique, sleep: async () => undefined });
+    expect(r.checks!.find((c) => c.id === "scroll-motion")).toMatchObject({ ok: false });
+    const notes = vi.mocked(designSitePage).mock.calls.find((c) => c[3]?.notes)![3]!.notes!;
+    expect(notes.join(" ")).toContain("The page moves as it is scrolled: FAILED");
+    // A Standard site isn't held to it.
+    expect((await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => fakeBrowser(still).browser, critique, sleep: async () => undefined })).checks).toBeTruthy();
   });
 
   it("keeps the original home page when the rewrite scores lower", async () => {

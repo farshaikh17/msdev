@@ -83,6 +83,10 @@ interface PageFacts {
   /** Tall sections with nothing in them (no words, pictures, video or drawing). */
   emptyBlocks?: number;
   /** The tells of a machine-made page: small spaced-capital labels above headings, a main heading with one word in another colour or in italics, its length in words, and strings of facts joined by dots. */
+  /** Scroll-driven motion on the page: pictures with parallax, pinned sequences, scrubbed statements. */
+  parallax?: number;
+  pins?: number;
+  scrubs?: number;
   eyebrows?: number;
   accentWord?: boolean;
   h1Words?: number;
@@ -103,6 +107,9 @@ export const FACTS = `(() => ({
   noAlt: Array.from(document.images).filter((i) => !i.hasAttribute("alt")).length,
   brokenImgs: Array.from(document.images).filter((i) => i.src && i.complete && !i.naturalWidth).length,
   emptyBlocks: Array.from(document.querySelectorAll("main section, main > div")).filter((e) => e.offsetHeight >= 480 && !(e.innerText || "").trim() && !e.querySelector("img,picture,video,canvas,svg,iframe")).length,
+  parallax: document.querySelectorAll("main [data-parallax]").length,
+  pins: document.querySelectorAll("main [data-pin] [data-pin-stage], main [data-horizontal] [data-horizontal-track], main [data-stack]").length,
+  scrubs: document.querySelectorAll("main [data-scrub-text], main [data-write]").length,
   eyebrows: Array.from(document.querySelectorAll("main h1, main h2, main h3")).filter((h) => { const p = h.previousElementSibling; if (!p || !(p.innerText || "").trim() || (p.innerText || "").length > 70 || /^H[1-6]$/.test(p.tagName)) return false; const c = getComputedStyle(p); return c.textTransform === "uppercase" && parseFloat(c.letterSpacing) >= 1 && parseFloat(c.fontSize) <= 16; }).length,
   accentWord: (() => { const h = document.querySelector("main h1"); if (!h) return false; const b = getComputedStyle(h); return Array.from(h.querySelectorAll("em, i, span, strong, mark, u")).some((e) => { if (!(e.innerText || "").trim() || e.closest(".m-line-mask, .m-line, .m-char, .m-word") === e || /^m-/.test(e.className || "")) return false; const c = getComputedStyle(e); return c.color !== b.color || c.fontStyle !== b.fontStyle; }); })(),
   h1Words: ((document.querySelector("main h1") || {}).innerText || "").split(/\\s+/).filter(Boolean).length,
@@ -437,6 +444,10 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
       consoleErrors.filter((e) => !/favicon|ERR_BLOCKED|net::|Failed to load resource/i.test(e)),
       !!demo.intake.phone,
     );
+    if (kit.style === "studio") {
+      const moving = (dFacts.parallax ?? 0) >= 3 && (dFacts.pins ?? 0) >= 1 && (dFacts.scrubs ?? 0) >= 1;
+      checks.push({ id: "scroll-motion", label: "The page moves as it is scrolled", ok: moving, detail: moving ? undefined : `${dFacts.parallax ?? 0} moving pictures, ${dFacts.pins ?? 0} pinned sequences, ${dFacts.scrubs ?? 0} scrubbed statements; a Studio page needs at least 3, 1 and 1 (see the scroll floor)` });
+    }
     checks.splice(2, 0, { id: "overflow-inner", label: "Other pages fit a phone screen", ok: !wide.length, detail: wide.length ? wide.map((x) => `${x.path} is ${x.px}px too wide`).join(", ") : undefined });
 
     // The business's current website, for the before/after.

@@ -67,8 +67,10 @@ export function matchVideo(library: LibraryEntry[], i: Intake, slug: string, sit
 }
 
 /** What goes inside the hero's motion layer. Empty when there's neither a video nor a photo. */
-export function heroMotion(video: string | null, photos: string[]): string {
+export function heroMotion(video: string | null, photos: string[], reveal = ""): string {
   const poster = photos[0] ?? "";
+  // A Studio first screen with a matched second picture: it shows through a spotlight that trails the pointer.
+  if (!video && poster && reveal) return `<img src="${esc(poster)}" alt="" fetchpriority="high"><img data-spotlight-reveal src="${esc(reveal)}" alt="">`;
   if (video)
     return `${poster ? `<img src="${esc(poster)}" alt="" fetchpriority="high">` : ""}<video autoplay muted loop playsinline preload="auto"${poster ? ` poster="${esc(poster)}"` : ""}><source src="${esc(video)}" type="video/mp4"></video>`;
   // Three photos cross-fade; with fewer, the first one drifts on its own (two would leave gaps).
@@ -91,10 +93,11 @@ export const HERO_CSS = `.hero-motion{position:absolute;inset:0;z-index:0;pointe
 :is(.hero-motion,.hero-motion-fill):has(img:nth-child(3)) img:nth-child(1){animation-delay:-1s}
 :is(.hero-motion,.hero-motion-fill):has(img:nth-child(3)) img:nth-child(2){animation-delay:5s}
 :is(.hero-motion,.hero-motion-fill):has(img:nth-child(3)) img:nth-child(3){animation-delay:11s}
-:is(.hero-motion,.hero-motion-fill) img:only-child{animation:fg-drift-solo 20s ease-in-out infinite alternate}
+:is(.hero-motion,.hero-motion-fill) img:only-child,:is(.hero-motion,.hero-motion-fill)[data-spotlight] img{animation:fg-zoom-in 1.8s cubic-bezier(.16,1,.3,1) both,fg-drift-solo 20s ease-in-out 1.8s infinite alternate}
 :is(.hero-motion,.hero-motion-fill):has(video) img{animation:none;opacity:1}
 @keyframes fg-fade{0%{opacity:0}5%{opacity:1}33%{opacity:1}39%{opacity:0}100%{opacity:0}}
 @keyframes fg-drift{0%{transform:scale(1.04) translate(0,0)}39%{transform:scale(1.16) translate(-2%,-1.5%)}100%{transform:scale(1.16) translate(-2%,-1.5%)}}
+@keyframes fg-zoom-in{from{transform:scale(1.15)}to{transform:scale(1.03)}}
 @keyframes fg-drift-solo{from{transform:scale(1.03)}to{transform:scale(1.15) translate(-2%,-1%)}}
 @media (prefers-reduced-motion:reduce){:is(.hero-motion,.hero-motion-fill) img{animation:none!important;opacity:0!important}:is(.hero-motion,.hero-motion-fill) img:first-child{opacity:1!important}:is(.hero-motion,.hero-motion-fill) video{display:none}}`;
 

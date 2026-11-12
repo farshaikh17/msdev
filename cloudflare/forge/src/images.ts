@@ -60,6 +60,23 @@ export async function previewImages(env: Env, descriptions: string[]): Promise<P
   return made.flatMap((bytes, n) => (bytes ? [{ name: `photo-${n + 1}.jpg`, description: descriptions[n], bytes }] : []));
 }
 
+/**
+ * A matched pair for a Studio first screen: the hero picture and the same scene "seen through"
+ * (what's underneath, or what it becomes), so one can show through a spotlight over the other.
+ * Both are made from one small seed picture used as their reference, which is what keeps the
+ * camera angle and framing the same. Counts as about two and a half photos.
+ */
+export async function heroPair(env: Env, hero: string, reveal: string): Promise<{ base: Uint8Array; reveal: Uint8Array } | null> {
+  if (!env.AI || !hero || !reveal || !(await spendImages(env, 1, 2.5))) return null;
+  const seed = await generate(env, hero, { small: true });
+  if (!seed) return null;
+  const [base, top] = await Promise.all([
+    generate(env, "Reproduce image 0 exactly as a sharp, detailed, realistic photograph: the same subject, composition, camera angle, framing, colours and light. Change nothing. No text, no logos.", { reference: seed }),
+    generate(env, `Edit image 0. Keep the same place, composition, camera angle and framing exactly, so the two pictures line up. Transform it into: ${reveal}. Make the transformation bold and obvious across the whole picture. No text, no logos.`, { reference: seed }),
+  ]);
+  return base && top ? { base, reveal: top } : null;
+}
+
 export interface BeforeAfter {
   /** What the "before" shows, and the change that makes the "after". */
   before: string;

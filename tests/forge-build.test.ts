@@ -21,6 +21,7 @@ vi.mock("../cloudflare/forge/src/designer", async (orig) => {
 });
 vi.mock("../cloudflare/forge/src/images", () => ({
   beforeAfterImages: vi.fn(async () => []),
+  heroPair: vi.fn(async () => null),
   previewImages: vi.fn(async () => [
     { name: "photo-1.jpg", description: "a barber at work", bytes: new Uint8Array([1, 2, 3]) },
     { name: "photo-2.jpg", description: "a shop front", bytes: new Uint8Array([4, 5, 6]) },

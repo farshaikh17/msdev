@@ -166,6 +166,7 @@ export function finish(res: Response, opts: { prefix: string; current: string | 
       if (filled) return;
       filled = true;
       if (legacy) e.setAttribute("class", `${e.getAttribute("class") ?? ""} hero-motion-fill`);
+      if (opts.heroMotion!.includes("data-spotlight-reveal")) e.setAttribute("data-spotlight", "");
       e.setInnerContent(opts.heroMotion!, { html: true });
     };
     r = r.on(".hero-motion", { element: (e) => fill(e, false) });

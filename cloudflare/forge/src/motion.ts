@@ -32,6 +32,9 @@ export const MOTION_API = `Our motion engine is loaded on every page (GSAP + Scr
 - data-shader="flow" data-colors="#hex,#hex,#hex" on an empty <div> placed absolutely (inset:0) inside a position:relative section: a living WebGL gradient in those colours that reacts to the pointer. Use the brand palette; great for hero backgrounds, CTA bands and the footer.
 - data-grain on a section: a subtle animated film-grain overlay.
 - data-follow on an element inside a position:relative container: it trails the pointer within the container (e.g. a floating image preview in a list of services).
+- data-reveal="blur" on first-screen copy (the paragraph, the buttons): rises 28px out of a 12px blur, staggered after the headline. The premium load-in.
+- data-depth="0.02" (0.01 to 0.06) on layered first-screen elements (a badge, a floating card, a picture frame): each drifts against the pointer by its own amount, so the layers separate. Bigger numbers sit "closer".
+- data-pin="3" on a <section> that contains one <div data-pin-stage> (exactly one screen tall: 100vh, overflow hidden): the stage pins while the visitor scrolls 3 more screens, and that scroll drives everything inside it. Inside the stage: data-at="0.2" on a block makes it write in (rise out of blur) when the scroll reaches 20%, and data-until="0.55" makes it leave again; data-write on a paragraph inside such a block writes it in word by word; data-pin-zoom="1.25" on the stage's background picture pushes the camera in from 1 to 1.25 across the whole scroll; data-pin-count="24" on a number counts up across its block's span. Lay the blocks out absolutely in different corners of the stage so that those sharing the screen never overlap, and give 3 to 5 beats. On phones the stage is not pinned and the blocks simply stack, so write them in reading order.
 Our engine also adds a short preloader (first visit), smooth page-to-page transitions, and smooth scrolling. Links to other pages just work.`;
 
 export const MOTION_CSS = `
@@ -51,6 +54,10 @@ html.m-on .m-cursor,html.m-on .m-ring{opacity:1}
 [data-marquee]{overflow:hidden;white-space:nowrap}[data-marquee]>*{display:inline-flex}
 [data-horizontal]{overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;max-width:100%}:where([data-horizontal-track]){display:flex}:where([data-horizontal-track])>:where(*){scroll-snap-align:start;flex-shrink:0;min-width:min(78vw,560px)}
 [data-horizontal].m-pinned{overflow:hidden;scroll-snap-type:none}
+.m-spot [data-spotlight-reveal]{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;-webkit-mask-image:radial-gradient(circle var(--m-r,240px) at var(--m-x,-999px) var(--m-y,-999px),#000 0,#000 40%,rgba(0,0,0,.75) 60%,rgba(0,0,0,.4) 75%,rgba(0,0,0,.12) 88%,transparent 100%);mask-image:radial-gradient(circle var(--m-r,240px) at var(--m-x,-999px) var(--m-y,-999px),#000 0,#000 40%,rgba(0,0,0,.75) 60%,rgba(0,0,0,.4) 75%,rgba(0,0,0,.12) 88%,transparent 100%)}
+[data-spotlight]:not(.m-spot) [data-spotlight-reveal]{display:none}
+[data-pin].m-pinned [data-pin-stage]{position:relative;height:100vh;overflow:hidden}
+.m-pin-bar{position:absolute;left:50%;bottom:22px;width:120px;height:2px;margin-left:-60px;background:rgba(128,128,128,.3);border-radius:2px;z-index:5;pointer-events:none}.m-pin-bar i{display:block;height:100%;background:var(--m-accent,#111);transform-origin:0 50%;transform:scaleX(0)}
 [data-follow]{pointer-events:none;display:none}html.m-on.m-fine [data-follow]{display:block}
 html.m-wait [data-split],html.m-wait [data-reveal]{visibility:hidden}
 html.m-on,html.m-on body{overflow-x:clip}html.lenis,html.lenis body{height:auto}.lenis.lenis-smooth{scroll-behavior:auto!important}.lenis.lenis-stopped{overflow:hidden}
@@ -79,6 +86,7 @@ var lenis=null;
 if(W.Lenis){lenis=new W.Lenis({duration:1.15,smoothWheel:true});lenis.on("scroll",ST.update);G.ticker.add(function(t){lenis.raf(t*1000)});G.ticker.lagSmoothing(0)}
 var first=d.querySelector("main section, main > *");
 var intro=G.timeline({paused:true});
+var mm0=G.matchMedia();
 // --- text
 all("[data-split]").forEach(function(el){
   if(!SPLIT)return;var type=el.dataset.split||"lines";
@@ -94,11 +102,13 @@ all("[data-scrub-text]").forEach(function(el){
   G.fromTo(s.words,{opacity:.14},{opacity:1,stagger:.1,ease:"none",scrollTrigger:{trigger:el,start:"top 80%",end:"bottom 45%",scrub:true}});
 });
 // --- reveals
-var SX=Math.min(80,Math.round(innerWidth*.06));var FROM={up:{y:70,opacity:0},fade:{opacity:0},scale:{scale:.88,opacity:0},left:{x:-SX,opacity:0},right:{x:SX,opacity:0},clip:{clipPath:"inset(100% 0% 0% 0%)"}};
+var SX=Math.min(80,Math.round(innerWidth*.06));var FROM={blur:{y:28,opacity:0,filter:"blur(12px)"},up:{y:70,opacity:0},fade:{opacity:0},scale:{scale:.88,opacity:0},left:{x:-SX,opacity:0},right:{x:SX,opacity:0},clip:{clipPath:"inset(100% 0% 0% 0%)"}};
+var nblur=0;
 all("[data-reveal]").forEach(function(el){
   var f=FROM[el.dataset.reveal]||FROM.up,to={y:0,x:0,scale:1,opacity:1,clipPath:"inset(0% 0% 0% 0%)",duration:1.2,ease:"expo.out"};
+  if(f.filter){to.filter="blur(0px)";to.duration=1.1;to.ease="cubic-bezier(.16,1,.3,1)";to.clearProps="filter"}
   G.set(el,f);
-  if(first&&first.contains(el))intro.to(el,to,.25);else G.to(el,Object.assign({scrollTrigger:{trigger:el,start:"top 90%"}},to));
+  if(first&&first.contains(el))intro.to(el,to,f.filter?.45+(nblur++)*.15:.25);else G.to(el,Object.assign({scrollTrigger:{trigger:el,start:"top 90%"}},to));
 });
 all("[data-stagger]").forEach(function(el){
   var kids=el.children;if(!kids.length)return;G.set(kids,{y:60,opacity:0});
@@ -108,6 +118,37 @@ all("[data-stagger]").forEach(function(el){
 all("[data-parallax]").forEach(function(el){
   var s=Math.max(-.6,Math.min(.6,num(el.dataset.parallax,.15)));
   G.fromTo(el,{yPercent:-s*50},{yPercent:s*50,ease:"none",scrollTrigger:{trigger:el.parentElement||el,start:"top bottom",end:"bottom top",scrub:true}});
+});
+// --- pinned scroll story: the stage holds still while the scroll writes its content in and out
+mm0.add("(min-width: 900px)",function(){
+  all("[data-pin]").forEach(function(sec){
+    var stage=sec.querySelector("[data-pin-stage]");if(!stage)return;
+    var screens=Math.max(1,Math.min(6,num(sec.dataset.pin,3)));
+    var blocks=all("[data-at]",stage).map(function(el){
+      var w=el.hasAttribute("data-write")?el:el.querySelector("[data-write]"),words=null;
+      if(w&&SPLIT){words=new SPLIT(w,{type:"words"}).words}
+      var c=el.hasAttribute("data-pin-count")?el:el.querySelector("[data-pin-count]");
+      return {el:el,at:num(el.dataset.at,0),until:el.hasAttribute("data-until")?num(el.dataset.until,1):null,words:words,count:c,end:c?num(c.dataset.pinCount,0):0};
+    });
+    var zoom=stage.querySelector("[data-pin-zoom]"),z=zoom?num(zoom.dataset.pinZoom,1.2):1;
+    var bar=d.createElement("div");bar.className="m-pin-bar";bar.innerHTML="<i></i>";stage.appendChild(bar);
+    function cl(v){return v<0?0:v>1?1:v}
+    function apply(p){
+      blocks.forEach(function(b){
+        var k=cl((p-b.at)/.1),o=b.until===null?0:cl((p-b.until)/.08);
+        b.el.style.opacity=k*(1-o);b.el.style.visibility=k*(1-o)<=0?"hidden":"visible";
+        b.el.style.transform="translate3d(0,"+((1-k)*30-o*40)+"px,0)";
+        b.el.style.filter=k<1||o>0?"blur("+((1-k)*10+o*10)+"px)":"";
+        if(b.words){var span=(b.until===null?1:b.until)-b.at,n=b.words.length;b.words.forEach(function(wd,i){var q=cl(((p-b.at)/(span*.6))*1.6-i/n*1.1);wd.style.opacity=.15+.85*q})}
+        if(b.count){var q2=cl((p-b.at)/Math.max(.12,((b.until===null?1:b.until)-b.at)*.6));b.count.textContent=(b.count.dataset.prefix||"")+Math.round(b.end*q2).toLocaleString()+(b.count.dataset.suffix||"")}
+      });
+      if(zoom)zoom.style.transform="scale("+(1+(z-1)*p)+")";
+      bar.firstChild.style.transform="scaleX("+p+")";
+    }
+    sec.classList.add("m-pinned");apply(0);
+    ST.create({trigger:sec,start:"top top",end:function(){return "+="+screens*innerHeight},pin:stage,scrub:.6,invalidateOnRefresh:true,onUpdate:function(self){apply(self.progress)}});
+  });
+  return function(){all("[data-pin]").forEach(function(sec){sec.classList.remove("m-pinned");all("[data-at]",sec).forEach(function(el){el.style.cssText=""})})};
 });
 // --- marquee
 all("[data-marquee]").forEach(function(el){
@@ -147,6 +188,28 @@ all("[data-counter]").forEach(function(el){
   el.textContent=pre+"0"+suf;
   G.to(o,{v:end,duration:2,ease:"power3.out",scrollTrigger:{trigger:el,start:"top 90%"},onUpdate:function(){el.textContent=pre+o.v.toFixed(dec).replace(/\B(?=(\d{3})+(?!\d))/g,",")+suf}});
 });
+// --- spotlight: a second picture shows through a soft circle that trails the pointer (drifts by itself on touch screens)
+all("[data-spotlight]").forEach(function(box){
+  var top=box.querySelector("[data-spotlight-reveal]");if(!top)return;
+  var r=Math.round(Math.min(260,Math.max(120,innerWidth*.2))),sx=-999,sy=-999,tx=-999,ty=-999,seen=false,t0=performance.now();
+  top.style.setProperty("--m-r",r+"px");box.classList.add("m-spot");
+  function place(e){var b=box.getBoundingClientRect();tx=e.clientX-b.left;ty=e.clientY-b.top;if(!seen){seen=true;sx=tx;sy=ty}}
+  if(fine)W.addEventListener("pointermove",place,{passive:true});
+  G.ticker.add(function(){
+    var b=box.getBoundingClientRect();if(b.bottom<0||b.top>innerHeight)return;
+    if(!fine||!seen){var t=(performance.now()-t0)/1000;tx=b.width*(.5+.3*Math.sin(t*.45));ty=b.height*(.48+.2*Math.sin(t*.9+1));if(sx<-900){sx=tx;sy=ty}}
+    sx+=(tx-sx)*.1;sy+=(ty-sy)*.1;
+    top.style.setProperty("--m-x",sx.toFixed(1)+"px");top.style.setProperty("--m-y",sy.toFixed(1)+"px");
+  });
+});
+// --- depth: layered first-screen elements drift against the pointer by their own amounts
+(function(){
+  var layers=all("[data-depth]");if(!layers.length||!fine)return;
+  var px=0,py=0,qx=0,qy=0;
+  W.addEventListener("pointermove",function(e){px=e.clientX/innerWidth-.5;py=e.clientY/innerHeight-.5},{passive:true});
+  var set=layers.map(function(el){return {x:G.quickSetter(el,"x","px"),y:G.quickSetter(el,"y","px"),k:Math.max(-.08,Math.min(.08,num(el.dataset.depth,.02)))}});
+  G.ticker.add(function(){qx+=(px-qx)*.06;qy+=(py-qy)*.06;if(scrollY>innerHeight*1.2)return;set.forEach(function(l){l.x(-qx*innerWidth*l.k);l.y(-qy*innerHeight*l.k)})});
+})();
 // --- pointer effects (desktop only)
 if(fine){
   root.classList.add("m-fine");

@@ -33,7 +33,7 @@ import type { Kit } from "./designer";
 import { lintSite, repairNote, type QaIssue, type QaResult } from "./qa";
 import { adaptKit, fixChrome, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, studioHome, TryLater, type Plan } from "./designer";
 import type { BuildJob, Env } from "./env";
-import { beforeAfterImages, previewImages } from "./images";
+import { heroPair, beforeAfterImages, previewImages } from "./images";
 import { privacyPage, termsPage } from "./legal";
 import { drawFor, pickConcept } from "./concepts";
 import { mergeIntake, reverseGeocode } from "./places";
@@ -240,9 +240,17 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
         await setTrade(env, slug, plan.trade);
       }
       const [images, pairImages] = await Promise.all([previewImages(env, plan?.imagePrompts ?? []), beforeAfterImages(env, plan?.pairs ?? []).catch(() => [])]);
+      // A Studio first screen gets a matched second picture that shows through a spotlight; it replaces the first photo with its aligned twin.
+      if (intake.style === "studio" && plan?.reveal && images[0]) {
+        const pair = await heroPair(env, plan.imagePrompts[0] ?? "", plan.reveal).catch(() => null);
+        if (pair) {
+          images[0] = { ...images[0], bytes: pair.base };
+          images.push({ name: "reveal-1.jpg", description: plan.reveal, bytes: pair.reveal });
+        }
+      }
       await Promise.all([...images, ...pairImages].map((img) => saveImage(env, slug, version, img.name, img.description, img.bytes)));
       const imgBase = `${env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : ""}/${slug}/_img/${version}/`;
-      const previews = images.map((img) => ({ url: imgBase + img.name, description: img.description }));
+      const previews = images.filter((img) => img.name.startsWith("photo-")).map((img) => ({ url: imgBase + img.name, description: img.description }));
       // A pair is only offered when both of its pictures came out.
       const pairs = [1, 2].flatMap((n) => {
         const b = pairImages.find((p) => p.name === `ba-${n}-before.jpg`);

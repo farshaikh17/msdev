@@ -92,6 +92,7 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
         // Only the site's own photos: never the link preview, review screenshots or before/after pairs.
         // A Studio first screen holds one picture (a slow drift); a crossfade between different shots reads as two unrelated images.
         names.filter((n) => /^photo-\d+\.jpg$/.test(n)).slice(0, kit.style === "studio" ? 1 : 3).map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`),
+        kit.style === "studio" && names.includes("reveal-1.jpg") ? `${prefix}/_img/${demo.liveVersion}/reveal-1.jpg` : "",
       );
     }
   } else {
@@ -134,6 +135,7 @@ export async function serveDraft(req: Request, env: Env, slug: string, version: 
   const motion = heroMotion(
     matchVideo(library, found.demo.intake, slug, pagesOf(kit).map((p) => p.name).join(" ")),
     names.filter((n) => /^photo-\d+\.jpg$/.test(n)).slice(0, kit.style === "studio" ? 1 : 3).map((n) => `${prefix}/_img/${version}/${n}`),
+    kit.style === "studio" && names.includes("reveal-1.jpg") ? `${prefix}/_img/${version}/reveal-1.jpg` : "",
   );
   const res = new Response(assemble(kit, page, slug, creditFor(found.tenant)), { headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "no-store" } });
   return finish(res, { prefix, current: "/", widget: "", leadUrl: `${prefix}/_lead`, heroMotion: motion });

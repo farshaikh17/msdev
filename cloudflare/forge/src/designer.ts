@@ -238,6 +238,8 @@ export interface Plan {
   imagePrompts: string[];
   /** 0 or 2 illustrative before/after scenes, for trades where the work visibly transforms something. */
   pairs?: { before: string; after: string }[];
+  /** How the hero picture looks "seen through" (for the spotlight on a Studio first screen). */
+  reveal?: string;
   /** The business's trade in a word or two (used when none was typed). */
   trade?: string;
   /** What the planning call cost (US$). */
@@ -270,6 +272,8 @@ What kind of business this is, in 1 to 3 words, title case (e.g. Restaurant, Plu
 @@@ PHOTOS
 8 photo descriptions for an image generator, one per line (15–30 words each): realistic scenes for this business's website. The first is the hero picture, and it must show the thing customers come for, close up and at its best: for a restaurant, bar or cafe the signature dish or drink being made or served (never an empty room or a building); for a trade the work being done by a person; for a salon or clinic the result or the care being given; for a place to stay the room at its most inviting. The second and third are also shown large behind the first screen, so make them equally strong and on the same subject. The rest show the main services, the setting and a happy customer moment. Concrete and visual (subject, setting, light), e.g. "A wildlife technician in uniform inspecting a roof vent on a Florida home at golden hour, ladder against the wall". No text, signs or brand names in the scene.
 ${PAIRS_PROMPT}
+@@@ REVEAL
+One line (15–30 words): the FIRST photo above, from exactly the same viewpoint, "seen through" to something a visitor would enjoy uncovering with a spotlight: what is underneath, how it is made, or what it becomes. Keep the same scene and subject and transform all of it boldly, e.g. the same engine bay as a glowing blue x-ray cutaway showing the parts inside; the same room at night, lit warm; the same plated dish as its raw ingredients laid out; the same garden in full summer bloom; the same wall finished in a deep rich colour.
 
 ${facts}`,
     2000,
@@ -288,7 +292,8 @@ ${facts}`,
     .flatMap((m) => (m ? [{ before: m[1]!.slice(0, 300), after: m[2]!.slice(0, 300) }] : []))
     .slice(0, 2);
   const trade = lines(p.TRADE)[0]?.replace(/[^\p{L}\p{N} &\-/']/gu, "").trim().slice(0, 40);
-  return { services: lines(p.SERVICES).filter((l) => l.length <= 60).slice(0, 6), imagePrompts: lines(p.PHOTOS).slice(0, 8), pairs, ...(trade ? { trade } : {}), cost: Number(usage.cost_usd) || 0 };
+  const reveal = lines(p.REVEAL)[0]?.slice(0, 300);
+  return { services: lines(p.SERVICES).filter((l) => l.length <= 60).slice(0, 6), imagePrompts: lines(p.PHOTOS).slice(0, 8), pairs, ...(trade ? { trade } : {}), ...(reveal ? { reveal } : {}), cost: Number(usage.cost_usd) || 0 };
 }
 
 const PAIRS_PROMPT = `@@@ PAIRS
@@ -446,6 +451,13 @@ The toolbox. These are available, but a move that appears on every site stops be
 - Pointer: data-magnetic buttons, data-cursor-text, a floating preview that follows the pointer (data-follow).
 - Atmosphere: a living shader (data-shader), film grain (data-grain). Real numbers you were given may count up (data-counter); never invent numbers.
 Whatever the direction: the headline, its paragraph and the primary button must all fit in the first screen at 1440×900 and at 390×844, clear of the header; the header is minimal (a full-screen menu overlay opened by a "Menu" button is welcome) and on desktop still shows the phone link and the main action button; the footer suits the direction (a giant wordmark only if it asks for one).
+The scroll floor (every Studio home page, whatever its direction; a direction's "ruled out" list is about style and never excuses this). A Studio site must visibly move as it is scrolled, not just fade in once:
+- One pinned scroll story (data-pin with a data-pin-stage): the stage holds still for three screens while 3 to 5 beats write in and out over a background picture that pushes in (data-pin-zoom), with one beat written word by word (data-write). Use it for the scene in this direction's sequence that tells how the business works or what makes it different. If the direction calls for a film strip (data-horizontal) or stacking cards (data-stack), that may take its place.
+- One large statement that brightens word by word as it is scrolled (data-scrub-text).
+- Every picture below the first screen moves at its own speed (data-parallax on the <img>, inside an overflow:hidden frame), with at least four on the page.
+- On the first screen: the headline splits (data-split="chars"), the sentence and the actions rise out of blur (data-reveal="blur"), and any floating piece (a badge, a tag, a small card) has data-depth so the layers separate under the pointer.
+The first screen's picture has a second, matched picture behind it that our system shows through a soft spotlight trailing the pointer. Leave the middle of that picture free of text and panels so the spotlight has room to be discovered, and add one short hint near the picture's edge in the direction's own voice (for example "Move to look inside").
+
 The first screen must look unmistakably like THIS direction and unlike our other eight: if it could be described as "big headline on a darkened photo with a button underneath", it is wrong unless the direction says exactly that.
 Keep it usable: the 360px phone layout must be as considered as desktop (type sizes that fit, no sideways scroll), one <h1> per page, real contrast, keyboard focus, and both light and dark modes designed (the dark one can be the hero of the concept). Keep CSS efficient: tokens, a few reusable components, no giant inline SVGs.
 
