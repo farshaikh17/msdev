@@ -1,156 +1,142 @@
 # Forge: the plan from here
 
-Version 2, 2026-11-12. Version 1 was reviewed by nine specialist judges (creative direction, AI prompting, front-end, measurement, cost, the customer, the agency, brand, delivery). All nine approved with changes; this version carries those changes. A tenth judge then attacks it (see "Review record" at the end).
+Version 3, 2026-11-12. Reviewed by ten judges under the tenth-man rule: nine specialists approve or amend, the tenth must show how the plan fails, the nine fix it, and the tenth attacks again. The record is at the end.
 
 ## North Star
 
-Every website works and looks amazing, and feels made for that one business: creative, with a real idea behind it, so the owner thinks "this is us, and I would pay for it". The AI does the reasoning (who this business is, what we have, how to make it special) and then makes it. Our code is the referee: it guarantees the facts, the fit, the variety and the quality. It is not the author.
+Every website works and looks amazing, and feels made for that one business: creative, with a real idea behind it, so the owner thinks "this is us, and I would pay for it". The AI does the reasoning (who this business is, what we have, how to make it special) and then makes it. Our code checks the facts, the fit and the result; it is not the author.
 
-Later, in this order: bring the cost down; resell it. Today it is an internal tool.
+Quality and creativity come first. Cutting cost comes after quality is proven; reselling after that. Today this is an internal tool.
 
-## What the last builds showed
+## What is actually wrong
 
-Six Studio sites, six looks and six first screens picked by hand. The first screens differ. Everything else repeats: a red-to-orange accent on cream or warm black on all 12 Studio sites ever built; one font pair per look; the same blocks with the same headings; the same pinned photo-with-steps scene on four of six; one photographic style. The judges added what version 1 missed:
+Six Studio sites, six looks and first screens picked by hand. The first screens differ; everything else repeats. The causes, in order of weight:
 
-- **The sites are not about the real business.** No phone, address or hours on two live home pages; a letter in a square for a logo; every photo AI-made; a museum with "Get a Quote" and "Service Areas". An owner looks for their own name, phone and storefront first.
-- **Nothing asks who the business is.** The only step before design is a cheap planning call that lists services and photos. The two best moments so far (the museum's lantern that "shows you around", the florist's "Flowers for vows, goodbyes and Tuesdays") are the two that came from the business itself.
-- **The prompt causes the sameness.** It bans blue and yellow accents and praises warm tinted neutrals (so: orange on cream); it lists font pairings (the model takes the first); it specifies the pinned story beat by beat; it fixes one voice, one page width, one spacing scale. Replacing one line would leave all of that pulling every site back to the same place.
-- **Orange was right for three of the six** (chains whose brand is orange). A rule that forbids repeating a colour would have made them wrong.
+1. **Nothing asks who the business is.** The only step before design is a cheap call that lists services and photos. The two best moments so far (the museum's lantern that "shows you around"; the florist's "Flowers for vows, goodbyes and Tuesdays") are the two that came from the business itself.
+2. **The standing prompt pulls every site to the same place.** It bans blue and yellow accents and praises warm tinted neutrals (so: orange on cream, 12 of 12 sites); lists font pairings (the model takes the first); specifies the pinned photo-with-steps scene beat by beat (four of six sites); fixes one voice, one page width, one list of blocks.
+3. **The sites are not about the real business.** No phone, address or hours on two live home pages; a letter in a square for a logo; a museum with "Get a Quote".
+4. **The designer never sees its own page.** One pass, no look at the result below the first screen. Pages thin out as they go down. The automatic review looks only at the first screen too.
+5. **Every Studio site gets the same furniture**: a flying object and a "brand moment", whether or not the business has an object worth following.
 
-## The design, in one picture
+## What we can and cannot know about a business
 
-```
-1. Real identity   facts, logo, brand colours, real photos   (code + scraping)
-2. The brief       who they are, the idea, three concepts    (AI reasons)
-3. The referee     fit, variety, legality; picks and locks   (code)
-4. The making      kit and pages inside the locked choices   (AI makes)
-5. The check       facts, adherence, sameness, quality       (code, then AI, then you)
-```
+Checked in the code: a Google Maps link gives only the name and map position; OpenStreetMap adds the town, and the street address only when it knows the business. There is no Google key and Maps pages are not scraped (owner's rule). So phone, hours, reviews, photos and logo come from only two places: **the business's own website**, when it has one, and **the person building the site**.
 
-### 1. Real identity (before any design)
+Three honest tiers, shown on the build form before building:
 
-- From the Maps listing and the business's current site: phone, address, hours, rating, real reviews, real photos, the logo (header image, `og:image`, touch icon, SVG: `scrape.ts` discards these today), brand colours (`theme-color`, the logo's and the site's main colours), price level, whether it is a chain.
-- **Identity strength**: locked (a real logo and colours exist), partial, or none.
-- Real photos outrank AI photos. Real brand colours outrank any dealt palette.
-- A build with no phone and no address is flagged on the site page before it is sent to anyone.
+- **Has a website:** we read it. To add: keep the logo (today discarded), the site's main colours, and any reviews it publishes.
+- **Facebook only, or nothing online:** we do not fetch Facebook. The rep adds what they can see.
+- **Nothing given:** name, town, trade only. The site is built honestly on that.
 
-### 2. The brief (the AI's reasoning)
+The build form gains, all optional except where marked: phone (the site is flagged **"not ready to send"** until there is one), address, hours, logo link or upload, one brand colour, a storefront or van photo, and one line: **"What you saw"** (the sign colour, the van, how long they have been there). Bulk lines become `name | city | link | phone`.
 
-One call (`src/brief.ts`, Sonnet, medium effort, about $0.04) before design. It reads the identity, the site's text, the reviews, and a short list of what the account's recent sites were built around. It writes:
+Rules for thin data, enforced in the prompts and checked after:
 
-- **Who they are**: position in one sentence, price tier, audience, three personality words, the local or heritage hook, and whether to follow, bend or break the trade's conventions, with the reason.
-- **Three concepts on different premises.** Each: the one true thing about this business; the idea in one sentence; a visual metaphor from its own objects, materials or place; the signature object (from its story, not just its trade); the story the home page tells; a palette family and type character; the set piece; the voice with two sample headings; what it refuses.
+- **Never invented:** phone, address, hours, prices, years in business, names, licences, awards, ratings, a review attributed to anyone, an AI photo presented as their building or their people.
+- **Left out rather than faked:** hours, the map pin, ratings, team sections. A missing block is not noticed; a wrong one is.
+- **Honest samples, labelled beside the item:** AI photos of the work only; review cards that say they are samples.
+- **Logo:** their full name set in type as a wordmark. Never a letter in a square.
+- **After a prospect replies:** a "They replied" button opens a short intake (logo, five photos, hours, colour) and rebuilds. That is the moment real material arrives.
 
-Stored with the site (`kit.brief`) and shown on the site page, so anyone can read why a site looks the way it does.
+## The four changes
 
-### 3. The referee (code)
+### A. The brief: the AI reasons before it designs
 
-Code does not invent; it filters and locks, in this order of precedence:
+`src/brief.ts`, run before design.
 
-1. **Locked brand.** Real colours and logo are used as they are and are exempt from every variety rule; those sites vary through type, sections, set piece and photography.
-2. **Fit.** A guardrail table per category: allowed looks, voices, photo treatments, motion intensity, contrast floor. Tight for bereavement, legal, health and childcare (no wit, no particle bursts, no brutalism, no black-and-white food). Loose for bars, tattoo, gyms, food.
-3. **Variety.** Scoped to the **campaign** (trade + town), with no window, and reserved at deal time so a batch of 25 plumbers cannot collide; then the account's recent sites.
+- **Three concepts from three separate calls** (Sonnet), none seeing the others, each given a different lens dealt by code from about eight: the place, the owner's story, the material or craft, the customer's moment, the name, what rivals never do. With thin identity: two calls, using only place, name and trade.
+- Each concept must give: **the one true thing** about this business, quoting where in the facts it comes from; **the idea** in one sentence; **what it refuses**. Everything else is optional: colour and type direction, the voice, the home page's arc, and whether the business has an object worth following or a moment worth stopping the scroll for. **The default for both effects is no.**
+- Each call is told what the account's recent sites in the same trade and town were built around, as "already made".
+- **Choosing:** code only removes concepts that break a hard rule (below). One blind call (Opus, low effort) sees the survivors shuffled and answers: "which could only be this business, and which would its owner show a friend?"
+- The chosen brief is stored with the site and shown on its page, so anyone can read why the site looks the way it does.
+- About $0.11 a site (estimate).
 
-How a choice is made: for each gene, code offers three or four options that pass 1 to 3; the brief's concepts name their pick with a one-line reason; code scores the three concepts against history and fit, takes the most distant one that passes, and validates every pick is on the shortlist. The result is the site's **DNA** (`kit.dna`): palette, type pair, shape language, section list, set piece, photo treatment, voice, each with its reason.
+Hard rules in code (small, not a table of everything): a real brand colour or logo given on the form is used as it is; bereavement, legal, health and childcare get no flying object, no brand moment and no wit; no button or page the trade does not have.
 
-One slot per site is **not dealt**: one section and the brand moment are invented from the metaphor, bounded only by the motion engine's attributes.
+### B. The prompt stops causing sameness
 
-Composition rules the referee enforces: at most two pinned scenes on a page, never adjacent; no perch for the flying object inside a pinned or sideways section; the flying object hides while a scene is pinned; pinned length capped on phones.
+When a brief exists, remove from the standing prompt: the accent colour ban and the warm-neutrals sentence; the font pairing list; the fixed widths and spacing numbers; the beat-by-beat pinned story; the single voice; the fixed "must carry" list of blocks. The brief supplies colour, type, voice and the page's arc instead. The home page call first writes a one-screen **score** (the arc, where the one loud moment sits, where it is quiet) and then writes the sections to it.
 
-### 4. The making
+The flying object and the brand moment appear only when the brief asked for them. The signature first screens stay (they work); a first screen that needs an object is only offered when the brief found one.
 
-- **Tokens are generated by code.** From the palette and shapes, `tokensCss()` writes the full set a site needs, for light and dark: grounds, surfaces, inks, muted, borders, accent, accent-hover, text-on-accent, shadow, focus ring, radii, with a contrast solver that adjusts the accent to pass 4.5:1. The font link is ours. The engine's own hard-coded colours become tokens too. The kit's CSS may contain no literal colours; a check snaps strays to the nearest token in code (no model call).
-- **The standing prompt loses what causes sameness** when a DNA is present: the font pairing list, the fixed widths and spacing, the warm-neutrals sentence, the beat-by-beat pinned story, the single voice.
-- **Sections are intent, not pixels.** Each of about eight section modules states its purpose, the content it must carry, the engine attributes it may use, and phone rules, plus a dealt composition seed (alignment, density, picture scale). The model designs it. Exact specs stay only where the engine needs them: the signature first screens and the set pieces.
-- **Voice** is the brief's, with banned heading *patterns* (not just strings) from the campaign's recent sites.
-- **Photos**: a shot list with variety (wide, detail, people, place), the dealt treatment, real photos first.
+### C. The designer sees its own page and revises once
 
-### 5. The check
+- **Settled capture** (`review.ts`): scroll for real in screen-height steps, wait for the engine at each, take a frame (up to 14 desktop, 8 phone), lay them out as one sheet. A full-page screenshot shows pinned scenes as blanks; this shows what a visitor sees. A near-blank frame is then a real fault and is flagged.
+- **One art-director pass** on the home page: Opus gets the frames, its own page and the brief; it says where the page stops being about this business, where it is empty, what to cut; and returns replacements for the weakest sections only. It replaces today's score-driven rewrite (which cost $0.50 to $0.80 and moved no score, because the writer never saw the page).
+- Accepted only if the measured checks still pass.
+- **This is unproven.** It stays only if you prefer the revised page, shown blind beside the original, on at least 4 of 5 trial sites.
+- The critic is told "a website for a local business; you do not know who made it", sees the sheet, and returns notes only. No score is used as a gate.
 
-Measured by code, every build (free): the existing checks; DNA adherence (tokens in use, dealt fonts rendered, dealt sections present); truth checks (no button or page the trade does not have; phone and address present; sample labels visible); a blank-band check on full-page captures at five scroll stops; phone pass at 390px with touch fallbacks; a fingerprint as a cheap trigger only.
+### D. Real identity on the form
 
-Judged by a model: the critic sees **full-page** strips (today it sees only the first screen), blind to the DNA, three runs, median, fixed rubric, with ten anchor screenshots (five award-level, five template) scored on every run so drift is visible. One added question: "state this site's idea from the screenshots alone; could this page belong to a competitor?" Sameness is judged by a vision model comparing pairs of full-page strips with names blurred ("same designer or template?", 1 to 5, naming what is alike). This runs at the gates and on demand from the variety board, not on every build.
-
-Judged by you: the variety board (thumbnails side by side with each site's idea and DNA), and a blind rating at the gate.
-
-### Steering (the team is not locked out)
-
-On the site page: **Re-roll colours and fonts** (tokens only: free, seconds); **Like this, but different** (keep the genes you lock, re-deal the rest); a **mood** on the build form (bold, calm, premium, friendly, surprise me) that filters the shortlist; "make it our green" as a token change, not a rebuild.
-
-### Learning from sales
-
-Each site records its outcome (sent, viewed, replied, booked, won, lost and why, including every "this isn't us" reason), pushed from GoHighLevel, beside its DNA. The variety board shows reply rate per gene; after 100 sends the shortlists are weighted by what gets replies.
-
-## Cost
-
-Estimates, to be confirmed by logging cost per stage. Today a Studio site is $2.30 to $3.44.
-
-- Savings the design makes safe: the kit at low effort once tokens and choices are dealt; simple inner pages (contact, questions, reviews) on Haiku; a cached shared block for the home and first-screen calls; palette strays fixed in code; at most one Sonnet repair for adherence, never an Opus rewrite. About $0.50 to $0.90 saved.
-- Additions: the brief ($0.04); longer home brief (up to $0.05); pairwise sameness only at gates (about $1 per gate).
-- **Target: $2.00 typical, $2.50 worst case; stretch $1.50.**
-- Images: the free allowance (about 90 a day, about 9 Studio sites) silently drops photos when it runs out. Change it to fail loudly, and allow paid overage (well under $0.01 a site; rate to verify).
+As set out above: the fields, the tiers, the "not ready to send" flag, the wordmark, the thin-data rules, reading the logo and colours from a website when there is one.
 
 ## The work, in order
 
-Each session ends deployed, with a test a cheaper model can run **without spending credits**; real builds are only the last step of a session, and the whole plan is budgeted at 12 to 15 real builds.
+Small slices. Each is one session for a cheaper model, and nothing starts until the slice before has passed.
 
-**Session 0. See it before paying for it (free).**
-- `npm run forge:variety`: deals DNA for 200 made-up businesses with no model call and prints the briefs; fails on collisions or lopsided use.
-- `npm run forge:fixtures`: renders every set piece and token set through `assemble()` with stub content and runs the measured checks at 360px and 1440px, reduced motion, and every legal neighbour pair.
-- A **swatch board**: every palette, font pair and shape set shown on one fixed sample page. You see the range the same day.
-- Fingerprints of the 12 existing sites as the baseline.
+**Slice 1. Read five briefs (no builds, about $0.60).** Build `brief.ts` and run it on five businesses already built (the museum, the florist, the tree service, the diner, the Cajun restaurant). You read the five chosen briefs and the two rejected ones for each. **Pass: you say each is about that business, and no two share an idea.** If not, the brief prompt is fixed and re-run; nothing else starts.
 
-**Session 1. Real identity + tokens.** Logo, colours, phone, address, hours and real photos from Maps and the current site; identity strength; `tokensCss()` with the contrast solver; the colour check; the sameness-causing prompt lines removed. Then: one first-screen-only real build, then two full builds (one business with a real brand, one without).
+**Slice 2. Three rebuilds (3 real builds, about $10).** Feed the brief into the design; make the prompt deletions (B); add the identity fields and thin-data rules (D); add settled capture. Rebuild three of the existing sites and show old beside new. **Pass: you see different, and more "them".**
 
-**Session 2. The brief and the referee.** `brief.ts`; the guardrail table; campaign-scoped variety; shortlist-pick-validate; `kit.brief` and `kit.dna` on the site page. Then two real builds in the same trade and town.
+**Slice 3. The revision pass (5 real builds, about $17).** Add the art-director pass (C). Five builds in the pilot trade, each shown to you blind, with and without the revision. **Pass: you prefer the revised page on 4 of 5**; otherwise the pass is removed and the plan continues without it.
 
-**Session 3. Seeing and steering.** Full-page capture and the blank-band check; DNA adherence and truth checks; the variety board; **Re-roll colours and fonts** and the mood chooser. No new real builds needed (works on existing sites).
+**Gate A: start using it on real prospects.** Those five pilot-trade builds: no failed measured check; every site flagged correctly for missing phone; you say they are different from each other and good. Total to here: 8 real builds, about $28.
 
-**Gate A: start using it on real prospects.** Five builds in the pilot trade: no failed measured check; phone, address and logo (where one exists) on the first screen; you look at the board and say they are different and good. Then the 20 real leads begin, in parallel with the remaining sessions.
+**Later, each only if real use shows that named problem:**
 
-**Session 4. Sections.** Eight section modules as intent plus constraints, composition seeds, heading-pattern memory, the undealt slot; the fixed "must carry" list goes only when fixtures and two real builds show nothing is lost.
+- *Two sites in one town look alike:* a rule that no two sites in a campaign share first screen + colour family + big moment (pools of at least 5, 6 and 4 give 120 combinations; when a pool runs out, reuse the least recently used that still fits; fit is never broken for variety).
+- *A prospect says "less orange" on a call:* a small block of colour and font variables written by code, so **Re-roll colours and fonts** takes seconds and costs nothing. Offered only on sites built with it.
+- *Briefs go wrong for a kind of business:* a fuller guardrail table per category.
+- *Pages still repeat below the first screen:* section modules written as intent (purpose, content, allowed motion), not pixel specs; more set pieces.
+- *Photos look alike:* photo treatments.
+- *You want to compare many sites at a glance:* a variety board built from the capture sheets.
+- *Cost matters:* cached shared prompt on the big calls (same output, safe now); then, one at a time and each tested against quality: lower effort on the kit, cheaper models for simple inner pages.
 
-**Session 5. Set pieces.** Three more set pieces on engine attributes that already exist; pin ordering (`ScrollTrigger.sort()`), the two-pin rule. New engine work only if the board still shows sameness.
+**Dropped from earlier versions:** code dealing every design decision from lists; a ban on literal colours with automatic snapping; fingerprints and similarity scores; anchor screenshots and three-run medians; reply-rate weighting per design choice; the swatch board and the 200-deal test; the mood chooser; your own "blind" rating of your own sites.
 
-**Session 6. Photos, voice, cost.** Treatments (the CSS ones first), the brief's voice in page prompts, the effort and routing savings, cost logged per stage.
+**Kept from the loose ends:** before/after pairs (prove on one real pair, or drop for trades where it fails); the turning showcase is offered only when it can really turn.
 
-**Session 7. Measurement and outcomes.** The full-page critic with anchors; pairwise sameness; outcome tracking from GoHighLevel; "Like this, but different".
+## Cost
 
-**Loose ends kept:** before/after pairs (prove on one real pair or drop per trade); retire the turning showcase from "Let Forge choose" until it can really turn. **Cut from this plan:** new engine set pieces unless needed; the weekly critique-to-spec loop (it teaches the designer the critic's taste); extra trade profiles beyond the guardrail table; automatic re-deal on similarity (the button does it).
+Estimates; to be confirmed by logging cost per stage (added in Slice 2). Today a Studio site is $2.30 to $3.44. With the brief (+$0.11) and the revision pass (+$0.30 to $0.80, replacing a rewrite that cost $0.50 to $0.80 on some sites): **about $3.40 typical, $3.00 to $4.20**. Ceiling for now: $4.50. Savings are deferred until quality is proven, then tested one at a time. The image allowance (about 90 a day) should fail loudly instead of silently building sites with fewer photos.
 
-**Gate B: before reselling.** Ten sites across ten trades and five towns, including a funeral home, a day-care, a tattoo studio and three businesses with real logos, all with "Let Forge choose":
-1. No failed measured check on any; every limit in this plan defined as a number.
-2. Sameness: no pair of the ten rated 4 or 5 of 5 by the pairwise judge; median 2 or less.
-3. Quality: 8 of 10 at 7 or more from the full-page critic, with the anchors steady (the score is void if the anchors move by 1).
-4. You, blind: shown the ten shuffled with ten real agency sites, you say "would pay" to at least 8 of ours and "seen this before" to at most 2. If your ranking and the critic's disagree, yours wins and the critic is recalibrated.
-5. Brand: each site with a real logo matches it, and a blind reader can say why each site looks the way it does.
-6. Cost at or under the target; the walkthrough and tests pass.
+## Gate B: before reselling
 
-## Selling (after Gate A, in parallel)
+Ten sites across ten trades and five towns with "Let Forge choose", including three businesses with real logos and three with nothing online:
 
-1. **Pilot by hand:** 20 real leads in one trade and region; write down every snag and every "this isn't us".
-2. **Make it real** when someone says yes: custom domain, their real photos in place of AI ones, one round of edits; demos expire after 30 days and stay unlisted.
-3. **Decide the offer:** what a client buys, Standard against Studio, the price. The pilot's reply and close rates set it.
+1. No failed measured check; no blank frames; nothing invented (every fact on the site traceable to the form or their website).
+2. Each site's brief names a true thing, and a reader shown the site can say what its idea is.
+3. **Three people who run a business and have never seen Forge** look at the ten live on a phone and answer two questions: "would you pay for this?" and "which of these look made by the same company?" Pass: most say yes to most, and no pair is named by more than one of them.
+4. Cost within the ceiling; the walkthrough and tests pass.
+
+## Selling (after Gate A, alongside the later work)
+
+1. **By hand first:** 20 real leads in one trade and region. Each site carries a simple status (sent, replied, won, lost and why); write down every "this isn't us".
+2. **When someone says yes:** the "They replied" intake, their real photos and logo, one round of edits, a custom domain. Demos expire after 30 days and stay unlisted.
+3. **Decide the offer and price** from what the 20 leads show.
 4. **Train the team** on the guide; first five sites each with you watching.
-5. **50-lead pilot**, tracking sites built, viewed, replied, booked, won.
-6. **Resellers** only after Gate B: palette pools, guardrails and campaigns are per account from the start so nothing needs rebuilding.
+5. **50-lead pilot.**
+6. **Resellers** only after Gate B.
 
 ## Decisions only you can make
 
-- Pay for image overage (pennies a site) or keep the daily cap.
+- **A storefront photo:** is it required before a pitch can be sent, or only prompted? (The customer judge: required. The agency judge: prompted, or reps will not build 20 in a sitting.)
+- **A bulk line with no link and no phone:** build it with the "not ready to send" flag (recommended), or reject it.
+- **The revision pass:** about $0.40 more per Studio site, kept only if you prefer the result in Slice 3.
+- **Three outside business owners** for Gate B, about 30 minutes each. Without them the gate is your own eye.
+- **A Google Places key:** the one exception to "no third-party keys" that would fill phone and hours automatically (a few cents a lead; Google restricts storing and showing its reviews and photos). Recommended: run the 20 leads without it and decide from how many arrive with nothing.
 - The pilot's trade and region.
-- Whether existing Studio sites are rebuilt (3 credits each) once Session 2 lands.
-- Domain, prices and legal review: before the 50-lead pilot, not before Gate A.
 
 ## Review record
 
-**Round 1 (nine judges, all "approve with changes").** What each changed:
-- Creative director: added the brief and the idea; shortlists instead of dictation; one undealt slot; sections as intent.
-- AI prompting: three concepts with code-side selection; remove the prompt lines that cause sameness; ban heading patterns.
-- Front-end: a full token set generated by code with a contrast solver; composition rules for pinned scenes; fixtures.
-- Measurement: full-page critic with anchors; pairwise sameness by vision; blank-band check; your blind rating in the gate.
-- Cost: lower effort and cheaper routing once choices are dealt; code-side repairs; a $2.00 target; loud image failures.
-- The customer: real identity first; fit before variety; truth checks; a phone pass.
-- The agency: re-roll and lock; campaign-scoped variety; two gates; outcome tracking; "make it real".
-- Brand: locked brand outranks everything; category guardrails; harder trades in the gate.
-- Delivery: a free Session 0; smaller sessions; tests that cost nothing; a budget of real builds.
+**Round 1: nine judges, all "approve with changes".** They moved the plan from "code deals every decision and the AI executes" to "the AI reasons in a brief and code referees"; added real identity, fit before variety, a full-page critic, steering buttons, two gates, cheaper sessions.
+
+**Round 1, the tenth man: "the plan fails", seven ways.**
+1. Identity cannot be fetched (no Google key, no scraping). *Fixed:* three honest tiers; the form asks the rep; thin-data rules; nothing promised from Maps.
+2. Nothing raises quality; the plan lowered effort. *Fixed:* the designer sees its own settled frames and revises once, kept only if you prefer it blind; effort cuts deferred.
+3. Sameness would move to the brief's form and the engine's furniture. *Fixed:* three separate concept calls with different lenses; only three required fields; effects off by default; chosen for "only this business", not for distance.
+4. The measurements were blind on this engine and your rating was not blind. *Fixed:* settled frame capture; critic gives notes, not a gate score; three outside business owners at Gate B.
+5. Too much machinery. *Fixed:* four changes in three small slices; everything else waits for a named problem or is dropped.
+6. The free first test proved the wrong thing. *Fixed:* the first test is five real briefs you read.
+7. Variety per campaign would run out. *Fixed:* a three-part rule with pool sizes and a reuse rule, built only when campaigns need it.
