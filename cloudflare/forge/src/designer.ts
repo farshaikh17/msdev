@@ -8,6 +8,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { splitList, parseReviews } from "../../../src/forge/copy";
 import { GENERIC, presetFor } from "../../../src/forge/presets";
 import { profileFor, type Profile } from "./profiles";
+import { heroById } from "./heroes";
 import type { Intake } from "../../../src/forge/schema";
 import type { Env } from "./env";
 import { conceptById, type Draw } from "./concepts";
@@ -316,8 +317,9 @@ export async function planPairs(env: Env, i: Intake): Promise<{ pairs: { before:
  * A Studio home page: what it must contain, and the order and layout of its scenes, which come
  * from the art direction (so two Studio sites don't share a skeleton).
  */
-export function studioHome(pages: PageSpec[], conceptId: string, draw?: Draw): string {
+export function studioHome(pages: PageSpec[], conceptId: string, draw?: Draw, heroId?: string): string {
   const c = conceptById(conceptId);
+  const sig = heroById(heroId);
   if (!c) return pages[0]?.brief ?? "";
   const order = draw?.order ?? c.scenes.map((_, i) => i);
   const by = (role: PageSpec["role"], path: string) => pages.find((p) => p.role === role) ?? pages.find((p) => p.path === path);
@@ -328,7 +330,7 @@ export function studioHome(pages: PageSpec[], conceptId: string, draw?: Draw): s
   const steps = by("steps", "/process");
   return `Compose the home page as the sequence of scenes below, in this order, each laid out the way its line describes. This is the "${c.name}" art direction: do not fall back on a generic order of sections.
 
-First screen: ${c.hero}${draw?.mirror ? "\nFor this site, mirror that composition left to right: what the description puts on the right goes on the left, and the reverse (a centred composition stays centred)." : ""}
+First screen: ${sig ? `${sig.spec}\nThe direction's own first-screen idea (${c.hero}) gives way to this signature hero; take only its material (type, colour, texture, frames) from the direction.` : c.hero}${draw?.mirror && !sig ? "\nFor this site, mirror that composition left to right: what the description puts on the right goes on the left, and the reverse (a centred composition stays centred)." : ""}
 The primary button is "${cta?.name ?? "Get a Quote"}" → ${cta?.path ?? "/quote"}; the phone is a tel: link.
 
 Then:
@@ -465,16 +467,17 @@ ${MOTION_API}`;
 
 export const ART_DIRECTION_FALLBACK = `Art direction first. Choose ONE strong concept that suits this business and commit to it on every page: editorial (oversized serif, asymmetric grids), kinetic (giant condensed grotesk, hard colour blocks), cinematic (near-black, full-bleed imagery, grain), or playful (chunky rounded type, bright colour). Pair the display face with a clean text face.`;
 
-const artDirection = (concept?: string) => {
+const artDirection = (concept?: string, heroId?: string) => {
   const c = conceptById(concept);
+  const sig = heroById(heroId);
   return c
-    ? `## Art direction for this site (fixed: hold every page to it)\n${c.brief}\n\nThe home page's first screen: ${c.hero}\nThis replaces the general rule about a full-bleed hero with a gradient overlay. Our system still supplies the moving picture: put exactly <div class="hero-motion" aria-hidden="true"></div> (empty, unstyled) as the FIRST child of the element the picture belongs in, which must have position:relative and overflow:hidden and its own size or aspect ratio. For a full-screen picture that element is the hero section itself; for a framed picture it is the frame, and then no overlay goes on it.\n\nMotion for this direction: ${c.moves}\nRuled out for this direction: ${c.never}\n\nThis is one of nine distinct directions we use; a neighbouring site is built in a different one with a different first screen, a different order of sections and different layouts for each, so commit fully to this one and avoid the habits of the others. Inner pages carry the same direction: their page heroes, lists and picture frames follow the same logic as the home page, not a generic template.`
+    ? `## Art direction for this site (fixed: hold every page to it)\n${c.brief}\n\nThe home page's first screen: ${sig ? `the signature hero "${sig.name}", exactly as its spec in the home page's brief describes (it outranks the direction's own first-screen idea; the direction supplies its material: type, colour, texture, frames). Build its component styles in the kit` : c.hero}\nThis replaces the general rule about a full-bleed hero with a gradient overlay. Our system still supplies the moving picture: put exactly <div class="hero-motion" aria-hidden="true"></div> (empty, unstyled) as the FIRST child of the element the picture belongs in, which must have position:relative and overflow:hidden and its own size or aspect ratio. For a full-screen picture that element is the hero section itself; for a framed picture it is the frame, and then no overlay goes on it.\n\nMotion for this direction: ${c.moves}\nRuled out for this direction: ${c.never}\n\nThis is one of nine distinct directions we use; a neighbouring site is built in a different one with a different first screen, a different order of sections and different layouts for each, so commit fully to this one and avoid the habits of the others. Inner pages carry the same direction: their page heroes, lists and picture frames follow the same logic as the home page, not a generic template.`
     : ART_DIRECTION_FALLBACK;
 };
 
-export const systemFor = (style: Style, concept?: string) =>
+export const systemFor = (style: Style, concept?: string, heroId?: string) =>
   style === "studio"
-    ? SYSTEM.replace("Keep motion restrained: no custom cursors, WebGL or heavy effects.", "Motion comes from our Studio motion engine (below): use its attributes generously and tastefully.").replace("## Copy rules", `${STUDIO.replace("{{ART_DIRECTION}}", artDirection(concept))}\n\n## Copy rules`)
+    ? SYSTEM.replace("Keep motion restrained: no custom cursors, WebGL or heavy effects.", "Motion comes from our Studio motion engine (below): use its attributes generously and tastefully.").replace("## Copy rules", `${STUDIO.replace("{{ART_DIRECTION}}", artDirection(concept, heroId))}\n\n## Copy rules`)
     : SYSTEM;
 
 const sitemapText = (pages: PageSpec[]) => pages.map((p) => `${p.path} — ${p.name}`).join("\n");
@@ -650,6 +653,8 @@ export interface Kit {
   style?: Style;
   /** The art direction a Studio site is held to (see concepts.ts). */
   concept?: string;
+  /** The signature hero its first screen is built around (see heroes.ts). */
+  hero?: string;
   /** How this site was dealt within its look (see drawFor in concepts.ts); compared with later sites so they differ. */
   draw?: string;
   /** Built on another finished site's design (its slug and version) instead of a fresh one. */
@@ -746,17 +751,17 @@ const need = (parts: Record<string, string>, names: string[]) => {
 };
 
 /** Stage 1: the design system (fonts, CSS, header, footer, script) for the given pages. */
-export async function designKit(env: Env, brief: string, pages: PageSpec[], style: Style = "standard", concept?: string, draw?: Draw): Promise<{ kit: Kit; usage: unknown }> {
+export async function designKit(env: Env, brief: string, pages: PageSpec[], style: Style = "standard", concept?: string, draw?: Draw, heroId?: string): Promise<{ kit: Kit; usage: unknown }> {
   // Low effort: the brief already makes the design decisions explicit, and thinking is the costliest part.
   // A Studio site thinks harder about its art direction: that is where the budget goes.
   const studio = style === "studio";
   const prompt = `${kitTask(pages, style)}\n\n## The business\n${brief}`;
-  let { text, usage, cut } = await ask(env, prompt, 64000, env.CLAUDE_MODEL || MODEL, studio ? "medium" : effortOf(env, "low"), systemFor(style, concept));
+  let { text, usage, cut } = await ask(env, prompt, 64000, env.CLAUDE_MODEL || MODEL, studio ? "medium" : effortOf(env, "low"), systemFor(style, concept, heroId));
   if (cut) {
     // Ran out of room (thinking counts toward the limit): once more, thinking less and writing tighter.
     console.log("kit cut off, retrying tighter");
     const first = Number(usage.cost_usd) || 0;
-    ({ text, usage, cut } = await ask(env, `${prompt}\n\n## Length\nYour whole reply must fit in about 30,000 tokens. Keep the stylesheet lean: no duplicate rules, no unused components, no long comments.`, 64000, env.CLAUDE_MODEL || MODEL, "low", systemFor(style, concept)));
+    ({ text, usage, cut } = await ask(env, `${prompt}\n\n## Length\nYour whole reply must fit in about 30,000 tokens. Keep the stylesheet lean: no duplicate rules, no unused components, no long comments.`, 64000, env.CLAUDE_MODEL || MODEL, "low", systemFor(style, concept, heroId)));
     usage = { ...usage, cost_usd: (Number(usage.cost_usd) || 0) + first };
     if (cut) throw new Error("The site's design came back incomplete twice. Try again; if it keeps happening, build it as Standard.");
   }
@@ -777,7 +782,7 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[], styl
       components: p.COMPONENTS ?? "",
       brief,
       pages,
-      ...(studio ? { style: "studio" as const, ...(conceptById(concept) ? { concept } : {}), ...(draw ? { draw: draw.print } : {}) } : {}),
+      ...(studio ? { style: "studio" as const, ...(conceptById(concept) ? { concept } : {}), ...(draw ? { draw: draw.print } : {}), ...(heroById(heroId) ? { hero: heroId } : {}) } : {}),
     },
     usage,
   };
@@ -896,7 +901,7 @@ ${page.brief}${current}${notes}${change}${adapt}${first}${only}`;
     studio ? (home ? 56000 : 32000) : home ? 40000 : 24000,
     model,
     studio ? "medium" : home ? effortOf(env, "low") : "medium",
-    systemFor(studio ? "studio" : "standard", kit.concept),
+    systemFor(studio ? "studio" : "standard", kit.concept, kit.hero),
   );
   const p = parseParts(text);
   // A reply that ran on after finishing its <main> (e.g. repeating itself) is still a whole page.

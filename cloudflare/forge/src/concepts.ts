@@ -288,7 +288,10 @@ function hash(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++)
     h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  return h >>> 0;
+  // Finish with an avalanche step: FNV's low bits barely move between similar names, and picks use the low bits.
+  h = Math.imul(h ^ (h >>> 16), 2246822507);
+  h = Math.imul(h ^ (h >>> 13), 3266489909);
+  return (h ^ (h >>> 16)) >>> 0;
 }
 
 /**

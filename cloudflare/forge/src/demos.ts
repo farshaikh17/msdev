@@ -8,6 +8,7 @@ import { startBuild, type StartResult } from "./build";
 import { getDemo, makeSlug, saveDemo, type Stored } from "./db";
 import type { Env } from "./env";
 import { conceptById } from "./concepts";
+import { heroById } from "./heroes";
 import { resolveMapsLink, splitStreetCity, type MapsPlace } from "./places";
 import { widgetId } from "./site";
 import { buildCost, type Tenant } from "./tenants";
@@ -35,6 +36,7 @@ export const INTAKE_FIELDS = [
   "businessName",
   "style",
   "concept",
+  "hero",
   "reuseFrom",
   "googleUrl",
   "industry",
@@ -106,6 +108,7 @@ export async function prepareIntake(raw: Record<string, string>): Promise<Intake
     mode: g("mode") || "auto",
     style: g("style") === "studio" ? "studio" : "standard",
     concept: conceptById(g("concept")) ? g("concept") : "auto",
+    hero: heroById(g("hero")) ? g("hero") : "auto",
     reuseFrom: g("reuseFrom"),
     websiteUrl: g("websiteUrl"),
     photoUrls: g("photoUrls"),

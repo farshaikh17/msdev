@@ -42,6 +42,16 @@ export function parseVideoUrls(raw: string): string[] {
  * highest), name and services. Whole-word matches only, so "ac" doesn't match "Pollux Air Conditioning…" wrongly.
  */
 export function matchVideo(library: LibraryEntry[], i: Intake, slug: string, siteServices = ""): string | null {
+  const clips = matchClips(library, i, siteServices);
+  if (!clips.length) return null;
+  // Same clip for a given demo every time; different demos in the trade spread across the clips.
+  let h = 0;
+  for (const c of slug) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return clips[h % clips.length]!;
+}
+
+/** Every library clip that suits this business (the best-scoring entries), for heroes that show several. */
+export function matchClips(library: LibraryEntry[], i: Intake, siteServices = ""): string[] {
   // The services the site was built with count like typed-in services (the trade is often left empty).
   const fields = [i.industry, i.businessName, `${i.services} ${siteServices}`].map((f) => ` ${f.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `);
   // Clips from every entry with the best score (Drive clips are one entry each, so a trade has several).
@@ -59,16 +69,28 @@ export function matchVideo(library: LibraryEntry[], i: Intake, slug: string, sit
     clips.push(...e.urls);
   }
   // One stray word in the services (a motel's "breakfast") isn't a match: the trade must hit, or two words.
-  if (!clips.length || bestScore < 2) return null;
-  // Same clip for a given demo every time; different demos in the trade spread across the clips.
-  let h = 0;
-  for (const c of slug) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return clips[h % clips.length];
+  return !clips.length || bestScore < 2 ? [] : [...new Set(clips)];
 }
 
 /** What goes inside the hero's motion layer. Empty when there's neither a video nor a photo. */
-export function heroMotion(video: string | null, photos: string[], reveal = ""): string {
+export function heroMotion(video: string | null, photos: string[], reveal = "", sig?: { media?: string; clips?: string[]; labels?: string[] }): string {
   const poster = photos[0] ?? "";
+  // Signature heroes (Studio): the scene switcher shows several scenes (library video first, then photographs);
+  // the camera dive puts a second, closer scene behind the first for the camera to land in.
+  if (sig?.media === "switch") {
+    const media = [...(sig.clips ?? []).map((u) => ({ video: u })), ...photos.map((u) => ({ img: u }))].slice(0, 4);
+    if (media.length >= 2)
+      return media
+        .map((m, n) => {
+          const label = esc(sig.labels?.[n] ?? `Scene ${n + 1}`);
+          return "video" in m
+            ? `<video data-switch-item data-label="${label}" ${n === 0 ? "autoplay " : ""}muted loop playsinline preload="${n === 0 ? "auto" : "metadata"}"${poster ? ` poster="${esc(poster)}"` : ""}><source src="${esc(m.video!)}" type="video/mp4"></video>`
+            : `<img data-switch-item data-label="${label}" src="${esc(m.img!)}" alt=""${n === 0 ? ' fetchpriority="high"' : ' loading="lazy"'}>`;
+        })
+        .join("");
+  }
+  if (sig?.media === "dive" && poster && photos[1])
+    return `${video ? `<video autoplay muted loop playsinline preload="auto" poster="${esc(poster)}"><source src="${esc(video)}" type="video/mp4"></video>` : `<img src="${esc(poster)}" alt="" fetchpriority="high">`}<img data-dive-to src="${esc(photos[1])}" alt="">`;
   // A Studio first screen with a matched second picture: it shows through a spotlight that trails the pointer.
   if (!video && poster && reveal) return `<img src="${esc(poster)}" alt="" fetchpriority="high"><img data-spotlight-reveal src="${esc(reveal)}" alt="">`;
   if (video)

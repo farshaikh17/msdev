@@ -12,6 +12,7 @@ import {
   getPage,
   pairsDue,
   recentLooks,
+  listLibrary,
   saveChrome,
   saveQa,
   setTrade,
@@ -37,6 +38,8 @@ import { heroPair, beforeAfterImages, previewImages } from "./images";
 import { privacyPage, termsPage } from "./legal";
 import { drawFor, pickConcept } from "./concepts";
 import { mergeIntake, reverseGeocode } from "./places";
+import { pickHero } from "./heroes";
+import { matchClips } from "./hero";
 import { readWebsite } from "./scrape";
 import { buildCost, chargeBuild, getTenant, recordBuildCost, type Tenant } from "./tenants";
 import { deliver } from "./webhook";
@@ -239,9 +242,18 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
         intake.industry = plan.trade;
         await setTrade(env, slug, plan.trade);
       }
+      // A Studio home page takes its look, its deal within the look and its signature hero before any picture is made.
+      const looks = intake.style === "studio" ? await recentLooks(env, demo.tenantId, slug).catch(() => []) : [];
+      const look = intake.style === "studio" ? pickConcept(intake, slug, looks.map((l) => l.concept).filter(Boolean)) : undefined;
+      const concept = look?.id;
+      // The deal within the look: scene order, the biggest moment, mirroring, menu and footer, unlike the account's recent sites.
+      const draw = look ? drawFor(look, slug, looks.map((l) => l.draw).filter(Boolean)) : undefined;
+      // The signature hero: video scenes when the trade has library clips, otherwise one the account hasn't used lately.
+      const clips = look ? matchClips(await listLibrary(env, demo.tenantId).catch(() => []), intake, plan?.services.join(" ") ?? "").length : 0;
+      const sig = look ? pickHero(intake, slug, looks.map((l) => l.hero).filter(Boolean), clips) : undefined;
       const [images, pairImages] = await Promise.all([previewImages(env, plan?.imagePrompts ?? []), beforeAfterImages(env, plan?.pairs ?? []).catch(() => [])]);
       // A Studio first screen gets a matched second picture that shows through a spotlight; it replaces the first photo with its aligned twin.
-      if (intake.style === "studio" && plan?.reveal && images[0]) {
+      if (intake.style === "studio" && plan?.reveal && images[0] && sig?.media === "pair") {
         const pair = await heroPair(env, plan.imagePrompts[0] ?? "", plan.reveal).catch(() => null);
         if (pair) {
           images[0] = { ...images[0], bytes: pair.base };
@@ -259,12 +271,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       });
       const pages = sitemapFor(intake, plan?.services);
       // A Studio home page takes its order and layouts from its art direction, not the standard section list.
-      const looks = intake.style === "studio" ? await recentLooks(env, demo.tenantId, slug).catch(() => []) : [];
-      const look = intake.style === "studio" ? pickConcept(intake, slug, looks.map((l) => l.concept).filter(Boolean)) : undefined;
-      const concept = look?.id;
-      // The deal within the look: scene order, the biggest moment, mirroring, menu and footer, unlike the account's recent sites.
-      const draw = look ? drawFor(look, slug, looks.map((l) => l.draw).filter(Boolean)) : undefined;
-      if (concept && pages[0]) pages[0] = { ...pages[0], brief: studioHome(pages, concept, draw) };
+      if (concept && pages[0]) pages[0] = { ...pages[0], brief: studioHome(pages, concept, draw, sig?.id) };
       const facts = factsBlock(intake, site, slug, plan, previews, pairs) + profileNote(intake) + (draw ? `\n\nFor this site the menu is ${draw.nav}, and the footer is ${draw.footer}.` : "");
       // Built on another of the account's finished sites: reuse its design (far cheaper than a new one).
       let base: { slug: string; version: string; kit: Kit } | null = null;
@@ -275,7 +282,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       }
       const { kit, usage } = base
         ? await adaptKit(env, base.kit, { slug: base.slug, version: base.version }, facts, pages)
-        : await designKit(env, facts, pages, intake.style, concept, draw);
+        : await designKit(env, facts, pages, intake.style, concept, draw, sig?.id);
       // The planning call is counted with the design.
       const u = usage as Record<string, unknown>;
       await saveKit(env, slug, version, kit, { ...u, cost_usd: (Number(u.cost_usd) || 0) + (plan?.cost ?? 0) });

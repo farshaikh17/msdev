@@ -11,6 +11,7 @@
  * extra. Past the cap, sites still go live; they just aren't reviewed.
  */
 import { conceptById } from "./concepts";
+import { heroById } from "./heroes";
 import Anthropic from "@anthropic-ai/sdk";
 import { getDemo, getKit, getPage, getReview, getSetting, saveImage, savePage, saveReview, setSetting } from "./db";
 import { costOf, designSitePage, pagesOf, type Kit } from "./designer";
@@ -194,7 +195,8 @@ export async function reviewHero(env: Env, slug: string, version: string, kit: K
       !d.tel && kit.brief.includes("Phone:") && "The phone number isn't a tap-to-call link.",
     ].filter((x): x is string => typeof x === "string");
     const look = conceptById(kit.concept);
-    const direction = look ? `\n\nThis is ONLY the first screen of the home page; the rest isn't written yet, so don't mark it down for missing sections, reviews or a form. Its art direction is "${look.name}". The first screen should be: ${look.hero}\nRuled out for it: ${look.never}\nIf it doesn't match that description (for example it is a big headline over a darkened full-bleed photo when the direction says otherwise), say so as a high-severity issue with the fix, and score no higher than 6.` : "\n\nThis is ONLY the first screen of the home page; the rest isn't written yet.";
+    const sig = heroById(kit.hero);
+    const direction = look ? `\n\nThis is ONLY the first screen of the home page; the rest isn't written yet, so don't mark it down for missing sections, reviews or a form. Its art direction is "${look.name}". The first screen should be: ${sig ? `the "${sig.name}" signature hero: ${sig.check}, in the art direction's type and colours` : look.hero}\nRuled out for it: ${look.never}\nIf it doesn't match that description (for example it is a big headline over a darkened full-bleed photo when the direction says otherwise), say so as a high-severity issue with the fix, and score no higher than 6.` : "\n\nThis is ONLY the first screen of the home page; the rest isn't written yet.";
     const crit = await deps.critique(env, { desktop, phone }, `${measured.length ? measured.map((m) => `- FAILED: ${m}`).join("\n") : "- The measured checks passed."}${direction}`, true);
     const notes = [...measured, ...crit.issues.filter((i) => i.severity !== "low").map((i) => `${i.what} → ${i.fix}`)];
     return { score: crit.score, notes: crit.score >= HERO_GOOD && !measured.length ? [] : notes, costUsd: crit.costUsd };
@@ -481,7 +483,8 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     const studio = kit.style === "studio";
     // A Studio site is judged against its own art direction, so one that drifts to the generic layout is marked down.
     const look = studio ? conceptById(kit.concept) : undefined;
-    const direction = look ? `\n\nThis site's art direction is "${look.name}". Its first screen should be: ${look.hero}\nRuled out for it: ${look.never}\nIf the first screen doesn't match that description (for example it is a big headline over a darkened full-bleed photo when the direction says otherwise), say so as a high-severity issue with the fix, and score no higher than 6.` : "";
+    const sig = heroById(kit.hero);
+    const direction = look ? `\n\nThis site's art direction is "${look.name}". Its first screen should be: ${sig ? `the "${sig.name}" signature hero: ${sig.check}, in the art direction's type and colours` : look.hero}\nRuled out for it: ${look.never}\nIf the first screen doesn't match that description (for example it is a big headline over a darkened full-bleed photo when the direction says otherwise), say so as a high-severity issue with the fix, and score no higher than 6.` : "";
     const crit = await deps.critique(env, { desktop, phone }, facts + direction, studio);
     review = { at, ...(wide.length ? { wide } : {}), score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues, checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
 

@@ -18,9 +18,11 @@ import {
   saveLead,
   throttled,
 } from "./db";
-import { pagesOf } from "./designer";
+import { pagesOf, type Kit } from "./designer";
+import type { Stored } from "./db";
 import type { Ctx, Env } from "./env";
-import { heroMotion, matchVideo } from "./hero";
+import { heroMotion, matchClips, matchVideo, type LibraryEntry } from "./hero";
+import { heroById } from "./heroes";
 import { assemble, chatWidget, creditFor, finish, templateCredit, widgetFor } from "./site";
 import { sha256Hex } from "./crypto";
 import { pitchPage } from "./pitch";
@@ -87,13 +89,7 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
     ogDesc = page.description;
     if (path === "/") {
       const library = await listLibrary(env, tenant.id);
-      motion = heroMotion(
-        matchVideo(library, demo.intake, slug, pagesOf(kit).map((p) => p.name).join(" ")),
-        // Only the site's own photos: never the link preview, review screenshots or before/after pairs.
-        // A Studio first screen holds one picture (a slow drift); a crossfade between different shots reads as two unrelated images.
-        names.filter((n) => /^photo-\d+\.jpg$/.test(n)).slice(0, kit.style === "studio" ? 1 : 3).map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`),
-        kit.style === "studio" && names.includes("reveal-1.jpg") ? `${prefix}/_img/${demo.liveVersion}/reveal-1.jpg` : "",
-      );
+      motion = heroFor(kit, library, demo.intake, slug, names, `${prefix}/_img/${demo.liveVersion}/`);
     }
   } else {
     // A single-page design (or the template while the first design is built).
@@ -118,6 +114,25 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
   return res;
 }
 
+/**
+ * What fills a home page's picture layer. Only the site's own photos are used (never the link
+ * preview, review screenshots or before/after pairs). A Studio site's signature hero decides the
+ * rest: one picture (or its spotlight twin), several scenes, or a second scene to dive into.
+ */
+function heroFor(kit: Kit, library: LibraryEntry[], intake: Stored["intake"], slug: string, names: string[], base: string): string {
+  const photos = names.filter((n) => /^photo-\d+\.jpg$/.test(n)).map((n) => base + n);
+  const services = pagesOf(kit).map((p) => p.name).join(" ");
+  if (kit.style !== "studio") return heroMotion(matchVideo(library, intake, slug, services), photos.slice(0, 3));
+  const sig = heroById(kit.hero);
+  if (sig?.media === "switch") {
+    const items = pagesOf(kit).filter((p) => p.role === "item" || p.path.startsWith("/services/")).map((p) => p.name);
+    return heroMotion(null, photos.slice(0, 4), "", { media: "switch", clips: matchClips(library, intake, services).slice(0, 4), labels: items });
+  }
+  if (sig?.media === "dive") return heroMotion(matchVideo(library, intake, slug, services), photos.slice(0, 2), "", { media: "dive" });
+  // A Studio first screen holds one picture (a slow drift); a crossfade between different shots reads as two unrelated images.
+  return heroMotion(matchVideo(library, intake, slug, services), photos.slice(0, 1), names.includes("reveal-1.jpg") ? base + "reveal-1.jpg" : "");
+}
+
 /** The path a version's first-screen draft is kept under (never part of the site's own pages). */
 export const HERO_DRAFT = "/_hero";
 
@@ -132,11 +147,7 @@ export async function serveDraft(req: Request, env: Env, slug: string, version: 
   if (!found || !kit || !page) return text("Nothing here.", 404);
   const names = await imageNames(env, slug, version);
   const library = await listLibrary(env, found.tenant.id);
-  const motion = heroMotion(
-    matchVideo(library, found.demo.intake, slug, pagesOf(kit).map((p) => p.name).join(" ")),
-    names.filter((n) => /^photo-\d+\.jpg$/.test(n)).slice(0, kit.style === "studio" ? 1 : 3).map((n) => `${prefix}/_img/${version}/${n}`),
-    kit.style === "studio" && names.includes("reveal-1.jpg") ? `${prefix}/_img/${version}/reveal-1.jpg` : "",
-  );
+  const motion = heroFor(kit, library, found.demo.intake, slug, names, `${prefix}/_img/${version}/`);
   const res = new Response(assemble(kit, page, slug, creditFor(found.tenant)), { headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "no-store" } });
   return finish(res, { prefix, current: "/", widget: "", leadUrl: `${prefix}/_lead`, heroMotion: motion });
 }

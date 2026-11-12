@@ -8,6 +8,7 @@ import { SWATCHES } from "./designer";
 import type { Session } from "./auth";
 import { STUDIO_CREDITS, buildCost, type Usage } from "./tenants";
 import { CONCEPTS } from "./concepts";
+import { HEROES } from "./heroes";
 import { ic } from "./web-ui";
 
 const THEME_BOOT = `(function(){var d=document.documentElement,t;try{t=localStorage.getItem("forge-theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";d.setAttribute("data-theme",t)})()`;
@@ -228,6 +229,7 @@ export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = []): string {
   const tier = `<fieldset class="look" style="border:0;padding:0;margin:0"><legend class="note" style="font-weight:600;margin-bottom:8px">Style</legend>
 <div class="look-row">${radio("style", "standard", style !== "studio", "Standard · 1 credit")}${radio("style", "studio", style === "studio", `Studio · ${STUDIO_CREDITS} credits`)}</div>
 <div><div class="note" style="font-weight:600;margin-bottom:8px">Studio look (only used for Studio)</div><div class="designs concepts">${conceptPick("auto", (v?.concept ?? "auto") === "auto" || !CONCEPTS.some((c) => c.id === v?.concept), "Let Forge choose", "The best fit for the trade, different each time")}${CONCEPTS.map((c) => conceptPick(c.id, v?.concept === c.id, c.name, c.blurb)).join("")}</div></div>
+<div><div class="note" style="font-weight:600;margin-bottom:8px">Studio first screen (only used for Studio)</div><div class="designs heroes">${[{ id: "auto", name: "Let Forge choose", blurb: "Video scenes when we have clips for the trade, otherwise a different one each time" }, ...HEROES].map((h) => `<label class="design"><input type="radio" name="hero" value="${esc(h.id)}"${(v?.hero ?? "auto") === h.id || (h.id === "auto" && !HEROES.some((x) => x.id === v?.hero)) ? " checked" : ""}><b>${esc(h.name)}</b><small>${esc(h.blurb)}</small></label>`).join("")}</div></div>
 <p class="note" style="margin:0"><b>Standard</b>: a polished, fast multi-page site. <b>Studio</b>: an award-style, art-directed site with kinetic type, smooth scrolling, WebGL backgrounds, a custom cursor and page transitions, held to one of nine distinct looks (pick one below, or let Forge choose). It takes longer and uses the larger models.</p></fieldset>`;
   const pick = (value: string, checked: boolean, inner: string) => `<label class="design"><input type="radio" name="reuseFrom" value="${esc(value)}"${checked ? " checked" : ""}>${inner}</label>`;
   const reuseSel = reuse.length

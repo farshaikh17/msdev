@@ -35,6 +35,7 @@ export const MOTION_API = `Our motion engine is loaded on every page (GSAP + Scr
 - data-reveal="blur" on first-screen copy (the paragraph, the buttons): rises 28px out of a 12px blur, staggered after the headline. The premium load-in.
 - data-depth="0.02" (0.01 to 0.06) on layered first-screen elements (a badge, a floating card, a picture frame): each drifts against the pointer by its own amount, so the layers separate. Bigger numbers sit "closer".
 - data-pin="3" on a <section> that contains one <div data-pin-stage> (exactly one screen tall: 100vh, overflow hidden): the stage pins while the visitor scrolls 3 more screens, and that scroll drives everything inside it. Inside the stage: data-at="0.2" on a block makes it write in (rise out of blur) when the scroll reaches 20%, and data-until="0.55" makes it leave again; data-write on a paragraph inside such a block writes it in word by word; data-pin-zoom="1.25" on the stage's background picture pushes the camera in from 1 to 1.25 across the whole scroll; data-pin-count="24" on a number counts up across its block's span. Lay the blocks out absolutely in different corners of the stage so that those sharing the screen never overlap, and give 3 to 5 beats. On phones the stage is not pinned and the blocks simply stack, so write them in reading order.
+- Signature-hero mechanics (use only when this site's signature hero calls for them; its spec says exactly how): data-dive on a hero section with a data-dive-stage inside (camera dive on scroll; data-dive-out / data-dive-in on its text blocks; data-dive-origin="x% y%" on the stage); data-switch on a hero section with an empty data-switch-nav (scene switcher); data-slides on a section of data-slide children with data-color and data-title, plus an empty data-slides-tabs (colour-field slider); data-sway on a hanging badge (drops in on its strap, sways, swings on hover).
 Our engine also adds a short preloader (first visit), smooth page-to-page transitions, and smooth scrolling. Links to other pages just work.`;
 
 export const MOTION_CSS = `
@@ -56,6 +57,17 @@ html.m-on .m-cursor,html.m-on .m-ring{opacity:1}
 [data-horizontal].m-pinned{overflow:hidden;scroll-snap-type:none}
 .m-spot [data-spotlight-reveal]{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;-webkit-mask-image:radial-gradient(circle var(--m-r,240px) at var(--m-x,-999px) var(--m-y,-999px),#000 0,#000 40%,rgba(0,0,0,.75) 60%,rgba(0,0,0,.4) 75%,rgba(0,0,0,.12) 88%,transparent 100%);mask-image:radial-gradient(circle var(--m-r,240px) at var(--m-x,-999px) var(--m-y,-999px),#000 0,#000 40%,rgba(0,0,0,.75) 60%,rgba(0,0,0,.4) 75%,rgba(0,0,0,.12) 88%,transparent 100%)}
 [data-spotlight]:not(.m-spot) [data-spotlight-reveal]{display:none}
+.hero-motion [data-dive-to]{opacity:0}[data-dive-stage]{position:relative}
+@media (max-width:899px){[data-dive] [data-dive-in]{position:relative!important;inset:auto!important;left:auto!important;top:auto!important;transform:none!important;margin:0 auto;padding:48px 20px;opacity:1!important;filter:none!important}}
+.hero-motion [data-switch-item]{transition:opacity 1s ease-in-out;animation:none!important;transform:scale(1.03)}.hero-motion [data-switch-item]:not(:first-child){opacity:0}
+.m-sw .hero-motion [data-switch-item]{opacity:0}.m-sw .hero-motion [data-switch-item].on{opacity:1}
+.m-switch-btn{background:none;border:0;border-bottom:1px solid transparent;color:inherit;font:inherit;cursor:pointer;opacity:.5;transition:opacity .3s,border-color .3s}.m-switch-btn:hover{opacity:.8}.m-switch-btn.on{opacity:1;border-bottom-color:currentColor}
+[data-slides]{transition:background-color 1.2s cubic-bezier(.77,0,.18,1)}[data-slides]:not(.m-sl) [data-slide]:not(:first-of-type){display:none}
+.m-sl [data-slide]{position:absolute;inset:0;transition:transform 1.2s cubic-bezier(.77,0,.18,1),opacity 1.2s cubic-bezier(.77,0,.18,1)}
+.m-sl [data-slide].in{transform:translateY(100%);opacity:0;visibility:hidden}.m-sl [data-slide].out{transform:translateY(-100%);opacity:0}.m-sl [data-slide].on{transform:none;opacity:1}
+[data-slides-tabs]{position:relative}.m-slide-tab{display:flex;align-items:baseline;gap:12px;background:none;border:0;color:inherit;font:inherit;cursor:pointer;opacity:.62;padding:0;margin:0 0 18px;text-align:left;transition:opacity .4s}.m-slide-tab.on{opacity:1}.m-slide-tab small{font-size:.58em;opacity:.7}
+.m-slides-bar{position:absolute;left:-22px;top:0;width:2px;height:24px;background:rgba(128,128,128,.3);transition:transform .6s cubic-bezier(.77,0,.18,1),height .6s}.m-slides-bar i{display:block;width:100%;height:100%;background:currentColor;transform-origin:50% 0;transform:scaleY(0)}
+@media (max-width:899px){[data-slides-tabs]{display:flex;gap:14px;flex-wrap:wrap}.m-slide-tab{margin:0}.m-slide-tab small,.m-slides-bar{display:none}}
 [data-pin].m-pinned [data-pin-stage]{position:relative;height:100vh;overflow:hidden}
 .m-pin-bar{position:absolute;left:50%;bottom:22px;width:120px;height:2px;margin-left:-60px;background:rgba(128,128,128,.3);border-radius:2px;z-index:5;pointer-events:none}.m-pin-bar i{display:block;height:100%;background:var(--m-accent,#111);transform-origin:0 50%;transform:scaleX(0)}
 [data-follow]{pointer-events:none;display:none}html.m-on.m-fine [data-follow]{display:block}
@@ -74,6 +86,36 @@ function all(s,el){return Array.prototype.slice.call((el||d).querySelectorAll(s)
 function num(v,f){v=parseFloat(v);return isNaN(v)?f:v}
 // Shaders work even without GSAP.
 all("[data-shader]").forEach(shader);
+// --- scene switcher: full-screen scenes crossfade, chosen from a labelled row (no library needed)
+all("[data-switch]").forEach(function(sec){
+  var items=all("[data-switch-item]",sec),nav=sec.querySelector("[data-switch-nav]");if(items.length<2)return;
+  var cur=0,lock=false,timer=null;sec.classList.add("m-sw");
+  var btns=items.map(function(it,i){var b=d.createElement("button");b.type="button";b.className="m-switch-btn";b.textContent=it.getAttribute("data-label")||("Scene "+(i+1));b.addEventListener("click",function(){go(i,true)});if(nav)nav.appendChild(b);return b});
+  function show(i){items.forEach(function(it,k){it.classList.toggle("on",k===i);if(it.tagName==="VIDEO"){if(k===i){try{it.currentTime=0;var p=it.play();if(p&&p.catch)p.catch(function(){})}catch(e){}}else{try{it.pause()}catch(e){}}}});btns.forEach(function(b,k){b.classList.toggle("on",k===i);b.setAttribute("aria-pressed",k===i?"true":"false")})}
+  function go(i,user){if(i===cur||lock)return;lock=true;cur=i;show(i);setTimeout(function(){lock=false},1000);if(user)restart()}
+  function restart(){if(reduce)return;clearInterval(timer);timer=setInterval(function(){if(!d.hidden)go((cur+1)%items.length)},7000)}
+  show(0);restart();
+});
+// --- colour-field slider: slides rise one screen at a time, with a numbered tab list and a progress line
+all("[data-slides]").forEach(function(sec){
+  var slides=all("[data-slide]",sec),tabs=sec.querySelector("[data-slides-tabs]")||d.querySelector("[data-slides-tabs]");if(slides.length<2)return;
+  var cur=0,timer=null,DUR=5000;sec.classList.add("m-sl");
+  var bar=null,fill=null,btns=[];
+  if(tabs){bar=d.createElement("div");bar.className="m-slides-bar";fill=d.createElement("i");bar.appendChild(fill);tabs.appendChild(bar);
+    btns=slides.map(function(sl,i){var b=d.createElement("button");b.type="button";b.className="m-slide-tab";var n=d.createElement("small");n.textContent=(i<9?"0":"")+(i+1);var t=d.createElement("span");t.textContent=sl.getAttribute("data-title")||("Slide "+(i+1));b.appendChild(n);b.appendChild(t);b.addEventListener("click",function(){go(i)});tabs.appendChild(b);return b})}
+  function paint(i,prev){
+    slides.forEach(function(sl,k){sl.classList.remove("on","out","in");if(k===i)sl.classList.add("on");else if(k===prev)sl.classList.add("out");else sl.classList.add("in")});
+    var c=slides[i].getAttribute("data-color");if(c)sec.style.backgroundColor=c;
+    btns.forEach(function(b,k){b.classList.toggle("on",k===i)});
+    if(bar&&btns[i]){var bt=btns[i].offsetTop,bh=btns[i].offsetHeight;bar.style.transform="translateY("+bt+"px)";bar.style.height=bh+"px"}
+    if(fill){fill.style.transition="none";fill.style.transform="scaleY(0)";void fill.offsetWidth;if(!reduce){fill.style.transition="transform "+DUR+"ms linear";fill.style.transform="scaleY(1)"}}
+  }
+  function go(i){if(i===cur)return;var p=cur;cur=(i+slides.length)%slides.length;paint(cur,p);restart()}
+  function restart(){clearTimeout(timer);if(reduce)return;timer=setTimeout(function(){if(!d.hidden)go(cur+1);else restart()},DUR)}
+  var sy=null;sec.addEventListener("touchstart",function(e){sy=e.touches[0].clientY},{passive:true});
+  sec.addEventListener("touchend",function(e){if(sy===null)return;var dy=e.changedTouches[0].clientY-sy;sy=null;if(Math.abs(dy)>50&&Math.abs(dy)<innerHeight*.6)go(cur+(dy<0?1:-1))},{passive:true});
+  paint(0,-1);restart();
+});
 if(!G||!ST||reduce){root.classList.add("m-static");all("[data-counter]").forEach(function(el){el.textContent=(el.dataset.prefix||"")+el.dataset.counter+(el.dataset.suffix||"")});return}
 // Lines are measured with the real fonts: wait for them (briefly), keeping the animated text hidden meanwhile.
 root.classList.add("m-wait");
@@ -146,9 +188,40 @@ mm0.add("(min-width: 900px)",function(){
       bar.firstChild.style.transform="scaleX("+p+")";
     }
     sec.classList.add("m-pinned");apply(0);
-    ST.create({trigger:sec,start:"top top",end:function(){return "+="+screens*innerHeight},pin:stage,scrub:.6,invalidateOnRefresh:true,onUpdate:function(self){apply(self.progress)}});
+    ST.create({trigger:sec,start:"top top",end:function(){return "+="+screens*innerHeight},pin:sec,scrub:.6,invalidateOnRefresh:true,onUpdate:function(self){apply(self.progress)}});
   });
   return function(){all("[data-pin]").forEach(function(sec){sec.classList.remove("m-pinned");all("[data-at]",sec).forEach(function(el){el.style.cssText=""})})};
+});
+// --- camera dive: the hero pins while the scroll pushes the camera into the picture and lands in a second scene
+mm0.add("(min-width: 900px)",function(){
+  all("[data-dive]").forEach(function(sec){
+    var stage=sec.querySelector("[data-dive-stage]")||sec,layer=stage.querySelector(".hero-motion");if(!layer)return;
+    var to=layer.querySelector("[data-dive-to]"),first=layer.querySelector("img:not([data-dive-to]),video");
+    var outs=all("[data-dive-out]",stage),ins=all("[data-dive-in]",stage),screens=Math.max(1,Math.min(4,num(sec.dataset.dive,2.4)));
+    layer.style.transformOrigin=stage.getAttribute("data-dive-origin")||"55% 55%";
+    var bar=d.createElement("div");bar.className="m-pin-bar";bar.innerHTML="<i></i>";stage.appendChild(bar);
+    function cl(v){return v<0?0:v>1?1:v}function seg(p,a,b){return cl((p-a)/(b-a))}function ease(t){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2}
+    function apply(p){
+      var push=ease(seg(p,.02,.62));
+      if(first)first.style.transform="scale("+(1+push*1.6)+")";
+      if(first)first.style.filter=push>.55?"blur("+((push-.55)*14).toFixed(1)+"px)":"";
+      if(to){var land=seg(p,.42,.62);to.style.opacity=land;to.style.transform="scale("+(1.18-.18*ease(seg(p,.42,1)))+")"}
+      var o=seg(p,.02,.16);outs.forEach(function(el){el.style.opacity=1-o;el.style.transform="translate3d(0,"+(-o*70)+"px,0) scale("+(1+o*.08)+")";el.style.filter=o>0?"blur("+(o*12).toFixed(1)+"px)":"";el.style.visibility=o>=1?"hidden":"visible"});
+      ins.forEach(function(el,i){var k=seg(p,.6+i*.04,.76+i*.04);el.style.opacity=k;el.style.transform="translate3d(0,"+((1-k)*30)+"px,0)";el.style.filter=k<1?"blur("+((1-k)*12).toFixed(1)+"px)":"";el.style.visibility=k<=0?"hidden":"visible"});
+      bar.firstChild.style.transform="scaleX("+p+")";
+    }
+    sec.classList.add("m-diving");apply(0);
+    // Pin the whole section, so a fixed height on it can't swallow the scroll that drives the dive.
+    ST.create({trigger:sec,start:"top top",end:function(){return "+="+screens*innerHeight},pin:sec,scrub:.6,invalidateOnRefresh:true,onUpdate:function(self){apply(self.progress)}});
+  });
+  return function(){all("[data-dive]").forEach(function(sec){sec.classList.remove("m-diving");all("[data-dive-out],[data-dive-in],.hero-motion img,.hero-motion video",sec).forEach(function(el){el.style.opacity="";el.style.transform="";el.style.filter="";el.style.visibility=""})})};
+});
+// --- hanging badge: drops in on its strap, sways, and swings when touched
+all("[data-sway]").forEach(function(el){
+  G.set(el,{transformOrigin:"50% 0%"});
+  var idle=null;
+  G.fromTo(el,{yPercent:-120,rotation:8,opacity:0},{keyframes:[{yPercent:0,rotation:-3,opacity:1,duration:.9,ease:"power2.out"},{rotation:1.6,duration:.3,ease:"sine.inOut"},{rotation:0,duration:.3,ease:"sine.out"}],delay:.7,onComplete:function(){idle=G.fromTo(el,{rotation:-1.1},{rotation:1.1,duration:3.2,ease:"sine.inOut",yoyo:true,repeat:-1})}});
+  el.addEventListener("pointerenter",function(){if(!idle)return;idle.pause();G.to(el,{keyframes:[{rotation:-6,duration:.3},{rotation:4,duration:.35},{rotation:-2,duration:.35},{rotation:0,duration:.4}],ease:"sine.out",onComplete:function(){idle.restart()}})});
 });
 // --- marquee
 all("[data-marquee]").forEach(function(el){

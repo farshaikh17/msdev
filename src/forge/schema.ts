@@ -56,6 +56,8 @@ export const Intake = z.object({
   style: z.enum(["standard", "studio"]).default("standard"),
   /** Studio art direction ("auto": one is picked to suit the trade). See cloudflare/forge/src/concepts.ts. */
   concept: z.string().trim().max(20).default("auto"),
+  /** Studio signature hero ("auto": picked per site). See cloudflare/forge/src/heroes.ts. */
+  hero: z.string().trim().max(20).default("auto"),
   /** Build on the design of one of the account's finished sites (its slug): much cheaper than a fresh design. */
   reuseFrom: z.string().trim().max(80).default(""),
   /** The business's current website, read for facts and photos. */
