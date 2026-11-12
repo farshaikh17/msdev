@@ -80,6 +80,7 @@ html.m-on .m-cursor,html.m-on .m-ring{opacity:1}
 .hero-subject{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden}
 .hero-subject img,.hero-motion[data-front-layer] img{position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:cover;animation:none!important;opacity:1!important;transform:none}
 .hero-subject,.hero-motion[data-front-layer]{transform-origin:50% 62%}
+[data-front] [data-front-text]{text-shadow:0 4px 40px rgba(0,0,0,.32),0 1px 3px rgba(0,0,0,.18)}
 html.m-wait [data-split],html.m-wait [data-reveal]{visibility:hidden}
 html.m-on,html.m-on body{overflow-x:clip}html.lenis,html.lenis body{height:auto}.lenis.lenis-smooth{scroll-behavior:auto!important}.lenis.lenis-stopped{overflow:hidden}
 @media (prefers-reduced-motion:reduce){[data-grain]::after{animation:none}}
@@ -134,6 +135,32 @@ function paint(cv,set,i){
   c.clearRect(0,0,w,h);c.drawImage(im,(w-dw)/2,(h-dh)/2,dw,dh);return true;
 }
 function fit(cv){var r=Math.min(W.devicePixelRatio||1,2),w=Math.round(cv.clientWidth*r),h=Math.round(cv.clientHeight*r);if(w&&h&&(cv.width!==w||cv.height!==h)){cv.width=w;cv.height=h;return true}return false}
+// --- subject in front: place the giant word so the subject overlaps part of it (the magazine-cover look) but it stays readable.
+// The cut-out's outline is read from its pixels; each height from the top down is tried, and the first where the subject
+// covers a modest share of the letters wins. If every height hides too much, the word goes in front of the subject.
+all(".hero-subject").forEach(function(sub){
+  var sec=sub.parentElement,img=sub.querySelector("img"),txt=sec&&(sec.querySelector("[data-front-text]")||sec.querySelector("h1"));if(!img||!txt)return;
+  var base=null;
+  function place(){
+    try{
+      var nw=img.naturalWidth,nh=img.naturalHeight,bw=sec.clientWidth,bh=sec.clientHeight;if(!nw||!nh||!bw||!bh)return;
+      if(base===null)base=txt.style.top;txt.style.top=base;sub.style.zIndex="";
+      var cw=96,ch=Math.max(8,Math.round(96*nh/nw)),cv=d.createElement("canvas");cv.width=cw;cv.height=ch;var c=cv.getContext("2d");c.drawImage(img,0,0,cw,ch);
+      var px=c.getImageData(0,0,cw,ch).data,sc=Math.max(bw/nw,bh/nh),ox=(bw-nw*sc)/2,oy=(bh-nh*sc)/2;
+      var sr=sec.getBoundingClientRect(),rg=d.createRange();rg.selectNodeContents(txt);var tr=rg.getBoundingClientRect();
+      var L=tr.left-sr.left,R=tr.right-sr.left,H=tr.height*.78,off=tr.top-txt.getBoundingClientRect().top;if(R-L<20||H<10)return;
+      function solid(x,y){var ix=Math.floor((x-ox)/sc/nw*cw),iy=Math.floor((y-oy)/sc/nh*ch);if(ix<0||iy<0||ix>=cw||iy>=ch)return 0;return px[(iy*cw+ix)*4+3]>160?1:0}
+      function cover(top){var n=0,k=0;for(var i=0;i<28;i++)for(var j=0;j<6;j++){n+=solid(L+(R-L)*(i+.5)/28,top+off+H*(.12+.76*j/5));k++}return n/k}
+      var best=null,low=1,lowAt=null;
+      for(var t=bh*.06;t<=bh*.5;t+=bh*.02){var cv2=cover(t);if(cv2<low){low=cv2;lowAt=t}if(best===null&&cv2>=.05&&cv2<=.3)best=t}
+      if(best!==null)txt.style.top=Math.round(best)+"px";
+      else if(low>.38)sub.style.zIndex="1";
+      else if(low>=.05)txt.style.top=Math.round(lowAt)+"px";
+    }catch(e){}
+  }
+  if(img.complete)place();else img.addEventListener("load",place);
+  var rt;W.addEventListener("resize",function(){clearTimeout(rt);rt=setTimeout(place,150)});
+});
 // --- turning showcase: the object turns by itself; a pinned stage drives it with the scroll instead
 all(".m-spin").forEach(function(box){
   var urls=(box.getAttribute("data-spin-frames")||"").split("|").filter(Boolean),img=box.querySelector("img"),cv=null,set=null,last=-1,manual=false,t0=performance.now(),vis=true;

@@ -108,7 +108,7 @@ export const FACTS = `(() => ({
   noAlt: Array.from(document.images).filter((i) => !i.hasAttribute("alt")).length,
   brokenImgs: Array.from(document.images).filter((i) => i.src && i.complete && !i.naturalWidth).length,
   emptyBlocks: Array.from(document.querySelectorAll("main section, main > div")).filter((e) => e.offsetHeight >= 480 && !(e.innerText || "").trim() && !e.querySelector("img,picture,video,canvas,svg,iframe")).length,
-  parallax: document.querySelectorAll("main [data-parallax]").length,
+  parallax: document.querySelectorAll("main [data-parallax], main [data-perch], main .hero-subject").length,
   pins: document.querySelectorAll("main [data-pin] [data-pin-stage], main [data-horizontal] [data-horizontal-track], main [data-stack]").length,
   scrubs: document.querySelectorAll("main [data-scrub-text], main [data-write]").length,
   eyebrows: Array.from(document.querySelectorAll("main h1, main h2, main h3")).filter((h) => { const p = h.previousElementSibling; if (!p || !(p.innerText || "").trim() || (p.innerText || "").length > 70 || /^H[1-6]$/.test(p.tagName)) return false; const c = getComputedStyle(p); return c.textTransform === "uppercase" && parseFloat(c.letterSpacing) >= 1 && parseFloat(c.fontSize) <= 16; }).length,

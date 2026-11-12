@@ -73,6 +73,7 @@ export interface HTMLElement {
   setInnerContent(content: string, opts?: { html: boolean }): void;
   append(content: string, opts?: { html: boolean }): void;
   after(content: string, opts?: { html: boolean }): void;
+  prepend(content: string, opts?: { html: boolean }): void;
   onEndTag(fn: () => void): void;
 }
 interface HTMLHandlers { element?(e: HTMLElement): void; text?(t: HTMLText): void }
