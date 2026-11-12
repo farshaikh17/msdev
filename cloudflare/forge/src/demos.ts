@@ -106,7 +106,8 @@ export async function prepareIntake(raw: Record<string, string>): Promise<Intake
     heroImageUrl: g("heroImageUrl"),
     primaryColor: color,
     mode: g("mode") || "auto",
-    style: g("style") === "studio" ? "studio" : "standard",
+    // Naming a Studio look or first screen without a style means a Studio site (they do nothing on a Standard one).
+    style: g("style") === "studio" || (!g("style") && (conceptById(g("concept")) || heroById(g("hero")))) ? "studio" : "standard",
     concept: conceptById(g("concept")) ? g("concept") : "auto",
     hero: heroById(g("hero")) ? g("hero") : "auto",
     reuseFrom: g("reuseFrom"),

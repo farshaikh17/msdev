@@ -63,7 +63,7 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 .pill{font:600 .72rem var(--body);letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:var(--ember-soft);color:var(--ember)}
 .login{max-width:380px;margin:12vh auto;padding-inline:16px}
 .empty{color:var(--muted);text-align:center;padding:28px}
-.look{display:grid;gap:14px}.look-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.look{display:grid;gap:14px}.studio-only{display:none;gap:14px}form:has(input[name=style][value=studio]:checked) .studio-only{display:grid}.look-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .choice{position:relative;display:inline-flex}.choice input{position:absolute;opacity:0;pointer-events:none}
 .choice span{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-weight:600;font-size:.88rem;cursor:pointer;background:var(--surface)}
 .choice input:checked+span{border-color:var(--steel);box-shadow:0 0 0 2px var(--steel-soft);color:var(--steel)}
@@ -226,10 +226,13 @@ export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = []): string {
   const radio = (name: string, value: string, checked: boolean, label: string) =>
     `<label class="choice"><input type="radio" name="${name}" value="${esc(value)}"${checked ? " checked" : ""}><span>${label}</span></label>`;
   const style = v?.style ?? "standard";
-  const tier = `<fieldset class="look" style="border:0;padding:0;margin:0"><legend class="note" style="font-weight:600;margin-bottom:8px">Style</legend>
-<div class="look-row">${radio("style", "standard", style !== "studio", "Standard · 1 credit")}${radio("style", "studio", style === "studio", `Studio · ${STUDIO_CREDITS} credits`)}</div>
-<div><div class="note" style="font-weight:600;margin-bottom:8px">Studio look (only used for Studio)</div><div class="designs concepts">${conceptPick("auto", (v?.concept ?? "auto") === "auto" || !CONCEPTS.some((c) => c.id === v?.concept), "Let Forge choose", "The best fit for the trade, different each time")}${CONCEPTS.map((c) => conceptPick(c.id, v?.concept === c.id, c.name, c.blurb)).join("")}</div></div>
-<div><div class="note" style="font-weight:600;margin-bottom:8px">Studio first screen (only used for Studio)</div><div class="designs heroes">${[{ id: "auto", name: "Let Forge choose", blurb: "Video scenes when we have clips for the trade, otherwise a different one each time (with a moving hero, a flying or turning object, or the subject in front of the headline)" }, ...HEROES].map((h) => `<label class="design"><input type="radio" name="hero" value="${esc(h.id)}"${(v?.hero ?? "auto") === h.id || (h.id === "auto" && !HEROES.some((x) => x.id === v?.hero)) ? " checked" : ""}><b>${esc(h.name)}</b><small>${esc(h.blurb)}</small></label>`).join("")}</div></div>
+  // Standard or Studio is the biggest choice on the form, so it sits in the open; the Studio pickers appear under it when Studio is chosen.
+  const tier = `<fieldset class="look tier" style="border:0;padding:0;margin:0"><legend class="note" style="font-weight:600;margin-bottom:8px">Style</legend>
+<div class="look-row">${radio("style", "standard", style !== "studio", "Standard · 1 credit")}${radio("style", "studio", style === "studio", `Studio · ${STUDIO_CREDITS} credits: motion, flying or turning objects, premium design`)}</div>
+<div class="studio-only">
+<div><div class="note" style="font-weight:600;margin-bottom:8px">Studio look</div><div class="designs concepts">${conceptPick("auto", (v?.concept ?? "auto") === "auto" || !CONCEPTS.some((c) => c.id === v?.concept), "Let Forge choose", "The best fit for the trade, different each time")}${CONCEPTS.map((c) => conceptPick(c.id, v?.concept === c.id, c.name, c.blurb)).join("")}</div></div>
+<div><div class="note" style="font-weight:600;margin-bottom:8px">Studio first screen</div><div class="designs heroes">${[{ id: "auto", name: "Let Forge choose", blurb: "Video scenes when we have clips for the trade, otherwise a different one each time (with a moving hero, a flying or turning object, or the subject in front of the headline)" }, ...HEROES].map((h) => `<label class="design"><input type="radio" name="hero" value="${esc(h.id)}"${(v?.hero ?? "auto") === h.id || (h.id === "auto" && !HEROES.some((x) => x.id === v?.hero)) ? " checked" : ""}><b>${esc(h.name)}</b><small>${esc(h.blurb)}</small></label>`).join("")}</div></div>
+</div>
 <p class="note" style="margin:0"><b>Standard</b>: a polished, fast multi-page site. <b>Studio</b>: an award-style, art-directed site with kinetic type, smooth scrolling, WebGL backgrounds, a custom cursor and page transitions, held to one of nine distinct looks (pick one below, or let Forge choose). It takes longer and uses the larger models.</p></fieldset>`;
   const pick = (value: string, checked: boolean, inner: string) => `<label class="design"><input type="radio" name="reuseFrom" value="${esc(value)}"${checked ? " checked" : ""}>${inner}</label>`;
   const reuseSel = reuse.length
@@ -254,9 +257,10 @@ export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = []): string {
 <p class="note" style="margin:0">Every site gets a light/dark switch; this sets which one it opens in.</p></fieldset>`;
   return `<div class="grid"><label class="full big-field" for="f-businessName">Business name or Google Maps link<input id="f-businessName" name="businessName" value="${esc(v?.businessName ?? "")}" placeholder="e.g. Vanguard Pipe & Water   or   https://maps.app.goo.gl/…" required autocomplete="off"></label>
 ${t("phone", "Phone (gives the site a call button)", "e.g. (646) 594-9379", false, "tel")}${t("city", "City (optional; a Maps link fills it in)", "e.g. Myrtle Beach, SC")}${t("industry", "What they do (optional)", "e.g. Plumbing, Roofing, Hair salon")}</div>
+${tier}
 <details><summary>More options</summary><div style="display:grid;gap:16px;margin-top:12px">
 <p class="note" style="margin:0">Everything here is optional. Left alone, Forge picks what suits the business.</p>
-${reuseSel}${tier}${look}
+${reuseSel}${look}
 <div class="grid">${t("googleUrl", "Google Maps link", "https://maps.app.goo.gl/…", false, "url")}
 ${t("websiteUrl", "Their current website (we read it for facts, photos and contact details)", "https://…", false, "url")}
 ${a("services", "Services", "Comma or line separated, e.g. Drain cleaning, Water heaters")}
