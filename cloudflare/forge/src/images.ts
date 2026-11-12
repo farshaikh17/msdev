@@ -83,9 +83,9 @@ export async function beforeAfterImages(env: Env, pairs: BeforeAfter[]): Promise
   const out = await Promise.all(
     pairs.slice(0, 2).map(async (p, n): Promise<PairImage[]> => {
       if (!(await spendImages(env, 2, 0.3))) return [];
-      const before = await generate(env, `${p.before}. ${STYLE} Overcast, unflattering light.`, { small: true });
+      const before = await generate(env, `${p.before}. ${STYLE} Plain daylight.`, { small: true });
       if (!before) return [];
-      const after = await generate(env, `Using image 0 as the exact reference for the scene, camera angle, buildings and surroundings: ${p.after}. Realistic photograph, golden hour light, no people, no text, no logos.`, { reference: before, small: true });
+      const after = await generate(env, `Edit image 0. Keep the same place, camera angle, framing, weather, time of day and lighting exactly. Change ONLY what the work changes, and make that change large and obvious at a glance: ${p.after}. Do not change the sky, the light or the colour grade. Realistic photograph, no people, no text, no logos.`, { reference: before, small: true });
       if (!after) return [];
       return [
         { name: `ba-${n + 1}-before.jpg`, description: `Before: ${p.before}`, bytes: before },
