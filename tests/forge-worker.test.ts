@@ -59,6 +59,12 @@ describe("Forge worker — multi-page sites", () => {
     expect(kind("Petal & Stem Florist")).toBe("retail");
     expect(kind("The Grill", "Roofing")).toBe("contractor");
     expect(kind("B&B Motel", "Motel")).toBe("lodging");
+    // Places people visit get their own wording (no quotes or service areas), but a more specific kind still wins.
+    expect(kind("Pointe Coupee Museum", "Museum")).toBe("attraction");
+    expect(kind("Riverside Winery", "")).toBe("attraction");
+    expect(kind("Gallery Salon", "")).toBe("beauty");
+    expect(kind("Temple Family Dental", "")).toBe("health");
+    expect(kind("Memorial Hospital", "Hospital")).toBe("health");
     // A thrift shop is a shop, but it needs a Donate page, not custom orders.
     const thrift = sitemapFor(Intake.parse({ businessName: "Main Street Thrift Shop", industry: "Thrift Store" })).map((p) => p.path);
     expect(thrift).toContain("/donate");

@@ -6,7 +6,7 @@
  */
 
 export interface Profile {
-  id: "contractor" | "restaurant" | "beauty" | "health" | "professional" | "fitness" | "retail" | "lodging";
+  id: "contractor" | "restaurant" | "beauty" | "health" | "professional" | "fitness" | "retail" | "lodging" | "attraction";
   /** The page listing what the business offers, and the pages under it. */
   items: { name: string; path: string; one: string; many: string; example: string };
   /** The main action a visitor takes. */
@@ -270,16 +270,53 @@ const P: Record<Exclude<Profile["id"], "contractor">, Omit<Profile, "id">> = {
     item: "A detail page for \"{name}\". Page hero (breadcrumb Home / Rooms / {name}); what it is and who it suits; what's included (a checklist of only what was given, otherwise general comforts; never a price, size or bed count that wasn't given); photos; how to ask about it; FAQs; a 'Check Rates' CTA; links to 2–3 other rooms or amenities.",
     faq: "rates and booking, check-in and check-out, the rooms and what's included, parking, pets and long stays",
   },
+  attraction: {
+    items: { name: "What's On", path: "/whats-on", one: "exhibit, tour or programme", many: "exhibits, tours and programmes", example: "Permanent Exhibits, Guided Tours, School Programs, Special Events" },
+    cta: {
+      name: "Plan Your Visit",
+      path: "/plan-your-visit",
+      form: "name, phone, email, preferred date, group size, what they're planning (select: a visit, a group or school trip, an event, research, other), notes",
+      about: "how the team replies to help plan the visit, group and school bookings, and what happens next (no invented prices, dates or times)",
+    },
+    visit: {
+      name: "Hours & Directions",
+      path: "/visit",
+      brief: "Page hero; opening hours as a clear table (only the hours given; otherwise 'Call for today's hours'); admission in general terms (never a price unless given); the address with the real map embed large; parking and accessibility in general terms (nothing invented); the phone as a tel: link; closing CTA.",
+    },
+    steps: {
+      name: "Groups & Events",
+      path: "/groups",
+      brief: "Page hero; the kinds of groups and occasions (schools, families, clubs, tours, private events) as cards; how booking a group visit or an event works in 4–5 steps; what to expect on the day; an enquiry form (name, phone, email, date, group size, details) with the privacy note; FAQs; closing CTA.",
+    },
+    gallery: {
+      name: "Gallery",
+      brief: "Page hero; the place, its highlights and visitors enjoying it, using only the supplied photos and the generated preview photos with short captions; what visitors notice first; a review; closing CTA to plan a visit.",
+    },
+    about: "Page hero; the story of the place and the people who keep it (only facts given; warm and general if few are known); what it is for and who it welcomes; the team or volunteers; what visitors say (2–3 reviews); hours and location summary; closing CTA.",
+    home: [
+      "What's on: photo-led features for every exhibit, tour or programme page ({items}), each linking to its page, plus 'Everything on offer' → {itemsPath}.",
+      "Why visit: what makes the place worth the trip, as an editorial feature with photos (not a card grid).",
+      "Groups, schools and events, linking to {stepsPath}.",
+      "Our story: the place and the people who keep it, linking to /about.",
+      "The place in pictures, linking to /gallery.",
+      "What visitors say: 2–3 reviews.",
+      "Plan your visit: opening hours (only if given), the real map embed and the address, linking to {visitPath}.",
+    ],
+    item: "A page for \"{name}\". Page hero (breadcrumb Home / What's On / {name}); what it is and what visitors see or do; who it suits (families, schools, researchers, groups); how to join or book in general terms (never a price, date, time or length that wasn't given); photos; FAQs; a 'Plan Your Visit' CTA; links to 2–3 other things on offer.",
+    faq: "opening hours and admission, getting here and parking, group and school visits, accessibility, events and photography",
+  },
 };
 
 const MATCH: [RegExp, Exclude<Profile["id"], "contractor">][] = [
   [/\b(motel|hotel|inn|lodge|lodging|resort|bed (and|&) breakfast|b&b|guest ?house|hostel|cabins?|campground|rv park|vacation rentals?)\b/i, "lodging"],
   [/\b(restaurant|bar|grill|grille|pub|tavern|saloon|brewery|brewing|taproom|steakhouse|bbq|barbecue|diner|kitchen|eatery|bistro|cantina|taqueria|pizza|pizzeria|sushi|burgers?|wings|cafe|café|coffee|bakery|deli|donuts?|bagels?|ice cream|creamery|food truck|catering)\b/i, "restaurant"],
   [/\b(salon|barber|barbershop|hair|nails?|lash|lashes|brows?|beauty|spa|med ?spa|massage|tattoo|aesthetic|waxing|makeup)\b/i, "beauty"],
-  [/\b(dental|dentist|dentistry|orthodont\w*|medical|clinic|doctor|physician|chiropract\w*|physio\w*|physical therapy|therap(y|ist)|optomet\w*|eye care|dermatolog\w*|pediatric\w*|veterinar\w*|vet|animal hospital|urgent care|counsel(l)?ing)\b/i, "health"],
+  [/\b(dental|dentist|dentistry|orthodont\w*|medical|clinic|doctor|physician|chiropract\w*|physio\w*|physical therapy|therap(y|ist)|optomet\w*|eye care|dermatolog\w*|pediatric\w*|veterinar\w*|vet|animal hospital|hospital|urgent care|counsel(l)?ing)\b/i, "health"],
   [/\b(law|lawyers?|attorneys?|legal|accounting|accountants?|cpa|bookkeep\w*|tax|insurance|financial|wealth|advisors?|mortgage|real estate|realty|realtors?|consult\w*|notary|architect\w*|marketing agency)\b/i, "professional"],
   [/\b(gym|fitness|yoga|pilates|crossfit|boxing|martial arts|karate|jiu[- ]?jitsu|dance|personal train\w*|bootcamp|climbing)\b/i, "fitness"],
   [/\b(boutique|florist|flowers|store|shop|market|jewel\w*|bookstore|gift|gifts|furniture|nursery|garden cent(er|re)|bike shop|pet store|thrift|antiques?)\b/i, "retail"],
+  // Last, so a more specific kind wins ("Gallery Salon" is a salon, "Temple Family Dental" a dentist).
+  [/\b(museums?|galler(y|ies)|historic(al)? (site|society|house|home|village)|heritage|monument|tours?|zoo|aquarium|botanical gardens?|arboretum|planetarium|science cent(er|re)|nature cent(er|re)|(water|amusement|theme|trampoline|state|national) park|theat(re|er)|playhouse|cinema|event (venue|space|center|centre)|wedding venue|venue|escape rooms?|bowling|arcade|mini ?golf|golf (course|club)|winery|vineyard|farm|orchard|pumpkin patch|church|ministr(y|ies)|temple|mosque|synagogue|community cent(er|re)|library|nonprofit|foundation)\b/i, "attraction"],
 ];
 /** Trades that travel to the customer keep the contractor pages even if a word above appears ("Spa Repair", "Bar Stool Refinishing"). */
 const TRADE = /\b(plumb\w*|hvac|heating|cooling|air condition\w*|roof\w*|electric\w*|landscap\w*|lawn|tree|cleaning|cleaners?|maid|janitorial|pest|exterminat\w*|remodel\w*|construction|contractors?|painting|painters?|flooring|fenc\w*|concrete|paving|masonry|handyman|garage doors?|locksmith|moving|movers|pressure wash\w*|pool (service|repair|cleaning)|repair|installation|restoration|towing|septic|gutter\w*|siding|windows?|drywall|insulation|solar|irrigation|junk|hauling|detailing)\b/i;
