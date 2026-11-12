@@ -42,6 +42,20 @@ const LEAD_CAP = 300;
 export const text = (body: string, status: number) => new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8" } });
 export const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") ?? "unknown";
 
+/**
+ * The cached copy of a response, if Cloudflare's cache answers quickly. A slow or stuck cache must
+ * never hold a page up: after a moment the page is simply built again.
+ */
+export async function fromCache(cache: Cache, req: Request, ms = 1500): Promise<Response | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<undefined>((done) => (timer = setTimeout(() => done(undefined), ms)));
+  try {
+    return await Promise.race([cache.match(req).catch(() => undefined), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** A demo that can be shown to the public: not archived, and its account is active. */
 async function publicDemo(env: Env, slug: string) {
   const demo = await getDemo(env, slug);
@@ -53,7 +67,7 @@ async function publicDemo(env: Env, slug: string) {
 /** A demo website page. `prefix` is the demo's address on this origin ("/<slug>" or "/s/<slug>"); `sub` the page path ("" for home). */
 export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, sub: string, prefix: string, sandbox: boolean): Promise<Response> {
   const cache = (caches as unknown as { default: Cache }).default;
-  const hit = await cache.match(req);
+  const hit = await fromCache(cache, req);
   if (hit) {
     trackView(req, env, ctx, slug);
     return hit;
@@ -114,8 +128,10 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
     legacyHero: !!hero.motion && !html.includes('class="hero-motion"'),
     og: { title: ogTitle, description: ogDesc, url: pageUrl.toString(), image: ogImage },
   });
-  ctx.waitUntil(cache.put(req, res.clone()));
-  return res;
+  // The page is finished first and the cache gets its own copy, so a slow cache can never hold the visitor's copy back.
+  const body = await res.text();
+  ctx.waitUntil(cache.put(req, new Response(body, res)).catch(() => undefined));
+  return new Response(body, res);
 }
 
 /**
@@ -220,14 +236,14 @@ export async function servePitch(req: Request, env: Env, slug: string, prefix: s
 /** A preview photo. Its address names the site version, so it never changes and caches for a year. */
 export async function serveImage(req: Request, env: Env, ctx: Ctx, slug: string, version: string, name: string): Promise<Response> {
   const cache = (caches as unknown as { default: Cache }).default;
-  const hit = await cache.match(req);
+  const hit = await fromCache(cache, req);
   if (hit) return hit;
   if (!(await publicDemo(env, slug))) return text("Not found", 404);
   const bytes = await getImage(env, slug, version, name);
   if (!bytes) return text("Not found", 404);
-  const res = new Response(bytes, { headers: { "content-type": name.endsWith(".webp") ? "image/webp" : "image/jpeg", "cache-control": "public, max-age=31536000, immutable" } });
-  ctx.waitUntil(cache.put(req, res.clone()));
-  return res;
+  const headers = { "content-type": name.endsWith(".webp") ? "image/webp" : "image/jpeg", "cache-control": "public, max-age=31536000, immutable" };
+  ctx.waitUntil(cache.put(req, new Response(bytes.slice(), { headers })).catch(() => undefined));
+  return new Response(bytes, { headers });
 }
 
 /** A demo website's form submission. */
