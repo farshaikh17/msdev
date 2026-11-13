@@ -24,7 +24,8 @@ vi.mock("@anthropic-ai/sdk", () => {
 
 import { designSitePage, type Kit } from "../cloudflare/forge/src/designer";
 
-const env = { ANTHROPIC_API_KEY: "test" } as never;
+const base = { ANTHROPIC_API_KEY: "test" };
+const env = base as never;
 const kit = { theme: "light", accent: "#a33", fonts: "", css: "", header: "<header></header>", footer: "<footer></footer>", script: "", components: "", brief: "A plumber in Tampa.", pages: [{ path: "/", name: "Home", kind: "ai", brief: "The home page." }] } as unknown as Kit;
 const spec = { path: "/", name: "Home", kind: "ai", brief: "The home page." } as never;
 const current = { title: "Home", description: "d", css: ".x{}", body: "<main><h1>Old</h1><p>Keep me</p></main>" };
@@ -79,7 +80,7 @@ describe("Studio inner pages on Workers AI", () => {
 
   it("writes them with DeepSeek, thinking off, and counts what it cost", async () => {
     const w = ai({ choices: [{ message: { content: "@@@ TITLE\nAbout\n@@@ MAIN\n<main><h1>About us</h1></main>" }, finish_reason: "stop" }], usage: { prompt_tokens: 20000, completion_tokens: 5000, neurons: 1200 } });
-    const r = await designSitePage({ ...env, AI: w.AI } as never, studioKit, about, {});
+    const r = await designSitePage({ ...base, AI: w.AI } as never, studioKit, about, {});
     expect(r.page.body).toBe("<main><h1>About us</h1></main>");
     expect(requests).toHaveLength(0); // Claude wasn't called
     expect(w.calls[0]!.model).toBe("@cf/deepseek-ai/deepseek-v4.1-flash-1017");
@@ -91,7 +92,7 @@ describe("Studio inner pages on Workers AI", () => {
     for (const bad of [() => { throw new Error("3040: capacity"); }, { choices: [{ message: { content: "@@@ MAIN\n<main><h1>Half" }, finish_reason: "length" }] }, { choices: [{ message: { content: "Sure! Here is a page." }, finish_reason: "stop" }] }]) {
       requests.length = 0;
       replies.push("@@@ TITLE\nAbout\n@@@ MAIN\n<main><h1>From Sonnet</h1></main>");
-      const r = await designSitePage({ ...env, AI: ai(bad).AI } as never, studioKit, about, {});
+      const r = await designSitePage({ ...base, AI: ai(bad).AI } as never, studioKit, about, {});
       expect(r.page.body).toContain("From Sonnet");
       expect(requests[0]!.model).toBe("claude-sonnet-5-5");
     }
@@ -100,9 +101,9 @@ describe("Studio inner pages on Workers AI", () => {
   it("can be switched back to Sonnet, and never touches the home page or Standard sites", async () => {
     replies.push("@@@ MAIN\n<main><h1>S</h1></main>", "@@@ MAIN\n<main><h1>H</h1></main>", "@@@ MAIN\n<main><h1>Std</h1></main>");
     const w = ai({});
-    await designSitePage({ ...env, AI: w.AI, FORGE_INNER_MODEL: "claude" } as never, studioKit, about, {});
-    await designSitePage({ ...env, AI: w.AI } as never, studioKit, spec, {});
-    await designSitePage({ ...env, AI: w.AI } as never, kit, about, {});
+    await designSitePage({ ...base, AI: w.AI, FORGE_INNER_MODEL: "claude" } as never, studioKit, about, {});
+    await designSitePage({ ...base, AI: w.AI } as never, studioKit, spec, {});
+    await designSitePage({ ...base, AI: w.AI } as never, kit, about, {});
     expect(w.calls).toHaveLength(0);
     expect(requests.map((q) => q.model)).toEqual(["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"]);
   });
