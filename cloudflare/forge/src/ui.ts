@@ -612,7 +612,7 @@ ${sendStep(d, links, extra, improve ? 3 : 2)}
 ${busy ? "" : leadCard(d, extra.leadLog ?? [])}
 ${!busy && d.liveVersion && (d.leadStatus === "replied" || d.leadStatus === "won" || d.handover) ? handoverCard(d, pages) : ""}
 ${busy ? "" : expiryNote(d)}
-${!busy && d.liveVersion && (d.leadStatus === "won" || extra.domain) ? domainCard(d, extra.domain ?? null, extra.domainTarget ?? "", !!extra.domainAuto) : ""}
+${!busy && d.liveVersion && extra.domainTarget && (d.leadStatus === "won" || extra.domain) ? domainCard(d, extra.domain ?? null, extra.domainTarget ?? "", !!extra.domainAuto) : ""}
 <details class="card"><summary>More tools</summary><div style="display:grid;gap:16px;margin-top:12px">
 ${outreachCard(d, links, extra.qr ?? "", true)}
 ${viewsCard(extra.views)}

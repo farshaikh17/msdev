@@ -159,9 +159,8 @@ describe("their own web address", () => {
     expect(loc(await call(h, `/demos/${slug}/domain`, { cookie: b.cookie, form: { domain: "not a domain" } }))).toContain("isn't a web address");
     await call(h, `/demos/${slug}/domain`, { cookie: b.cookie, form: { domain: "https://www.alpha.test/" } });
     expect(h.db.prepare("SELECT host FROM domains WHERE slug = ?").get(slug)).toEqual({ host: "www.alpha.test" });
-    const page = await html(await call(h, `/demos/${slug}`, { cookie: b.cookie }));
-    expect(page).toContain("Their own web address");
-    expect(page).toContain("Waiting for Mianro");
+    // Custom addresses aren't set up on this Forge (no FORGE_DOMAIN_TARGET): the card stays out of the way.
+    expect(await html(await call(h, `/demos/${slug}`, { cookie: b.cookie }))).not.toContain("Their own web address");
     // Another site (another account, even) can't take the same address, in either form.
     const c = await makeAccount(h, admin, "Other Co", "owner@c.test", 5);
     const other = slugOf(await build(h, c.cookie, "Beta Plumbing"));
