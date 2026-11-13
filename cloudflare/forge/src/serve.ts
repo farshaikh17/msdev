@@ -143,7 +143,7 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
  * preview, review screenshots or before/after pairs). A Studio site's signature hero decides the
  * rest: one picture (or its spotlight twin), several scenes, or a second scene to dive into.
  */
-function heroFor(kit: Kit, library: LibraryEntry[], intake: Stored["intake"], slug: string, version: string, names: string[], base: string, clipBase: string): HeroFill {
+export function heroFor(kit: Kit, library: LibraryEntry[], intake: Stored["intake"], slug: string, version: string, names: string[], base: string, clipBase: string): HeroFill {
   const photos = names.filter((n) => /^photo-\d+\.jpg$/.test(n)).map((n) => base + n);
   const services = pagesOf(kit).map((p) => p.name).join(" ");
   if (kit.style !== "studio") return { motion: heroMotion(matchVideo(library, intake, slug, services), photos.slice(0, 3)) };
