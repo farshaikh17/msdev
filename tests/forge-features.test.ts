@@ -858,3 +858,17 @@ describe("links as people type them", () => {
     expect(i).toMatchObject({ websiteUrl: "https://deltadental-mobile.com", phone: "251.555.0100", style: "studio" });
   });
 });
+
+import { artNotes } from "../cloudflare/forge/src/review";
+describe("the art director's notes", () => {
+  it("keeps each instruction with the screen it is about, and spends no note on a heading", () => {
+    const n = artNotes("**Screen 1 / hero:**\n- Replace the worker photo with the finished lot.\n- Cut the tilted sticker.\n**Screens 3–5:** Collapse into one pinned section.\n- Show one drawing that builds in three steps.\n2. Make the footer quieter and smaller.");
+    expect(n).toEqual([
+      "Screen 1 / hero: Replace the worker photo with the finished lot.",
+      "Screen 1 / hero: Cut the tilted sticker.",
+      "Screens 3–5: Collapse into one pinned section.",
+      "Screens 3–5: Show one drawing that builds in three steps.",
+      "Make the footer quieter and smaller.",
+    ]);
+  });
+});

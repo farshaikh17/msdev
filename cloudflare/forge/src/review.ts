@@ -302,6 +302,32 @@ const ART_SYSTEM = `You are the art director of a small, very good design studio
  * business, where it is empty or thin, what to cut; then concrete notes for one revision. Unlike the
  * old score-driven rewrite, the writer's notes come from seeing the page, all the way down.
  */
+/**
+ * The art director's notes as separate instructions. A heading line ("**Screen 1 / hero:**") is put in
+ * front of the bullets under it, so each note says where it applies and none is spent on a heading.
+ */
+export function artNotes(text: string): string[] {
+  const out: string[] = [];
+  let where = "";
+  for (const raw of text.split("\n")) {
+    const bullet = /^\s*[-*•]\s+/.test(raw);
+    const l = raw.replace(/^\s*(\d+[.)]|[-*•])\s+/, "").replace(/\*\*/g, "").trim();
+    if (l.length < 3) continue;
+    if (/:$/.test(l) && l.length < 80) {
+      where = l.slice(0, -1).trim();
+      continue;
+    }
+    if (bullet && where) {
+      out.push(`${where}: ${l}`);
+      continue;
+    }
+    const head = l.match(/^([^:]{2,60}):\s+\S/);
+    where = head ? head[1]!.trim() : "";
+    out.push(l);
+  }
+  return out.filter((l) => l.length > 8).slice(0, 14);
+}
+
 async function artDirectReal(env: Env, shots: Shots, brief: string): Promise<{ notes: string[]; keep: string; costUsd: number }> {
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 180_000 });
   const res = await client.messages.create({
@@ -321,7 +347,7 @@ One line per desktop screen: what it shows, and whether it serves the idea (yes 
 @@@ WEAKEST
 The three weakest screens and why: empty, thin, repetitive, generic, off the idea, or hard to read.
 @@@ NOTES
-At most eight numbered instructions for the revision, most important first. Each names the screen or section and says exactly what to change, cut, merge or add, in design terms (layout, scale, picture, motion, words). Make the page more about this business, not busier. Never ask for facts that are not on the page.
+At most ten numbered instructions for the revision, one per line (no headings or sub-bullets), most important first. Each names the screen or section and says exactly what to change, cut, merge or add, in design terms (layout, scale, picture, motion, words). Make the page more about this business, not busier. Never ask for facts that are not on the page.
 @@@ KEEP
 One or two sentences: what works and must not change.`),
         ],
@@ -330,11 +356,7 @@ One or two sentences: what works and must not change.`),
   });
   const text = res.content.map((c) => (c.type === "text" ? c.text : "")).join("");
   const p = parseParts(text);
-  const notes = (p.NOTES ?? "")
-    .split("\n")
-    .map((l) => l.replace(/^\s*\d+[.)]\s*/, "").trim())
-    .filter((l) => l.length > 8)
-    .slice(0, 8);
+  const notes = artNotes(p.NOTES ?? "");
   const weakest = (p.WEAKEST ?? "").trim();
   return { notes: weakest ? [...notes, `The weakest screens, as the art director saw them: ${weakest.replace(/\s+/g, " ").slice(0, 600)}`] : notes, keep: (p.KEEP ?? "").replace(/\s+/g, " ").trim().slice(0, 400), costUsd: costOf(env.CLAUDE_MODEL || MODEL, res.usage as unknown as Record<string, unknown>) };
 }
