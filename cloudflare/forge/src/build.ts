@@ -33,7 +33,7 @@ import {
 } from "./db";
 import type { Kit } from "./designer";
 import { lintSite, repairNote, type QaIssue, type QaResult } from "./qa";
-import { adaptKit, fixChrome, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, studioHome, TryLater, type Plan } from "./designer";
+import { adaptKit, thinServices, fixChrome, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, studioHome, TryLater, type Plan } from "./designer";
 import type { BuildJob, Env } from "./env";
 import { heroPair, beforeAfterImages, objectImage, previewImages } from "./images";
 import { studioMedia, type StudioMedia } from "./media";
@@ -265,7 +265,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       let chosen: { look?: string; hero?: string } = {};
       if (studio && !intake.reuseFrom && env.ANTHROPIC_API_KEY) {
         const nearby = await recentIdeas(env, demo.tenantId, slug, intake.city).catch(() => []);
-        const input = { slug, businessName: intake.businessName, trade: intake.industry, town: intake.city, services: intake.services || plan?.services.join(", "), saw: [intake.saw, intake.notes].filter(Boolean).join(" "), website: site?.text, reviews: intake.reviews };
+        const input = { slug, businessName: intake.businessName, trade: intake.industry, town: intake.city, services: intake.services || (thinServices(intake, site) ? "" : plan?.services.join(", ")), saw: [intake.saw, intake.notes].filter(Boolean).join(" "), website: site?.text, reviews: intake.reviews };
         const brief = await writeBrief(env, input, nearby.map((n) => `${n.name}: ${n.idea}`), nearby.map((n) => n.lens)).catch((e) => {
           if (e instanceof TryLater || e instanceof Fatal) throw e;
           console.log("brief failed, designing without one", slug, errText(e));

@@ -166,3 +166,14 @@ describe("the brief leads the design", () => {
     expect(studioExtras("dive", "a-1")).toContain("data-perch");
   });
 });
+
+import { thinServices } from "../cloudflare/forge/src/designer";
+describe("services nobody gave", () => {
+  it("a Studio site with no services and no website names only what is certain", () => {
+    const i = (o: Record<string, string>) => Intake.parse({ businessName: "Yellow Green Farmers Market", ...o });
+    expect(thinServices(i({ style: "studio" }), null)).toBe(true);
+    expect(thinServices(i({ style: "studio", services: "Produce, Honey" }), null)).toBe(false);
+    expect(thinServices(i({ style: "studio" }), { title: "t", description: "d", text: "We sell mangoes." } as never)).toBe(false);
+    expect(thinServices(i({ style: "standard" }), null)).toBe(false);
+  });
+});

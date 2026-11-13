@@ -256,7 +256,16 @@ export interface Plan {
  * A quick, cheap first step (Haiku, about $0.002): the services a business like this offers and
  * what its photos should show. Without it, an unusual niche falls back to generic trade services.
  */
+/**
+ * A Studio site with no services given and no website to read them from: name only the few things
+ * every business of exactly this kind offers, so the site claims nothing the business may not do.
+ */
+export const thinServices = (i: Intake, site: SiteFacts | null) => i.style === "studio" && !i.services.trim() && !(site?.text ?? "").trim();
+
+const SERVICES_THIN = `3 or 4 things this business offers, one per line (2–4 words each, title case). No services were given and it has no website, so name ONLY what every business of exactly this kind, with this name, certainly offers, as broad plain categories (for a farmers market: Fresh Produce, Local Goods; for a plumber: Repairs, Installations). Never anything specialist, seasonal or occasion-based (weddings, events, catering, gifts, emergency or 24/7 call-outs, delivery, financing) unless the name or the facts below say so.`;
+
 export async function planSite(env: Env, i: Intake, site: SiteFacts | null): Promise<Plan> {
+  const thin = thinServices(i, site);
   const facts = [
     `Business: ${i.businessName}`,
     i.industry && `Niche: ${i.industry}`,
@@ -274,7 +283,7 @@ export async function planSite(env: Env, i: Intake, site: SiteFacts | null): Pro
 @@@ TRADE
 What kind of business this is, in 1 to 3 words, title case (e.g. Restaurant, Plumbing, Hair Salon, Family Dentist). Judge from the name, niche, services and website.
 @@@ SERVICES
-4 to 6 things this business offers, one per line (2–4 words each, title case). For a trade or service business these are its services; for a restaurant, bar or cafe its menu sections (e.g. Burgers & Sandwiches, Steaks, Starters, Drinks); for a gym or studio its classes; for a shop its product ranges; for a clinic its treatments. Use the ones given or on their website when there are any; otherwise what a business of this kind typically offers.
+${thin ? SERVICES_THIN : "4 to 6 things this business offers, one per line (2–4 words each, title case)."} For a trade or service business these are its services; for a restaurant, bar or cafe its menu sections (e.g. Burgers & Sandwiches, Steaks, Starters, Drinks); for a gym or studio its classes; for a shop its product ranges; for a clinic its treatments. Use the ones given or on their website when there are any; otherwise what a business of this kind typically offers.
 @@@ PHOTOS
 8 photo descriptions for an image generator, one per line (15–30 words each): realistic scenes for this business's website. The first is the hero picture, and it must show the thing customers come for, close up and at its best: for a restaurant, bar or cafe the signature dish or drink being made or served (never an empty room or a building); for a trade the work being done by a person; for a salon or clinic the result or the care being given; for a place to stay the room at its most inviting. It has ONE clear main subject standing out from its background, near the middle of the frame and not cut off by the edges. The second and third are also shown large behind the first screen, so make them equally strong and on the same subject. The rest show the main services, the setting and a happy customer moment. Concrete and visual (subject, setting, light), e.g. "A wildlife technician in uniform inspecting a roof vent on a Florida home at golden hour, ladder against the wall". No text, signs or brand names in the scene. Never a close-up of hands or fingers (the image generator makes them look waxy and wrong): show people at a natural distance, or show the product or the result itself.
 ${PAIRS_PROMPT}
@@ -305,7 +314,7 @@ ${facts}`,
   const reveal = lines(p.REVEAL)[0]?.slice(0, 300);
   const object = lines(p.OBJECT)[0]?.replace(/^["']|["'.]$/g, "").slice(0, 200);
   const move = lines(p.MOVE)[0]?.replace(/^["']|["'.]$/g, "").slice(0, 240);
-  return { services: lines(p.SERVICES).filter((l) => l.length <= 60).slice(0, 6), imagePrompts: lines(p.PHOTOS).slice(0, 8), pairs, ...(trade ? { trade } : {}), ...(reveal ? { reveal } : {}), ...(object ? { object } : {}), ...(move ? { move } : {}), cost: Number(usage.cost_usd) || 0 };
+  return { services: lines(p.SERVICES).filter((l) => l.length <= 60).slice(0, thin ? 4 : 6), imagePrompts: lines(p.PHOTOS).slice(0, 8), pairs, ...(trade ? { trade } : {}), ...(reveal ? { reveal } : {}), ...(object ? { object } : {}), ...(move ? { move } : {}), cost: Number(usage.cost_usd) || 0 };
 }
 
 const PAIRS_PROMPT = `@@@ PAIRS

@@ -337,6 +337,8 @@ describe("Studio builds", () => {
     const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 5);
     const slug = slugOf(await studio(b.cookie, "Studio Barbers"));
     await drain(h);
+    // Services the planner guessed (none were given, and there's no website) aren't shown to the brief as real ones.
+    expect(vi.mocked(writeBrief).mock.calls.at(-1)![1].services).toBe("");
     const call0 = vi.mocked(designKit).mock.calls[0]!;
     expect(call0[4]).toBe("americana");
     expect(call0[6]).toBe("breakout");
