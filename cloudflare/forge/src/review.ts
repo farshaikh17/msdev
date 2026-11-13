@@ -752,7 +752,9 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
       await artPass(env, deps, { slug, version, kit, demo, shots: shotSet, failed, settle, sleep, url: `${base}${prefix}?r=${version}-art`, prefix }, review);
     }
     const heroFirst = studio && !!(await getPage(env, slug, version, "/_hero"));
-    if (!(studio && down.frames.length && env.FORGE_ART_PASS !== "off") && ((crit.score < (studio ? FIX_BELOW_STUDIO : FIX_BELOW) && !heroFirst) || failed.length) && notes.length) {
+    // The older automatic rewrite (score- or check-driven) is off unless FORGE_AUTO_FIX=on: it cost about
+    // $0.40 a time and often came back no better. The notes stay, with the fix buttons, for whoever wants them.
+    if (env.FORGE_AUTO_FIX === "on" && !(studio && down.frames.length && env.FORGE_ART_PASS !== "off") && ((crit.score < (studio ? FIX_BELOW_STUDIO : FIX_BELOW) && !heroFirst) || failed.length) && notes.length) {
       const spec = pagesOf(kit).find((p) => p.path === "/");
       const current = await getPage(env, slug, version, "/");
       if (spec && current) {

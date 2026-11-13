@@ -105,7 +105,7 @@ describe("the automatic review", () => {
     // The first look scores 5; after the rewrite the page is looked at again and scores 8.
     const critique = vi.fn<ReviewDeps["critique"]>(async () => (++looks > 1 ? { score: 8, verdict: "Much stronger.", strengths: ["Clear offer"], issues: [], costUsd: 0.012 } : { score: 5, verdict: "Flat hero.", strengths: ["Clear phone"], issues: [{ what: "Hero lacks contrast", fix: "Darken the overlay", severity: "high" as const }], costUsd: 0.012 }));
     const deps: ReviewDeps = { launch: async () => browser, critique, sleep: async () => undefined };
-    const env = { ...h.env, BROWSER: {} } as Env;
+    const env = { ...h.env, BROWSER: {}, FORGE_AUTO_FIX: "on" } as Env;
     const r = await reviewSite(env, slug, version, deps);
     expect(r.skipped).toBeUndefined();
     // The score shown is of the page as it now is; the earlier score is kept beside it.
@@ -451,12 +451,25 @@ describe("Studio art directions", () => {
     h.db.prepare("INSERT INTO site_pages (slug, version, path, title, description, css, body) VALUES (?, ?, '/_hero', 't', 'd', '', '<main><h1>Home</h1></main>')").run(slug, version);
     const still = { ...goodFacts([`/${slug}/about`]), parallax: 0, pins: 0, scrubs: 0 };
     const critique = vi.fn<ReviewDeps["critique"]>(async () => ({ score: 9, verdict: "Lovely.", strengths: [], issues: [], costUsd: 0.01 }));
-    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => fakeBrowser(still).browser, critique, sleep: async () => undefined });
+    const r = await reviewSite({ ...h.env, BROWSER: {}, FORGE_AUTO_FIX: "on" } as Env, slug, version, { launch: async () => fakeBrowser(still).browser, critique, sleep: async () => undefined });
     expect(r.checks!.find((c) => c.id === "scroll-motion")).toMatchObject({ ok: false });
     const notes = vi.mocked(designSitePage).mock.calls.find((c) => c[3]?.notes)![3]!.notes!;
     expect(notes.join(" ")).toContain("The page moves as it is scrolled: FAILED");
     // A Standard site isn't held to it.
-    expect((await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => fakeBrowser(still).browser, critique, sleep: async () => undefined })).checks).toBeTruthy();
+    expect((await reviewSite({ ...h.env, BROWSER: {}, FORGE_AUTO_FIX: "on" } as Env, slug, version, { launch: async () => fakeBrowser(still).browser, critique, sleep: async () => undefined })).checks).toBeTruthy();
+  });
+
+  it("by default only notes the problems: no automatic rewrite", async () => {
+    const { slug, demo } = await liveDemo();
+    const version = demo.liveVersion!;
+    const before = (await getPage(h.env, slug, version, "/"))!.body;
+    const critique = vi.fn<ReviewDeps["critique"]>(async () => ({ score: 4, verdict: "Weak.", strengths: [], issues: [{ what: "Weak hero", fix: "Bigger", severity: "high" as const }], costUsd: 0.01 }));
+    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => fakeBrowser({ ...goodFacts([]), h1: 0 }).browser, critique, sleep: async () => undefined });
+    expect(r.issues).toHaveLength(1);
+    expect(r.fixed).toBeUndefined();
+    expect(critique).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(designSitePage).mock.calls.filter((c) => c[3]?.notes)).toHaveLength(0);
+    expect((await getPage(h.env, slug, version, "/"))!.body).toBe(before);
   });
 
   it("keeps the original home page when the rewrite scores lower", async () => {
@@ -465,7 +478,7 @@ describe("Studio art directions", () => {
     const before = (await getPage(h.env, slug, version, "/"))!.body;
     let looks = 0;
     const critique = vi.fn<ReviewDeps["critique"]>(async () => ({ score: ++looks > 1 ? 4 : 6, verdict: "v", strengths: [], issues: [{ what: "Weak hero", fix: "Bigger", severity: "high" as const }], costUsd: 0.01 }));
-    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => fakeBrowser(goodFacts([])).browser, critique, sleep: async () => undefined });
+    const r = await reviewSite({ ...h.env, BROWSER: {}, FORGE_AUTO_FIX: "on" } as Env, slug, version, { launch: async () => fakeBrowser(goodFacts([])).browser, critique, sleep: async () => undefined });
     expect(r.score).toBe(6);
     expect(r.fixed).toBe(false);
     expect(r.fixError).toContain("original was kept");
@@ -480,7 +493,7 @@ describe("Studio art directions", () => {
     h.db.prepare("UPDATE site_versions SET kit = ? WHERE slug = ? AND version = ?").run(JSON.stringify({ ...JSON.parse(row.kit), style: "studio" }), slug, version);
     const { browser } = fakeBrowser(goodFacts([`/${slug}/about`]));
     const critique = vi.fn<ReviewDeps["critique"]>(async () => ({ score: 7, verdict: "Competent.", strengths: [], issues: [{ what: "Generic hero", fix: "Make the headline huge", severity: "medium" as const }], costUsd: 0.01 }));
-    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => browser, critique, sleep: async () => undefined });
+    const r = await reviewSite({ ...h.env, BROWSER: {}, FORGE_AUTO_FIX: "on" } as Env, slug, version, { launch: async () => browser, critique, sleep: async () => undefined });
     expect(critique.mock.calls[0]![3]).toBe(true);
     expect(r.fixed).toBe(true); // 7 is good enough for Standard, not for Studio
   });
@@ -910,5 +923,35 @@ describe("links that aren't the business's own site", () => {
     expect(g instanceof Error ? g.message : g.websiteUrl).not.toContain("looks like their website");
     const k = await prepareIntake({ businessName: "https://g.co/kgs/AbC123" }).catch((e: Error) => e);
     expect(k instanceof Error ? k.message : "").not.toContain("looks like their website");
+  });
+});
+
+import { applyEdits, parseEdits } from "../cloudflare/forge/src/designer";
+describe("revisions send only their edits", () => {
+  const page = { title: "Home", description: "d", css: ".a{color:red}", body: "<main><section class=hero><h1>Old headline</h1></section><section>Gallery</section></main>" };
+  it("applies the edits, and adds CSS", () => {
+    const e = parseEdits(`@@@ EDITS
+<<<<<<< FIND MAIN
+<h1>Old headline</h1>
+=======
+<h1>New headline</h1>
+>>>>>>> REPLACE
+<<<<<<< FIND CSS
+=======
+.b{color:blue}
+>>>>>>> REPLACE`);
+    expect(e).toHaveLength(2);
+    const out = applyEdits(page, e);
+    expect(out.body).toContain("<h1>New headline</h1>");
+    expect(out.body).toContain("Gallery");
+    expect(out.css).toContain(".a{color:red}");
+    expect(out.css).toContain(".b{color:blue}");
+    expect(out.title).toBe("Home");
+  });
+  it("refuses an edit whose text isn't in the page once, so the page is written whole instead", () => {
+    expect(() => applyEdits(page, [{ in: "MAIN", find: "<h1>Missing</h1>", replace: "x" }])).toThrow("wasn't found");
+    expect(() => applyEdits(page, [{ in: "MAIN", find: "section", replace: "x" }])).toThrow("more than once");
+    expect(() => applyEdits(page, [{ in: "MAIN", find: "<main>", replace: "" }])).toThrow("lost its <main>");
+    expect(() => applyEdits(page, [])).toThrow("no edits");
   });
 });

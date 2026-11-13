@@ -950,9 +950,91 @@ export interface PageRevision {
   heroOnly?: boolean;
   /** The first screen, already built and reviewed: the home page keeps it and adds the rest. */
   hero?: PageDraft;
+  /** Write the whole page again even for a revision (by default a revision sends only its edits). */
+  full?: boolean;
+}
+
+/** One edit to a page: an exact piece of its MAIN or CSS, and what replaces it (an empty FIND in CSS appends). */
+export interface PageEdit {
+  in: "MAIN" | "CSS";
+  find: string;
+  replace: string;
+}
+
+const EDIT_FORMAT = `Reply with ONLY the changes, as edit blocks, never the whole page. Each block is exactly:
+<<<<<<< FIND MAIN
+(an exact, unique piece of the current MAIN, copied character for character, long enough to occur only once)
+=======
+(what replaces it)
+>>>>>>> REPLACE
+Use FIND CSS for the page's CSS; a FIND CSS block with nothing between its first two lines adds its CSS at the end. To rework a whole section, FIND that entire section and replace it. Put all blocks under one part:
+@@@ EDITS
+(the blocks, in order)`;
+
+/** Read the edit blocks of a reply. */
+export function parseEdits(text: string): PageEdit[] {
+  const out: PageEdit[] = [];
+  const re = /<<<<<<< FIND (MAIN|CSS)\r?\n([\s\S]*?)\r?\n?=======\r?\n([\s\S]*?)\r?\n?>>>>>>> REPLACE/g;
+  for (const m of text.matchAll(re)) out.push({ in: m[1] as "MAIN" | "CSS", find: m[2]!, replace: m[3]! });
+  return out;
+}
+
+/** Apply edits to a page. Throws when an edit's FIND isn't in the page exactly once (the caller then rewrites the page whole). */
+export function applyEdits(page: PageDraft, edits: PageEdit[]): PageDraft {
+  if (!edits.length) throw new Error("no edits came back");
+  let body = page.body;
+  let css = page.css ?? "";
+  for (const e of edits) {
+    if (e.in === "CSS" && !e.find.trim()) {
+      css = `${css}\n${e.replace}`;
+      continue;
+    }
+    const src = e.in === "MAIN" ? body : css;
+    const at = src.indexOf(e.find);
+    if (!e.find || at < 0) throw new Error(`an edit's text wasn't found in the ${e.in}`);
+    if (src.indexOf(e.find, at + 1) >= 0) throw new Error(`an edit's text occurs more than once in the ${e.in}`);
+    const next = src.slice(0, at) + e.replace + src.slice(at + e.find.length);
+    if (e.in === "MAIN") body = next;
+    else css = next;
+  }
+  if (!/<main[\s>]/i.test(body) || !/<\/main>/i.test(body)) throw new Error("the edited page lost its <main>");
+  return { ...page, body, css };
+}
+
+/** Two calls' usage as one (a failed edit attempt still cost what it cost). */
+function addUsage(a: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
+  return { ...b, cost_usd: (Number(a.cost_usd) || 0) + (Number(b.cost_usd) || 0), calls: (Number(a.calls) || 1) + (Number(b.calls) || 1) };
 }
 
 export async function designSitePage(env: Env, kit: Kit, page: PageSpec, rev: PageRevision = {}): Promise<{ page: PageDraft; usage: unknown }> {
+  // A revision of a page that exists sends only its edits (a fraction of the tokens of the whole page);
+  // if they don't apply cleanly, the page is written whole as before.
+  if (rev.current && (rev.notes?.length || rev.instruction) && !rev.full && !rev.heroOnly) {
+    let spent: Record<string, unknown> = {};
+    try {
+      const r = await writePage(env, kit, page, rev, true);
+      spent = r.usage;
+      const edited = applyEdits(rev.current, parseEdits(r.text));
+      return { page: { ...edited, css: tidyCss(edited.css.replace(/<\/?style[^>]*>/gi, ""), kit.style === "studio" ? 20_000 : 12_000) }, usage: { ...r.usage, edited: true } };
+    } catch (e) {
+      console.log("edit fell back to a full rewrite", page.path, e instanceof Error ? e.message : String(e));
+      const whole = await designSitePage(env, kit, page, { ...rev, full: true });
+      return { page: whole.page, usage: addUsage(spent, whole.usage as Record<string, unknown>) };
+    }
+  }
+  const { text, usage, cut } = await writePage(env, kit, page, rev, false);
+  const studio = kit.style === "studio";
+  const p = parseParts(text);
+  // A reply that ran on after finishing its <main> (e.g. repeating itself) is still a whole page.
+  const end = p.MAIN?.lastIndexOf("</main>") ?? -1;
+  if (cut && end < 0) throw new Error(`The ${page.name} page came back incomplete (too long).`);
+  if (end >= 0) p.MAIN = p.MAIN.slice(0, end + "</main>".length);
+  need(p, ["MAIN"]);
+  return { page: { title: p.TITLE ?? page.name, description: p.DESCRIPTION ?? "", css: tidyCss((p.CSS ?? "").replace(/<\/?style[^>]*>/gi, ""), studio ? 20_000 : 12_000), body: p.MAIN }, usage };
+}
+
+/** One call that writes a page (whole) or its edits. */
+async function writePage(env: Env, kit: Kit, page: PageSpec, rev: PageRevision, edit: boolean): Promise<{ text: string; usage: Record<string, unknown>; cut: boolean }> {
   const shared = `## The business
 ${kit.brief}
 
@@ -978,10 +1060,10 @@ ${PAGE_TASK}`;
     ? `\n\n## The page as it is now\nCSS:\n${rev.current.css || "(none)"}\n\nMAIN:\n${rev.current.body}`
     : "";
   const notes = rev.notes?.length
-    ? `\n\n## Review of the rendered page (from screenshots on desktop and on a phone)\nWrite the page again: keep everything that works (the same copy and components unless a point below says otherwise) and fix every point:\n${rev.notes.map((n) => `- ${n}`).join("\n")}`
+    ? `\n\n## Review of the rendered page (from screenshots on desktop and on a phone)\n${edit ? "Change the page" : "Write the page again"}: keep everything that works (the same copy and components unless a point below says otherwise) and fix every point:\n${rev.notes.map((n) => `- ${n}`).join("\n")}`
     : "";
   const change = rev.instruction
-    ? `\n\n## Requested change\n${rev.instruction}\n\nApply only this change. Keep everything else exactly as it is (same copy, same sections, same components), and reply with the whole page.`
+    ? `\n\n## Requested change\n${rev.instruction}\n\nApply only this change. Keep everything else exactly as it is (same copy, same sections, same components)${edit ? "" : ", and reply with the whole page"}.`
     : "";
   const adapt = rev.adaptFrom
     ? `\n\n## The same page on a finished sister site (same design system)\nCSS:\n${rev.adaptFrom.css || "(none)"}\n\nMAIN:\n${rev.adaptFrom.body}\n\nWrite THIS business's page with the same layout, sections, components, spacing, motion and visual style as the sister page above, but with entirely new copy, facts, numbers, names and photos taken only from the business facts and photos given earlier. Never carry over the sister site's business name, phone, address, reviews, photo links or any claim; use only this business's own.`
@@ -993,16 +1075,17 @@ ${PAGE_TASK}`;
     ? `\n\n## For now, write ONLY the first screen\nReply with a <main> that contains just the first section described above (the first screen) and nothing after it, with the CSS it needs. The rest of the page is written once this first screen has been looked at in a browser. It must be complete and finished on its own: the headline, its one sentence, the actions and the picture, fitting one screen at 1440×900 and at 390×844.`
     : "";
   const task = `## ${rev.instruction ? "Change" : rev.notes?.length ? "Improve" : "Write"} this page: ${page.name} (${page.path})
-${page.brief}${current}${notes}${change}${adapt}${first}${only}`;
+${page.brief}${current}${notes}${change}${adapt}${first}${only}${edit ? `\n\n## How to reply\n${EDIT_FORMAT}` : ""}`;
   // The home page is the showcase, so it gets the design model; the rest follow the kit on the cheaper one.
   const home = page.path === "/";
   const studio = kit.style === "studio";
   const model = rev.cheap ? STUDIO_PAGE_MODEL : home && !kit.reuse ? env.CLAUDE_MODEL || MODEL : home ? STUDIO_PAGE_MODEL : studio ? STUDIO_PAGE_MODEL : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
-  const { text, usage, cut } = await ask(
+  return ask(
     env,
     [
-      // Cached for the inner pages, which share it; the home page is the only page on its model, so it isn't.
-      home ? { type: "text", text: shared } : { type: "text", text: shared, cache_control: { type: "ephemeral" } },
+      // Cached: the inner pages share it, and so do the home page's own calls (its first screen, the
+      // page around it, the review's revision), which come minutes apart on the same model.
+      { type: "text", text: shared, cache_control: { type: "ephemeral" } },
       { type: "text", text: task },
     ],
     // A page is 3–6k tokens plus thinking. A tighter cap on the cheaper model also stops a reply
@@ -1012,11 +1095,4 @@ ${page.brief}${current}${notes}${change}${adapt}${first}${only}`;
     studio ? "medium" : home ? effortOf(env, "low") : "medium",
     systemFor(studio ? "studio" : "standard", kit.concept, kit.hero, kit.idea),
   );
-  const p = parseParts(text);
-  // A reply that ran on after finishing its <main> (e.g. repeating itself) is still a whole page.
-  const end = p.MAIN?.lastIndexOf("</main>") ?? -1;
-  if (cut && end < 0) throw new Error(`The ${page.name} page came back incomplete (too long).`);
-  if (end >= 0) p.MAIN = p.MAIN.slice(0, end + "</main>".length);
-  need(p, ["MAIN"]);
-  return { page: { title: p.TITLE ?? page.name, description: p.DESCRIPTION ?? "", css: tidyCss((p.CSS ?? "").replace(/<\/?style[^>]*>/gi, ""), studio ? 20_000 : 12_000), body: p.MAIN }, usage };
 }
