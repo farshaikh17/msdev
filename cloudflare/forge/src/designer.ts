@@ -1035,6 +1035,24 @@ export async function designSitePage(env: Env, kit: Kit, page: PageSpec, rev: Pa
 
 /** One call that writes a page (whole) or its edits. */
 async function writePage(env: Env, kit: Kit, page: PageSpec, rev: PageRevision, edit: boolean): Promise<{ text: string; usage: Record<string, unknown>; cut: boolean }> {
+  const r = pageRequest(env, kit, page, rev, edit);
+  return ask(
+    env,
+    [
+      // Cached: the inner pages share it, and so do the home page's own calls (its first screen, the
+      // page around it, the review's revision), which come minutes apart on the same model.
+      { type: "text", text: r.shared, cache_control: { type: "ephemeral" } },
+      { type: "text", text: r.task },
+    ],
+    r.maxTokens,
+    r.model,
+    r.effort,
+    r.system,
+  );
+}
+
+/** What a page is written from: the shared context, the page's task, and the model, budget and system to use. */
+export function pageRequest(env: Env, kit: Kit, page: PageSpec, rev: PageRevision, edit: boolean): { shared: string; task: string; system: string; model: string; maxTokens: number; effort: Effort } {
   const shared = `## The business
 ${kit.brief}
 
@@ -1080,19 +1098,15 @@ ${page.brief}${current}${notes}${change}${adapt}${first}${only}${edit ? `\n\n## 
   const home = page.path === "/";
   const studio = kit.style === "studio";
   const model = rev.cheap ? STUDIO_PAGE_MODEL : home && !kit.reuse ? env.CLAUDE_MODEL || MODEL : home ? STUDIO_PAGE_MODEL : studio ? STUDIO_PAGE_MODEL : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
-  return ask(
-    env,
-    [
-      // Cached: the inner pages share it, and so do the home page's own calls (its first screen, the
-      // page around it, the review's revision), which come minutes apart on the same model.
-      { type: "text", text: shared, cache_control: { type: "ephemeral" } },
-      { type: "text", text: task },
-    ],
+  return {
+    shared,
+    task,
     // A page is 3–6k tokens plus thinking. A tighter cap on the cheaper model also stops a reply
     // that has started repeating itself sooner.
-    studio ? (home ? 56000 : 32000) : home ? 40000 : 24000,
+    maxTokens: studio ? (home ? 56000 : 32000) : home ? 40000 : 24000,
     model,
-    studio ? "medium" : home ? effortOf(env, "low") : "medium",
-    systemFor(studio ? "studio" : "standard", kit.concept, kit.hero, kit.idea),
-  );
+    // Edits carry their own instructions (the notes or the change), so they need little thinking first.
+    effort: edit ? "low" : studio ? "medium" : home ? effortOf(env, "low") : "medium",
+    system: systemFor(studio ? "studio" : "standard", kit.concept, kit.hero, kit.idea),
+  };
 }

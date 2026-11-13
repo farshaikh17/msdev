@@ -43,6 +43,8 @@ describe("page revisions", () => {
     expect((r.usage as { edited?: boolean }).edited).toBe(true);
     const content = (requests[0]!.messages as { content: { text: string; cache_control?: unknown }[] }[])[0]!.content;
     expect(content[1]!.text).toContain("Reply with ONLY the changes");
+    // An edit thinks little first (thinking is billed as output).
+    expect((requests[0]!.output_config as { effort: string }).effort).toBe("low");
     // The shared part (business, design system) is cached, the home page's calls included.
     expect(content[0]!.cache_control).toEqual({ type: "ephemeral" });
   });
