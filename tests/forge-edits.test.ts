@@ -108,3 +108,28 @@ describe("Studio inner pages on Workers AI", () => {
     expect(requests.map((q) => q.model)).toEqual(["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"]);
   });
 });
+
+describe("the rest of a Studio home page on Workers AI", () => {
+  const studioKit = { ...kit, style: "studio" } as unknown as Kit;
+  const hero = { title: "Home", description: "", css: "", body: "<main><section>First screen</section></main>" };
+  it("is written by DeepSeek once Opus has built the first screen, and by Opus if DeepSeek fails", async () => {
+    const calls: string[] = [];
+    const ok = { run: async (m: string) => (calls.push(m), { choices: [{ message: { content: "@@@ MAIN\n<main><section>First screen</section><section>Rest</section></main>" }, finish_reason: "stop" }], usage: { neurons: 1500 } }) };
+    const r = await designSitePage({ ...base, AI: ok } as never, studioKit, spec, { hero });
+    expect(calls).toEqual(["@cf/deepseek-ai/deepseek-v4.1-flash-1017"]);
+    expect(r.page.body).toContain("Rest");
+    expect(requests).toHaveLength(0);
+    replies.push("@@@ MAIN\n<main><section>First screen</section><section>From Opus</section></main>");
+    await designSitePage({ ...base, AI: { run: async () => { throw new Error("busy"); } } } as never, studioKit, spec, { hero });
+    expect(requests[0]!.model).toBe("claude-opus-5-5");
+  });
+  it("leaves the first screen and the art pass to Opus", async () => {
+    const calls: string[] = [];
+    const ai = { run: async (m: string) => (calls.push(m), {}) };
+    replies.push("@@@ MAIN\n<main><section>Hero</section></main>", "@@@ EDITS\n<<<<<<< FIND MAIN\nFirst screen\n=======\nFirst\n>>>>>>> REPLACE");
+    await designSitePage({ ...base, AI: ai } as never, studioKit, spec, { heroOnly: true });
+    await designSitePage({ ...base, AI: ai } as never, studioKit, spec, { notes: ["Shorter"], current: hero });
+    expect(calls).toHaveLength(0);
+    expect(requests.map((q) => q.model)).toEqual(["claude-opus-5-5", "claude-opus-5-5"]);
+  });
+});

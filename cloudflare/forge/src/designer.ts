@@ -1066,11 +1066,11 @@ async function writePage(env: Env, kit: Kit, page: PageSpec, rev: PageRevision, 
       // Only a reply that finished, in the shape asked for, is kept; anything else goes to Sonnet.
       const ok = edit ? parseEdits(out.text).length > 0 : !out.cut && /<\/main>/i.test(parseParts(out.text).MAIN ?? "");
       if (ok) return out;
-      console.log("workers ai reply unusable; using Sonnet", page.path, out.cut ? "cut" : "shape");
+      console.log("workers ai reply unusable; using Claude", page.path, out.cut ? "cut" : "shape");
     } catch (e) {
-      console.log("workers ai failed; using Sonnet", page.path, e instanceof Error ? e.message : String(e));
+      console.log("workers ai failed; using Claude", page.path, e instanceof Error ? e.message : String(e));
     }
-    r.model = STUDIO_PAGE_MODEL;
+    r.model = r.fallback;
   }
   return ask(
     env,
@@ -1088,7 +1088,7 @@ async function writePage(env: Env, kit: Kit, page: PageSpec, rev: PageRevision, 
 }
 
 /** What a page is written from: the shared context, the page's task, and the model, budget and system to use. */
-export function pageRequest(env: Env, kit: Kit, page: PageSpec, rev: PageRevision, edit: boolean): { shared: string; task: string; system: string; model: string; maxTokens: number; effort: Effort } {
+export function pageRequest(env: Env, kit: Kit, page: PageSpec, rev: PageRevision, edit: boolean): { shared: string; task: string; system: string; model: string; fallback: string; maxTokens: number; effort: Effort } {
   const shared = `## The business
 ${kit.brief}
 
@@ -1134,7 +1134,14 @@ ${page.brief}${current}${notes}${change}${adapt}${first}${only}${edit ? `\n\n## 
   const home = page.path === "/";
   const studio = kit.style === "studio";
   const cfInner = env.FORGE_INNER_MODEL === "claude" ? "" : env.FORGE_INNER_MODEL?.startsWith("@cf/") ? env.FORGE_INNER_MODEL : CF_INNER_MODEL;
-  const model = rev.cheap ? STUDIO_PAGE_MODEL : home && !kit.reuse ? env.CLAUDE_MODEL || MODEL : home ? STUDIO_PAGE_MODEL : studio ? (env.AI && cfInner ? cfInner : STUDIO_PAGE_MODEL) : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
+  let model = rev.cheap ? STUDIO_PAGE_MODEL : home && !kit.reuse ? env.CLAUDE_MODEL || MODEL : home ? STUDIO_PAGE_MODEL : studio ? (env.AI && cfInner ? cfInner : STUDIO_PAGE_MODEL) : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
+  // A Studio home page whose first screen Opus already built and a browser approved: the rest of the page
+  // goes on Workers AI too (tested: as good as Opus's for about 2 cents), with Opus as the fallback.
+  let fallback = STUDIO_PAGE_MODEL;
+  if (studio && home && rev.hero && !rev.cheap && !kit.reuse && env.AI && cfInner) {
+    fallback = model;
+    model = cfInner;
+  }
   return {
     shared,
     task,
@@ -1142,6 +1149,7 @@ ${page.brief}${current}${notes}${change}${adapt}${first}${only}${edit ? `\n\n## 
     // that has started repeating itself sooner.
     maxTokens: studio ? (home ? 56000 : 32000) : home ? 40000 : 24000,
     model,
+    fallback,
     // Edits carry their own instructions (the notes or the change), so they need little thinking first.
     effort: edit ? "low" : studio ? "medium" : home ? effortOf(env, "low") : "medium",
     system: systemFor(studio ? "studio" : "standard", kit.concept, kit.hero, kit.idea),
