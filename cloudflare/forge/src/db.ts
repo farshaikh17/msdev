@@ -631,13 +631,14 @@ export async function pairsDue(env: Env, slug?: string, limit = 2): Promise<{ sl
   return results;
 }
 
+/** Live sites whose review never ran (at any age), or crashed in the last week: they get another go, a few an hour. */
 export async function reviewsDue(env: Env, limit = 2): Promise<{ slug: string; version: string }[]> {
   const { results } = await env.DB.prepare(
     `SELECT d.slug, d.live_version version, v.review FROM demos d
        JOIN site_versions v ON v.slug = d.slug AND v.version = d.live_version
       WHERE d.status = 'active' AND d.live_version IS NOT NULL AND d.build_status = 'ready'
         AND d.tenant_id IN (SELECT id FROM tenants WHERE status = 'active')
-        AND d.updated_at > ? AND (v.review IS NULL OR v.review LIKE '%"skipped":"error%')
+        AND (v.review IS NULL OR (d.updated_at > ? AND v.review LIKE '%"skipped":"error%'))
       ORDER BY d.updated_at DESC LIMIT 20`,
   )
     .bind(new Date(Date.now() - 7 * 86_400_000).toISOString())

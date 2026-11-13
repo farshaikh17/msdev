@@ -363,6 +363,12 @@ describe("the review's browser snippet", () => {
     expect(await reviewsDue(h.env)).toEqual([]); // given up
     set({ at: new Date(Date.now() - 2 * 3_600_000).toISOString(), skipped: "browser budget for this month is used up" });
     expect(await reviewsDue(h.env)).toEqual([]); // not an error: left alone
+    // An older site (changed weeks ago) whose review never ran is still due; one that crashed back then is left alone.
+    h.db.prepare("UPDATE demos SET updated_at = ? WHERE slug = ?").run(new Date(Date.now() - 30 * 86_400_000).toISOString(), slug);
+    set(null);
+    expect((await reviewsDue(h.env)).map((x) => x.slug)).toEqual([slug]);
+    set({ at: new Date(Date.now() - 2 * 3_600_000).toISOString(), skipped: "error: boom", tries: 1 });
+    expect(await reviewsDue(h.env)).toEqual([]);
     set({ at: new Date().toISOString(), score: 8, shots: [] });
     expect(await reviewsDue(h.env)).toEqual([]); // fine
   });
