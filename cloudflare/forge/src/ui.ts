@@ -541,7 +541,7 @@ ${links.ghl ? row("On your GoHighLevel page", links.ghl, links.ghl) : row("On yo
 ${row("Chat message", chat, chat)}
 ${row("Sheet row (date · business · trade · city · phone · link)", sheet.replace(/\t/g, " · "), sheet)}
 </div></section>
-<form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Start over with a new design</h2><p class="note" style="margin:0">Correct the details below, or just press the button for a completely new look. The link stays the same.${s.tenant.unlimited ? "" : ` This uses ${cost} credit${cost === 1 ? "" : "s"}.`}</p>${fields(i)}
+<form method="post" action="/demos/${esc(d.slug)}/rewrite" class="card"><h2>Start over with a new design</h2><p class="note" style="margin:0">Correct the details below, or just press the button for a completely new look. The link stays the same. The Studio look and first screen start on "Let Forge choose" so the site's own idea picks them; choose one only if you want to overrule it.${s.tenant.unlimited ? "" : ` This uses ${cost} credit${cost === 1 ? "" : "s"}.`}</p>${fields({ ...i, concept: "auto", hero: "auto" })}
 <div><button class="btn" type="submit" data-busy="Starting…"${busy || out ? " disabled" : ""}>Redesign the whole site</button>${out ? ` <span class="note">No credits left.</span>` : ""}</div></form>
 <form method="post" action="/demos/${esc(d.slug)}/archive"><button class="btn danger" type="submit">Delete this website (its link stops working)</button></form>
 </div></details>
