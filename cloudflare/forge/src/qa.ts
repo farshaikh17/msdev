@@ -233,8 +233,8 @@ o.appendChild(big);o.appendChild(b);document.body.appendChild(o);requestAnimatio
 function close(){o.remove();document.removeEventListener("keydown",key)}function key(k){if(k.key==="Escape")close()}
 o.addEventListener("click",close);document.addEventListener("keydown",key)});
 }catch(x){}})();
-/* Any empty photo box left on a page ("Your photos appear here") is filled with one of the site's photos. */
-window.__fgFill=function(urls){try{if(!urls||!urls.length)return;
+/* Any empty photo box left on a page ("Your photos appear here") is filled with one of the site's photos, or hidden when the site has none. */
+window.__fgFill=function(urls){try{urls=urls||[];
 var P=/(photos?|pictures?|images?)\\b[^.!?]{0,60}\\b(appears?|go|goes|added)\\b[^.!?]{0,20}\\bhere|space for (your|real|the)\\b[^.!?]{0,20}(photos?|pictures?)|(photos?|pictures?) coming soon/i;
 var abs=function(u){try{return new URL(u,location.href).href}catch(e){return u}},used={};
 [].forEach.call(document.images,function(i){used[i.currentSrc||i.src]=1});
@@ -243,6 +243,7 @@ var pool=urls.filter(function(u){return !used[abs(u)]}).concat(urls),k=0,done=[]
 var t=(el.textContent||"").trim();if(!t||t.length>170||!P.test(t)||/before|after|review/i.test(t))return;
 var box=el;while(box.parentElement&&!/^(MAIN|SECTION|ARTICLE|BODY)$/.test(box.parentElement.tagName)&&(box.parentElement.textContent||"").trim().length<=t.length+110&&!box.parentElement.querySelector("img,video,iframe,form,a[href]"))box=box.parentElement;
 if(box.querySelector("img,video")||done.indexOf(box)>=0||done.some(function(d){return d.contains(box)}))return;done.push(box);
+if(!pool.length){box.style.display="none";box.setAttribute("data-fg-filled","");return}
 var img=document.createElement("img");img.src=pool[k++%pool.length];img.alt="Sample photo";img.loading="lazy";img.setAttribute("data-fg-zoom","");
 var tag=document.createElement("span");tag.textContent="Sample photo";
 box.innerHTML="";box.setAttribute("data-fg-filled","");box.appendChild(img);box.appendChild(tag)});

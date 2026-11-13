@@ -517,7 +517,7 @@ async function visit(page: BrowserPage, url: string, settleMs: number, sleep: (m
 const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** The checks that matter for keeping a revision: a revised page may not fail one the original passed. */
-const KEEP_CHECKS = ["overflow", "h1", "images", "links", "console", "empty", "scroll-motion", "blank"];
+const KEEP_CHECKS = ["overflow-desktop", "overflow-phone", "h1", "images", "links", "console", "empty", "scroll-motion", "blank"];
 
 /**
  * The art director's pass (Studio): look at the whole page, write notes, revise the home page once,
@@ -545,11 +545,20 @@ async function artPass(
     // The first version is kept once (a later review never overwrites it), for the side-by-side.
     if (!(await getPage(env, o.slug, o.version, BEFORE_PAGE))) await savePage(env, o.slug, o.version, BEFORE_PAGE, current, null);
     await savePage(env, o.slug, o.version, "/", revised, usage);
-    const after = await recheck(env, deps, o.url, o.settle, o.sleep, o.kit, o.prefix, !!o.demo.intake.phone);
+    // From here the revision is live: whatever goes wrong, the original goes back unless the revision was measured.
+    let after: Awaited<ReturnType<typeof recheck>>;
+    try {
+      after = await recheck(env, deps, o.url, o.settle, o.sleep, o.kit, o.prefix, !!o.demo.intake.phone);
+    } catch (e) {
+      await savePage(env, o.slug, o.version, "/", current, null);
+      review.artPass = { notes: look.notes, kept: false, why: `the revision couldn't be checked (${(e instanceof Error ? e.message : String(e)).slice(0, 100)}), so the original was kept` };
+      return;
+    }
     const before = new Set((review.checks ?? []).filter((c) => !c.ok).map((c) => c.id));
     const worse = after?.checks.filter((c) => !c.ok && !before.has(c.id) && KEEP_CHECKS.includes(c.id)) ?? [];
     if (!after) {
-      review.artPass = { notes: look.notes, kept: true, why: "kept without a second look (no browser time left)" };
+      await savePage(env, o.slug, o.version, "/", current, null);
+      review.artPass = { notes: look.notes, kept: false, why: "this month's browser time ran out before the revision could be checked, so the original was kept" };
     } else if (worse.length) {
       await savePage(env, o.slug, o.version, "/", current, null);
       review.artPass = { notes: look.notes, kept: false, why: `the revision failed ${worse.map((c) => c.label.toLowerCase()).join(", ")}, so the original was kept` };
@@ -578,7 +587,7 @@ async function recheck(env: Env, deps: ReviewDeps, url: string, settle: number, 
     await visit(page, url, settle, sleep);
     const desktop = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
     const d = factsOf(await page.evaluate<PageFacts>(FACTS));
-    const down = kit.style === "studio" ? await scrollFrames(page, sleep, 8, 600).catch(() => ({ frames: [] as Uint8Array[], blank: 0 })) : { frames: [], blank: 0 };
+    const down = kit.style === "studio" ? await scrollFrames(page, sleep, 8, 1000).catch(() => ({ frames: [] as Uint8Array[], blank: 0 })) : { frames: [], blank: 0 };
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true });
     await visit(page, url, settle, sleep);
     const phone = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
@@ -737,7 +746,9 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     // isn't rewritten again on score alone (in production that cost $0.50 to $0.80 a site and moved no
     // score): only a measured failure does it. The notes stay, with the fix buttons, for whoever wants them.
     // A Studio site gets the art director's pass instead: one revision from seeing the whole page.
-    if (studio && down.frames.length && env.FORGE_ART_PASS !== "off") {
+    // Once per version: a page already revised (its original is kept at /_before) isn't revised again on a later check.
+    const revisedBefore = studio && !!(await getPage(env, slug, version, BEFORE_PAGE));
+    if (studio && down.frames.length && env.FORGE_ART_PASS !== "off" && !revisedBefore) {
       await artPass(env, deps, { slug, version, kit, demo, shots: shotSet, failed, settle, sleep, url: `${base}${prefix}?r=${version}-art`, prefix }, review);
     }
     const heroFirst = studio && !!(await getPage(env, slug, version, "/_hero"));

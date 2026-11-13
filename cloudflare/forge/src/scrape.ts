@@ -63,6 +63,7 @@ export async function readWebsite(url: string): Promise<SiteFacts | null> {
 
   let logo = "";
   let touchIcon = "";
+  let headerImg = "";
   const takeLogo = (src: string | null) => {
     if (logo || !src || /^data:/.test(src)) return;
     try {
@@ -73,7 +74,9 @@ export async function readWebsite(url: string): Promise<SiteFacts | null> {
     }
   };
   const rewriter = new HTMLRewriter()
-    .on('img[src*="logo"], img[class*="logo"], img[id*="logo"], img[alt*="logo"], img[alt*="Logo"], header img, .logo img, #logo img', { element: (e) => takeLogo(e.getAttribute("src") ?? e.getAttribute("data-src")) })
+    .on('img[src*="logo"], img[class*="logo"], img[id*="logo"], img[alt*="logo"], img[alt*="Logo"], .logo img, #logo img', { element: (e) => takeLogo(e.getAttribute("src") ?? e.getAttribute("data-src")) })
+    // The first picture in the header is only a fallback (it is often a phone, cart or flag icon).
+    .on("header img", { element: (e) => void (headerImg ||= e.getAttribute("src") ?? e.getAttribute("data-src") ?? "") })
     .on('link[rel="apple-touch-icon"], link[rel="apple-touch-icon-precomposed"]', { element: (e) => void (touchIcon ||= e.getAttribute("href") ?? "") })
     .on('meta[name="theme-color"]', { element: (e) => void (facts.themeColor ||= (e.getAttribute("content") ?? "").trim()) })
     .on("title", { element: () => void (inTitle = true), text: (t) => { if (inTitle) facts.title += t.text; if (t.lastInTextNode) inTitle = false; } })
@@ -111,6 +114,7 @@ export async function readWebsite(url: string): Promise<SiteFacts | null> {
     return null;
   }
   facts.business = pickBusiness(ld, tels);
+  if (!logo && headerImg && !/(icon|phone|cart|flag|search|menu|arrow)/i.test(headerImg)) takeLogo(headerImg);
   if (!logo && touchIcon) takeLogo(touchIcon);
   if (logo) facts.logo = logo;
   facts.themeColor = brandHex(facts.themeColor ?? "");

@@ -203,7 +203,7 @@ export function finish(
   }
   const float = opts.floatObject ? `<div class="m-float" aria-hidden="true" data-path="${esc(opts.floatObject.path ?? "arc")}" data-still="${esc(opts.floatObject.still)}"${opts.floatObject.frames.length ? ` data-frames="${esc(opts.floatObject.frames.join("|"))}"` : ""}><canvas></canvas></div>` : "";
   // The site's own photo links, for the guard that fills any empty photo box left on a page.
-  const fill = opts.photos?.length ? `<script>window.__fgFill&&window.__fgFill(${JSON.stringify(opts.photos).replace(/</g, "\\u003c")})</script>` : "";
+  const fill = `<script>window.__fgFill&&window.__fgFill(${JSON.stringify(opts.photos ?? []).replace(/</g, "\\u003c")})</script>`;
   r = r.on("body", { element: (e) => {
       // The flying object's layer goes first, so it is in the page when the motion engine (near the end of it) runs.
       if (float) e.prepend(float, { html: true });

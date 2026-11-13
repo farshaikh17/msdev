@@ -86,7 +86,9 @@ export function asLink(v: string | undefined): string {
   if (/^\/\//.test(t)) return `https:${t}`;
   return /^([a-z0-9-]+\.)+[a-z]{2,}(:\d+)?([/?#].*)?$/i.test(t) && !/\s/.test(t) ? `https://${t}` : t;
 }
-const MAPS = /(^|\.)(google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl\/maps)/i;
+const MAPS = /^((www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl\/|g\.co\/)/i;
+/** Pages that aren't the business's own site: their logo, colour and words would be the platform's. */
+export const SOCIAL = /^https?:\/\/([a-z0-9-]+\.)*(facebook\.com|fb\.com|fb\.me|instagram\.com|tiktok\.com|x\.com|twitter\.com|linkedin\.com|yelp\.com|nextdoor\.com|google\.[a-z.]+|goo\.gl|g\.co)(\/|$)/i;
 const LINK_LABELS: Record<string, string> = { websiteUrl: "Their website", googleUrl: "Google Maps link", logoUrl: "Their logo", heroImageUrl: "Storefront, van or team photo" };
 
 export async function prepareIntake(raw: Record<string, string>): Promise<Intake> {
@@ -94,6 +96,12 @@ export async function prepareIntake(raw: Record<string, string>): Promise<Intake
   for (const k of ["websiteUrl", "googleUrl", "logoUrl", "heroImageUrl"]) if (raw[k] !== undefined) raw[k] = asLink(raw[k]);
   // One box takes either: a link typed where the name goes is the Google Maps link, or their website.
   const typed = asLink(raw.businessName);
+  // A social or Google page in the website box: kept as a note (with the link), never read as their own site.
+  if (raw.websiteUrl && SOCIAL.test(raw.websiteUrl)) {
+    if (MAPS.test(raw.websiteUrl.replace(/^https?:\/\//i, "")) && !raw.googleUrl) raw.googleUrl = raw.websiteUrl;
+    else raw.notes = [raw.notes, `Their social page: ${raw.websiteUrl}`].filter(Boolean).join("\n");
+    raw.websiteUrl = "";
+  }
   if (/^https?:\/\//i.test(typed)) {
     if (MAPS.test(typed.replace(/^https?:\/\//i, ""))) raw = { ...raw, googleUrl: raw.googleUrl || typed, businessName: "" };
     else

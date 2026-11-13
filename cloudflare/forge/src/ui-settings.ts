@@ -141,7 +141,7 @@ ${o.newKey ? `<div class="flash ok" role="status" style="display:grid;gap:8px"><
 <section class="card"><h2>Build a demo</h2>
 <p class="note" style="margin:0">Send the same details as the dashboard form. Only <b>businessName</b> (or a <b>googleUrl</b> to read it from) is required. The demo is created at once with a quick template site, and Claude's full design replaces it in about 7–20 minutes.</p>
 ${code(sample)}
-<p class="note" style="margin:0">Fields: businessName, googleUrl, industry, city, phone, address, hours, websiteUrl, services, serviceAreas, reviews, notes, photoUrls, logoUrl, heroImageUrl, primaryColor (#rrggbb), mode (auto, light or dark), style (standard, or studio for the award-style tier at 3 credits), chatWidget.</p>
+<p class="note" style="margin:0">Fields: businessName, googleUrl, industry, city, phone, address, hours, websiteUrl, services, serviceAreas, reviews, notes, saw (one line of what you saw at the business), photoUrls, logoUrl, heroImageUrl, primaryColor (#rrggbb), mode (auto, light or dark), style (standard, or studio for the award-style tier at 3 credits; a studio site needs websiteUrl, saw, services, reviews or notes, or the request is refused with 422), chatWidget.</p>
 ${code(`201 Created
 { "slug": "acme-plumbing-1a2b3c4d", "status": "building", "site_url": "${o.sitesBase}acme-plumbing-1a2b3c4d", "credits_left": 11 }`)}
 <p class="note" style="margin:0">Errors: 401 bad key · 402 no credits left · 422 a field is wrong · 429 too many requests or builds running at once.</p></section>

@@ -760,9 +760,10 @@ describe("the art director's pass (Studio)", () => {
     expect(vi.mocked(designSitePage).mock.calls.filter((c) => c[3]?.notes)).toHaveLength(1);
     expect((await getPage(h.env, slug, version, "/"))!.body).toContain("FIXED");
     expect((await getPage(h.env, slug, version, "/_before"))!.body).toBe(original);
-    // A second review never overwrites the first original.
+    // A second review never overwrites the first original, and doesn't revise the page again.
     await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => scrollingBrowser(moving([`/${slug}/about`])).browser, critique, artDirect, sleep: async () => undefined });
     expect((await getPage(h.env, slug, version, "/_before"))!.body).toBe(original);
+    expect(artDirect).toHaveBeenCalledTimes(1);
     // It isn't one of the site's pages (it is served at /<slug>/_before, checked on the live site).
     expect(await pagesDone(h.env, slug, version)).not.toContain("/_before");
   });
@@ -787,6 +788,26 @@ describe("the art director's pass (Studio)", () => {
     expect(r.artPass?.why).toContain("original was kept");
     expect(r.fixed).toBeFalsy();
     expect((await getPage(h.env, slug, version, "/"))!.body).toBe(original);
+  });
+
+  it("puts the original back when the revision scrolls sideways on a phone, or can't be checked", async () => {
+    const { slug, version } = await studioLive();
+    const original = (await getPage(h.env, slug, version, "/"))!.body;
+    let launches = 0;
+    const base = { critique: async () => ({ score: 8, verdict: "v", strengths: [], issues: [], costUsd: 0.01 }), artDirect: async () => ({ notes: ["Screen 2: make the gallery a wide strip"], keep: "", costUsd: 0.04 }), sleep: async () => undefined };
+    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { ...base, launch: async () => (++launches === 1 ? scrollingBrowser(moving([`/${slug}/about`])).browser : scrollingBrowser({ ...moving([`/${slug}/about`]), overflow: true }).browser) });
+    expect(r.artPass).toMatchObject({ kept: false });
+    expect(r.artPass?.why).toContain("sideways");
+    expect((await getPage(h.env, slug, version, "/"))!.body).toBe(original);
+
+    // The same site again, as if never revised (no original kept yet).
+    h.db.prepare("DELETE FROM site_pages WHERE slug = ? AND version = ? AND path = '/_before'").run(slug, version);
+    const other = { slug, version, original };
+    launches = 0;
+    const r2 = await reviewSite({ ...h.env, BROWSER: {} } as Env, other.slug, other.version, { ...base, launch: async () => { if (++launches > 1) throw new Error("429 Too many browsers"); return scrollingBrowser(moving([`/${other.slug}/about`])).browser; } });
+    expect(r2.artPass).toMatchObject({ kept: false });
+    expect(r2.artPass?.why).toContain("couldn't be checked");
+    expect((await getPage(h.env, other.slug, other.version, "/"))!.body).toBe(other.original);
   });
 
   it("can be turned off, and a Standard site never gets it", async () => {
@@ -870,5 +891,18 @@ describe("the art director's notes", () => {
       "Screens 3–5: Show one drawing that builds in three steps.",
       "Make the footer quieter and smaller.",
     ]);
+  });
+});
+
+describe("links that aren't the business's own site", () => {
+  it("keeps a Facebook page as a note and never reads it as their website; a Google share link in the name box is a Maps link", async () => {
+    const i = await prepareIntake({ businessName: "Beta Bakery", websiteUrl: "facebook.com/betabakery" });
+    expect(i.websiteUrl).toBe("");
+    expect(i.notes).toContain("Their social page: https://facebook.com/betabakery");
+    expect(hasFact(i)).toBe(true);
+    const g = await prepareIntake({ businessName: "Beta Bakery", websiteUrl: "https://maps.app.goo.gl/abc" }).catch((e: Error) => e);
+    expect(g instanceof Error ? g.message : g.websiteUrl).not.toContain("looks like their website");
+    const k = await prepareIntake({ businessName: "https://g.co/kgs/AbC123" }).catch((e: Error) => e);
+    expect(k instanceof Error ? k.message : "").not.toContain("looks like their website");
   });
 });
