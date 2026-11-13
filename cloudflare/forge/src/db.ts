@@ -9,6 +9,8 @@ import { parseKeywords, parseVideoUrls, type LibraryEntry } from "./hero";
 import { recordBuildCost, refundBuild } from "./tenants";
 
 interface Row {
+  handover?: string | null;
+  expires_at?: string | null;
   lead_status?: string | null;
   lead_at?: string | null;
   outreach?: string | null;
@@ -53,7 +55,70 @@ export type Stored = Demo & {
   /** Where this demo stands as a sales lead, and when that last changed. */
   leadStatus: LeadStatus;
   leadAt: string | null;
+  /** When its link stops working (null: never). A won site never expires. */
+  expiresAt: string | null;
+  /** "They replied": their real photos, logo and details, and the one round of edits. */
+  handover: Handover | null;
 };
+
+/** What the business sent back once they replied, and where putting it into the site has got to. */
+export interface Handover {
+  at: string;
+  status: "working" | "done" | "failed";
+  error: string;
+  /** How many of their photos replaced the preview photos. */
+  photos: number;
+  logo: boolean;
+  /** The details they corrected (field names). */
+  facts: string[];
+  /** Their one round of edits, and the page it is for. */
+  edits: string;
+  editPath: string;
+}
+
+export async function setHandover(env: Env, slug: string, h: Handover): Promise<void> {
+  await env.DB.prepare("UPDATE demos SET handover = ? WHERE slug = ?").bind(JSON.stringify(h), slug).run();
+}
+
+/**
+ * Their own photos in place of the preview photos: own-N.jpg replaces photo-N.jpg everywhere the live
+ * version refers to it (pages and the design's CSS). New names, because images are cached for a year.
+ */
+export async function useOwnPhotos(env: Env, slug: string, version: string, n: number): Promise<void> {
+  for (let k = 1; k <= n; k++) {
+    const from = `_img/${version}/photo-${k}.jpg`;
+    const to = `_img/${version}/own-${k}.jpg`;
+    await env.DB.prepare("UPDATE site_pages SET body = REPLACE(body, ?1, ?2), css = REPLACE(css, ?1, ?2) WHERE slug = ?3 AND version = ?4").bind(from, to, slug, version).run();
+    await env.DB.prepare("UPDATE site_versions SET kit = REPLACE(kit, ?1, ?2) WHERE slug = ?3 AND version = ?4").bind(from, to, slug, version).run();
+  }
+}
+
+/** Add what the business told us to the facts every later page is written from (they outrank the original facts). */
+export async function addToBrief(env: Env, slug: string, version: string, text: string): Promise<void> {
+  await env.DB.prepare("UPDATE site_versions SET kit = json_set(kit, '$.brief', json_extract(kit, '$.brief') || ?) WHERE slug = ? AND version = ?").bind(`\n\n## Sent by the business itself (true; where it differs from anything above, this is right)\n${text}`, slug, version).run();
+}
+
+/** How long a demo link works after it is built, and how much one press adds. */
+export const DEMO_DAYS = 30;
+const days = (n: number, from = Date.now()) => new Date(from + n * 86_400_000).toISOString();
+
+/** Has this demo's link stopped working? (A won site never does; featured examples are checked by the caller.) */
+export const isExpired = (d: Pick<Stored, "expiresAt" | "leadStatus">, now = Date.now()) => !!d.expiresAt && d.leadStatus !== "won" && Date.parse(d.expiresAt) < now;
+
+/** A demo that was just rebuilt works for at least DEMO_DAYS from now. */
+export async function freshenExpiry(env: Env, tenantId: number, slug: string): Promise<void> {
+  const until = days(DEMO_DAYS);
+  await env.DB.prepare("UPDATE demos SET expires_at = ? WHERE slug = ? AND tenant_id = ? AND (expires_at IS NULL OR expires_at < ?)").bind(until, slug, tenantId, until).run();
+}
+
+/** Give a demo another DEMO_DAYS from today (or from its current end, if that is later). */
+export async function extendDemo(env: Env, tenantId: number, slug: string): Promise<string | null> {
+  const row = await env.DB.prepare("SELECT expires_at FROM demos WHERE slug = ? AND tenant_id = ?").bind(slug, tenantId).first<{ expires_at: string | null }>();
+  if (!row) return null;
+  const until = days(DEMO_DAYS, Math.max(Date.now(), Date.parse(row.expires_at ?? "") || 0));
+  await env.DB.prepare("UPDATE demos SET expires_at = ? WHERE slug = ? AND tenant_id = ?").bind(until, slug, tenantId).run();
+  return until;
+}
 
 /** A demo as a sales lead: not sent yet, sent, they replied, won or lost. */
 export const LEAD_STATUSES = ["new", "sent", "replied", "won", "lost"] as const;
@@ -109,6 +174,8 @@ export interface Listed {
   noPhone?: boolean;
   /** Where it stands as a sales lead. */
   leadStatus: LeadStatus;
+  /** When its link stops working (null: never). */
+  expiresAt: string | null;
 }
 
 /** A build that has made no progress this long was stopped by the platform (a queue job runs at most 15 minutes). */
@@ -152,6 +219,8 @@ function toDemo(r: Row): Stored {
     buildCost: costFrom(r.build_usage),
     leadStatus: leadStatusOf(r.lead_status),
     leadAt: r.lead_at ?? null,
+    expiresAt: r.expires_at ?? null,
+    handover: parseJson<Handover>(r.handover),
     buildStatus: stale ? "failed" : r.build_status === "building" || r.build_status === "failed" || r.build_status === "queued" ? r.build_status : "ready",
     outreach: parseJson<Outreach>(r.outreach),
     changeNote: parseJson<ChangeNote>(r.change_note),
@@ -195,7 +264,7 @@ export async function getDemo(env: Env, slug: string, opts: { tenantId?: number;
 
 export async function listDemos(env: Env, tenantId: number): Promise<Listed[]> {
   const { results } = await env.DB.prepare(
-    "SELECT slug, business_name, intake, content, created_at, updated_at, build_status, lead_status, (SELECT v.version FROM site_versions v WHERE v.slug = demos.slug AND v.version = demos.live_version AND v.review LIKE '%shot-desktop.jpg%') AS shot FROM demos WHERE tenant_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 200",
+    "SELECT slug, business_name, intake, content, created_at, updated_at, build_status, lead_status, expires_at, (SELECT v.version FROM site_versions v WHERE v.slug = demos.slug AND v.version = demos.live_version AND v.review LIKE '%shot-desktop.jpg%') AS shot FROM demos WHERE tenant_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 200",
   )
     .bind(tenantId)
     .all<Row & { shot: string | null }>();
@@ -203,20 +272,20 @@ export async function listDemos(env: Env, tenantId: number): Promise<Listed[]> {
     const intake = JSON.parse(r.intake) as { city?: string; phone?: string };
     const content = JSON.parse(r.content) as { industry?: string };
     const stale = r.build_status === "building" && Date.now() - Date.parse(r.updated_at ?? r.created_at) > STALE_MS;
-    return { buildStatus: stale ? "failed" : r.build_status, slug: r.slug, businessName: r.business_name, industry: content.industry ?? "", city: intake.city ?? "", createdAt: r.created_at, leadStatus: leadStatusOf(r.lead_status), ...(r.shot ? { shot: r.shot } : {}), ...(intake.phone ? {} : { noPhone: true }) };
+    return { buildStatus: stale ? "failed" : r.build_status, slug: r.slug, businessName: r.business_name, industry: content.industry ?? "", city: intake.city ?? "", createdAt: r.created_at, leadStatus: leadStatusOf(r.lead_status), expiresAt: r.expires_at ?? null, ...(r.shot ? { shot: r.shot } : {}), ...(intake.phone ? {} : { noPhone: true }) };
   });
 }
 
 /** Create a demo for an account, or update one it already has (a slug that belongs to another account is never touched). */
 export async function saveDemo(env: Env, d: Demo, tenantId: number): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO demos (slug, business_name, intake, content, written_by, status, created_at, updated_at, tenant_id)
-     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)
+    `INSERT INTO demos (slug, business_name, intake, content, written_by, status, created_at, updated_at, tenant_id, expires_at)
+     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
      ON CONFLICT (slug) DO UPDATE SET business_name = excluded.business_name, intake = excluded.intake,
        content = excluded.content, written_by = excluded.written_by, updated_at = excluded.updated_at
        WHERE demos.tenant_id = excluded.tenant_id`,
   )
-    .bind(d.slug, d.intake.businessName, JSON.stringify(d.intake), JSON.stringify(d.content), d.writtenBy, d.createdAt, d.updatedAt, tenantId)
+    .bind(d.slug, d.intake.businessName, JSON.stringify(d.intake), JSON.stringify(d.content), d.writtenBy, d.createdAt, d.updatedAt, tenantId, days(DEMO_DAYS, Date.parse(d.createdAt) || Date.now()))
     .run();
 }
 

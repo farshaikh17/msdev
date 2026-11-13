@@ -1,13 +1,14 @@
 /** The Forge Demo screens: sign-in, set-up, invites, the dashboard and a demo. Plain HTML, no framework. */
 import { esc } from "../../../src/forge/render";
 import type { Intake } from "../../../src/forge/schema";
-import { LEAD_LABELS, LEAD_STATUSES, LOST_REASONS, type ChangeNote, type Lead, type LeadChange, type LeadStatus, type Listed, type Stored, type ViewStat } from "./db";
+import { LEAD_LABELS, LEAD_STATUSES, LOST_REASONS, isExpired, type ChangeNote, type Lead, type LeadChange, type LeadStatus, type Listed, type Stored, type ViewStat } from "./db";
 import type { Review } from "./review";
 import { QA_RULES, type QaResult, type QaRule } from "./qa";
 import { SWATCHES } from "./designer";
 import type { Session } from "./auth";
 import { STUDIO_CREDITS, buildCost, type Usage } from "./tenants";
 import { CONCEPTS } from "./concepts";
+import type { Domain } from "./domains";
 import { HEROES } from "./heroes";
 import type { Idea } from "./brief";
 import { ic } from "./web-ui";
@@ -309,6 +310,59 @@ function leadCard(d: Stored, log: LeadChange[]): string {
 <div><button class="btn" type="submit">Save</button></div>${history}</form>`;
 }
 
+/**
+ * "They replied": their real photos, logo and details, and one round of edits, in one form. Photos go in
+ * at once; the rest is applied in the background and reported here.
+ */
+function handoverCard(d: Stored, pages: { name: string; path: string }[]): string {
+  const h = d.handover;
+  const i = d.intake;
+  const state = !h
+    ? ""
+    : h.status === "working"
+      ? `<div class="status" role="status"><span class="spin"></span><div><b>Their logo, details and edits are going in.</b><br><span class="note">Usually 2–5 minutes. Refresh to see it finish.</span></div></div>`
+      : h.status === "failed"
+        ? `<div class="flash bad" role="alert" style="margin:0"><b>Not everything went in:</b> ${esc(h.error)} Send the form again to retry.</div>`
+        : `<div class="flash" role="status" style="margin:0"><b>Done ${esc(h.at.slice(0, 10))}:</b> ${[h.photos ? `${h.photos} of their photos` : "", h.logo ? "their logo" : "", h.facts.length ? `their ${h.facts.join(", ")}` : "", h.edits ? "their round of edits" : ""].filter(Boolean).join(", ") || "nothing new"} went into the site.</div>`;
+  const used = !!h?.edits;
+  const options = pages.map((p) => `<option value="${esc(p.path)}">${esc(p.name)}</option>`).join("");
+  return `<form method="post" action="/demos/${esc(d.slug)}/handover" enctype="multipart/form-data" class="card" id="handover"><h2>They replied: make it theirs</h2>
+<p class="note" style="margin:0">Put in what they send you: their logo, their photos (the work, the team, the van, the shop) and any details to correct, then their one round of edits. Their photos replace the preview photos everywhere at once; the rest takes a few minutes. No credit is used.</p>${state}
+<div class="grid"><label>Their logo (picture file)<input type="file" name="logo" accept="image/*"></label><label>…or a link to it<input name="logoLink" inputmode="url" placeholder="e.g. ohara-plumbing.com/logo.png"></label>
+<label>Their photos (up to 8; the first becomes the main picture)<input type="file" name="photos" accept="image/*" multiple></label><label>…or links, one per line<textarea name="photoLinks" rows="2" placeholder="Links straight to the pictures"></textarea></label>
+<label>Phone<input name="phone" type="tel" value="${esc(i.phone)}" placeholder="e.g. (308) 555-0142"></label><label>Opening hours<input name="hours" value="${esc(i.hours)}" placeholder="e.g. Mon–Fri 7am–5pm"></label>
+<label class="full">Address<input name="address" value="${esc(i.address)}" placeholder="e.g. 210 W 3rd St, Grand Island, NE"></label>
+<label class="full">Their real reviews (they replace the samples; one per paragraph, optionally ending — Name)<textarea name="reviews" rows="3">${esc(i.reviews)}</textarea></label>
+<label class="full">Their one round of edits${used ? " (used: anything more goes through Request a change)" : ""}<textarea name="edits" rows="3" maxlength="1500" placeholder="Everything they want changed, in their words. e.g. Use our green, drop the emergency section, say we're family-run since 1998"></textarea></label>
+<label>On which page<select name="editPath">${options}</select></label></div>
+<div><button class="btn ember" type="submit" data-busy="Uploading…">Put it into the site</button></div></form>`;
+}
+
+/** A won site on the business's own web address: the address, the one DNS record to add, and whether it's working. */
+function domainCard(d: Stored, dom: Domain | null, target: string, auto: boolean): string {
+  const rec = dom ? (dom.host.split(".").length > 2 ? dom.host.split(".")[0]! : "@") : "www";
+  const status = !dom
+    ? ""
+    : !target
+      ? `<p class="note" style="margin:0"><b>Waiting for Mianro:</b> custom addresses need a one-time setup on Forge before they work. The address is saved and will start working once that's done.</p>`
+      : `<ul class="note" style="margin:0;padding-left:18px"><li>${dom.dnsOk ? "✅" : "⏳"} DNS record ${dom.dnsOk ? "is in place" : "not seen yet"}</li>${auto ? `<li>${dom.ssl === "active" ? "✅" : "⏳"} Secure certificate ${dom.ssl === "active" ? "issued" : `being issued${dom.ssl ? ` (${esc(dom.ssl)})` : ""}`}</li>` : `<li>Mianro adds <b>${esc(dom.host)}</b> under Custom Hostnames in Cloudflare (one minute, once).</li>`}${dom.checkedAt ? `<li>Last checked ${when(dom.checkedAt)}</li>` : ""}</ul>
+<div class="share"><div class="share-row"><div><b>The DNS record to add at their domain company</b><span>Type CNAME · Name ${esc(rec)} · Target ${esc(target)}</span></div><button class="btn ghost" data-copy="${esc(target)}">Copy target</button></div></div>
+${rec === "@" ? `<p class="note" style="margin:0">Most domain companies don't allow a CNAME on the bare address: use <b>www.${esc(dom.host)}</b> instead, and forward the bare address to it.</p>` : ""}`;
+  return `<section class="card" id="domain"><h2>Their own web address</h2>
+<p class="note" style="margin:0">Once they've bought it, the site can live on their own address instead of the Forge link. ${dom ? `It is set to <b><a href="https://${esc(dom.host)}" target="_blank" rel="noreferrer">${esc(dom.host)}</a></b>.` : ""}</p>${status}
+<form method="post" action="/demos/${esc(d.slug)}/domain" class="row" style="gap:10px;align-items:end"><label style="flex:1;min-width:220px">Address<input name="domain" inputmode="url" value="${esc(dom?.host ?? "")}" placeholder="e.g. www.oharaplumbing.com"></label><button class="btn" type="submit">${dom ? "Save" : "Use this address"}</button></form>
+${dom ? `<form method="post" action="/demos/${esc(d.slug)}/domain-check"><button class="btn ghost" type="submit">Check again</button> <span class="note">To stop using it, clear the address and save.</span></form>` : ""}</section>`;
+}
+
+/** How long the link works, with one press to keep it going (a won site never expires). */
+function expiryNote(d: Stored): string {
+  if (d.leadStatus === "won") return `<p class="note" style="margin:0">This link never expires: the site is marked as won.</p>`;
+  if (!d.expiresAt) return "";
+  const left = Math.ceil((Date.parse(d.expiresAt) - Date.now()) / 86_400_000);
+  const said = left <= 0 ? `<b>This link has expired.</b> Visitors see “This preview has ended”.` : `This link works until <b>${esc(d.expiresAt.slice(0, 10))}</b> (${left} day${left === 1 ? "" : "s"} left).`;
+  return `<form method="post" action="/demos/${esc(d.slug)}/extend" class="row" style="gap:10px"><span class="note">${said} Demos expire after 30 days unless they're won.</span><button class="btn ghost" type="submit">${left <= 0 ? "Bring it back for 30 days" : "Extend 30 days"}</button></form>`;
+}
+
 function siteCard(d: Listed, url: string): string {
   const state =
     d.buildStatus === "building"
@@ -317,6 +371,8 @@ function siteCard(d: Listed, url: string): string {
         ? `<span class="tag dim">Waiting its turn</span>`
         : d.buildStatus === "failed"
           ? `<span class="tag bad">Needs attention</span>`
+          : isExpired(d)
+            ? `<span class="tag bad" title="The link no longer works. Open it and extend it to bring it back.">Expired</span>`
           : d.noPhone
             ? `<span class="tag dim" title="Add their phone number before sending it">Ready · add phone</span>`
             : `<span class="tag ok">Ready</span>`;
@@ -370,6 +426,10 @@ export interface DemoExtra {
   idea?: Idea | null;
   /** The changes to its lead status, newest first. */
   leadLog?: LeadChange[];
+  /** The business's own web address, if it has one, and how addresses are set up on this Forge. */
+  domain?: Domain | null;
+  domainTarget?: string;
+  domainAuto?: boolean;
 }
 
 const checkList = (checks: { label: string; ok: boolean; detail?: string }[]) =>
@@ -550,6 +610,9 @@ ${lookStep(d, r, links, owner, extra.qa, extra.idea)}
 ${improve}
 ${sendStep(d, links, extra, improve ? 3 : 2)}
 ${busy ? "" : leadCard(d, extra.leadLog ?? [])}
+${!busy && d.liveVersion && (d.leadStatus === "replied" || d.leadStatus === "won" || d.handover) ? handoverCard(d, pages) : ""}
+${busy ? "" : expiryNote(d)}
+${!busy && d.liveVersion && (d.leadStatus === "won" || extra.domain) ? domainCard(d, extra.domain ?? null, extra.domainTarget ?? "", !!extra.domainAuto) : ""}
 <details class="card"><summary>More tools</summary><div style="display:grid;gap:16px;margin-top:12px">
 ${outreachCard(d, links, extra.qr ?? "", true)}
 ${viewsCard(extra.views)}

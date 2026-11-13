@@ -22,18 +22,37 @@ import { pruneThrottle, pruneVisitors, queuedTenants, reviewsDue } from "./db";
 import { importClip, serveVideo, syncFolder } from "./drive";
 import type { BuildJob, Ctx, Env, MessageBatch, VideoJob } from "./env";
 import { serveDraft, CORS, serveImage, servePitch, serveSite, takeLead, text } from "./serve";
+import { isOwnAddress, slugForHost } from "./domains";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)) || "Something went wrong.";
 
 /** A site image: preview photos, the review's screenshots, the social preview, the old-site captures, and a Studio hero's cut-outs and turning frames. */
-export const IMAGE_PATH = /^\/([a-z0-9-]{3,64})\/_img\/([a-z0-9]{6,40})\/((?:photo-\d{1,2}|reveal-1|ba-[12]-(?:before|after)|og|shot-desktop|shot-phone|old-desktop|old-phone)\.jpg|(?:object|subject|spin-\d{2})\.webp)$/;
+export const IMAGE_PATH = /^\/([a-z0-9-]{3,64})\/_img\/([a-z0-9]{6,40})\/((?:photo-\d{1,2}|own-\d{1,2}|reveal-1|ba-[12]-(?:before|after)|og|shot-desktop|shot-phone|old-desktop|old-phone)\.jpg|(?:object|subject|logo|spin-\d{2})\.webp)$/;
 
 /** /<slug> plus an optional page path such as /services or /services/drain-cleaning. */
 const PAGE_PATH = /^\/([a-z0-9-]{3,64})((?:\/[a-z0-9-]+){1,2})?$/;
 
+/** A won site on its business's own address: /, /<page>, /_img/…, /_lead. */
+async function handleOwnAddress(req: Request, env: Env, ctx: Ctx, url: URL): Promise<Response> {
+  const slug = await slugForHost(env, url.hostname);
+  if (!slug) return text("This address isn't connected to a website yet.", 404);
+  const path = url.pathname.replace(/\/+$/, "") || "/";
+  if (req.method === "POST" && path === "/_lead") return takeLead(req, env, ctx, slug);
+  if (req.method !== "GET" && req.method !== "HEAD") return text("Not found", 404);
+  const img = `/${slug}${path}`.match(IMAGE_PATH);
+  if (img) return serveImage(req, env, ctx, img[1], img[2], img[3]);
+  if (path === "/favicon.ico") return new Response(null, { status: 204, headers: { "cache-control": "public, max-age=86400" } });
+  const page = path === "/" ? "" : path;
+  if (page && !/^(?:\/[a-z0-9-]+){1,2}$/.test(page)) return text("Not found", 404);
+  return serveSite(req, env, ctx, slug, page, "", false);
+}
+
 /** forge-sites: demo websites only, at /<slug>[/<page>]. */
 async function handleSites(req: Request, env: Env, ctx: Ctx): Promise<Response> {
-  const path = new URL(req.url).pathname.replace(/\/+$/, "") || "/";
+  const url = new URL(req.url);
+  // A business's own address (a won site): the site is served at the root, with no /<slug> in front.
+  if (isOwnAddress(env, url.hostname)) return handleOwnAddress(req, env, ctx, url);
+  const path = url.pathname.replace(/\/+$/, "") || "/";
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...CORS, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" } });
   const read = req.method === "GET" || req.method === "HEAD";
   let m = path.match(/^\/([a-z0-9-]{3,64})\/_lead$/);

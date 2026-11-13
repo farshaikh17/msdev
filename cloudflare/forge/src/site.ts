@@ -155,7 +155,8 @@ export function finish(
   const local = (v: string | null) => !!v && v.startsWith("/") && !v.startsWith("//");
   const move = (v: string) => {
     const [, path, rest] = v.match(/^([^?#]*)(.*)$/)!;
-    return `${opts.prefix}${path === "/" ? "" : path}${rest}`;
+    // On a business's own address there is no prefix: home stays "/".
+    return `${opts.prefix}${path === "/" ? (opts.prefix ? "" : "/") : path}${rest}`;
   };
   let r = new HTMLRewriter()
     .on("head", {

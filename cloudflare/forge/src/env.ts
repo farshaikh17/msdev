@@ -16,6 +16,11 @@ export interface Env {
   FORGE_AUTO_FIX?: string;
   /** The Workers AI model for Studio inner pages (default DeepSeek V4.1 Flash), or "claude" for Sonnet. */
   FORGE_INNER_MODEL?: string;
+  /** Custom domains: the address a customer's CNAME record points at (a host in the Cloudflare for SaaS zone). */
+  FORGE_DOMAIN_TARGET?: string;
+  /** Custom domains: the Cloudflare for SaaS zone id and an API token (Custom Hostnames: Edit), so Forge registers addresses itself. */
+  CF_SAAS_ZONE?: string;
+  CF_SAAS_TOKEN?: string;
   /** Overrides the model for the inner pages (default claude-haiku-5-5; the design kit and home page use CLAUDE_MODEL). */
   CLAUDE_PAGE_MODEL?: string;
   /** Overrides the design model's effort: low (default), medium or high. Higher costs more. */
@@ -64,7 +69,9 @@ export type BuildJob =
   /** Add illustrative before/after photos to a live site (the gallery and home page are rewritten around them). */
   | { slug: string; version: string; stage: "pairs" }
   /** A change request on one page of the live site. */
-  | { slug: string; version: string; stage: "change"; path: string; instruction: string };
+  | { slug: string; version: string; stage: "change"; path: string; instruction: string }
+  /** "They replied": put their logo and details into the site and apply their one round of edits. */
+  | { slug: string; version: string; stage: "handover" };
 /** Copy one clip from the team's Google Drive folder into the video library. */
 export interface VideoJob { stage: "video"; driveId: string }
 export interface Queue<T> { send(body: T, opts?: { delaySeconds?: number }): Promise<void> }

@@ -16,6 +16,12 @@ import {
   getQa,
   getReview,
   getSetting,
+  addToBrief,
+  extendDemo,
+  saveImage,
+  setHandover,
+  updateIntake,
+  useOwnPhotos,
   leadHistory,
   leadStatusOf,
   setLeadStatus,
@@ -38,6 +44,8 @@ import {
 import { Invalid, NoCredits, asLink, checkWidget, createDemo, noCreditsText, rawFields, redesignDemo, startMessage } from "./demos";
 import { pagesOf, sitemapFor } from "./designer";
 import { DEFAULT_FOLDER, FOLDER_KEY, folderId, syncFolder } from "./drive";
+import { fitImage } from "./media";
+import { checkDomain, domainForSlug, hostOf, removeDomain, setDomain } from "./domains";
 import type { Ctx, Env } from "./env";
 import { ghlLink, ghlSnippet, sitesBase } from "./ghl";
 import { parseKeywords, parseVideoUrls } from "./hero";
@@ -269,7 +277,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     }
   }
 
-  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/fix|\/replace|\/review|\/pairs|\/lead)?$/);
+  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/fix|\/replace|\/review|\/pairs|\/lead|\/extend|\/handover|\/domain|\/domain-check)?$/);
   if (m) {
     const [, slug, action] = m;
     // Always scoped to this account: another account's demo is simply "not found".
@@ -287,7 +295,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
       ]);
       const pages = liveKit ? pagesOf(liveKit).map((p) => ({ name: p.name, path: p.path, url: `${site(slug)}${p.path === "/" ? "" : p.path}` })) : [];
       const total = (buildKit ? pagesOf(buildKit) : sitemapFor(demo.intake)).length;
-      const [review, views, qa, leadLog] = await Promise.all([demo.liveVersion ? getReview(env, slug, demo.liveVersion) : null, viewStats(env, { slugs: [slug] }), demo.liveVersion ? getQa(env, slug, demo.liveVersion) : null, leadHistory(env, s.tenant.id, slug)]);
+      const [review, views, qa, leadLog, domain] = await Promise.all([demo.liveVersion ? getReview(env, slug, demo.liveVersion) : null, viewStats(env, { slugs: [slug] }), demo.liveVersion ? getQa(env, slug, demo.liveVersion) : null, leadHistory(env, s.tenant.id, slug), domainForSlug(env, slug)]);
       return demoPage(s, demo, { site: site(slug), ghl: ghlLink(s.tenant.ghlPageUrl, slug), pages }, { done, total }, leads, q("ok"), q("error"), {
         review,
         qa,
@@ -296,7 +304,94 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
         qr: qrSvg(site(slug)),
         idea: liveKit?.idea ?? null,
         leadLog,
+        domain,
+        domainTarget: env.FORGE_DOMAIN_TARGET ?? "",
+        domainAuto: !!(env.CF_SAAS_ZONE && env.CF_SAAS_TOKEN),
       });
+    }
+    if (action === "/domain" && post) {
+      const raw = String((await req.formData()).get("domain") ?? "");
+      if (!raw.trim()) {
+        await removeDomain(env, slug);
+        return redirect(withMsg(`/demos/${slug}`, "ok", "The site is no longer on its own address."));
+      }
+      if (demo.leadStatus !== "won") return redirect(withMsg(`/demos/${slug}`, "error", "Mark the site as won first: their own address is for sites they've bought."));
+      const host = hostOf(raw);
+      if (!host) return redirect(withMsg(`/demos/${slug}`, "error", "That isn't a web address we can use. Type it like www.oharaplumbing.com."));
+      const problem = await setDomain(env, s.tenant.id, slug, host);
+      if (problem.startsWith("That address")) return redirect(withMsg(`/demos/${slug}`, "error", problem));
+      await checkDomain(env, slug);
+      return redirect(withMsg(`/demos/${slug}`, problem ? "error" : "ok", problem || `Saved ${host}. Now the DNS record below goes in at their domain company.`));
+    }
+    if (action === "/domain-check" && post) {
+      const d = await checkDomain(env, slug);
+      const live = d && d.dnsOk && (!d.cfId || d.ssl === "active");
+      return redirect(withMsg(`/demos/${slug}`, live ? "ok" : "error", !d ? "No address is set for this site." : live ? `${d.host} is pointing at the site.` : d.dnsOk ? "The DNS record is in place; the certificate is still being issued (usually minutes, up to a day)." : "The DNS record isn't there yet (changes can take up to a few hours to show)."));
+    }
+    if (action === "/handover" && post) {
+      if (!demo.liveVersion) return redirect(withMsg(`/demos/${slug}`, "error", "Wait for the design to finish first."));
+      if (demo.handover?.status === "working" && Date.now() - Date.parse(demo.handover.at) < 15 * 60_000)
+        return redirect(withMsg(`/demos/${slug}`, "error", "Their photos and details are still going in. Give it a few minutes."));
+      const f = await req.formData();
+      const text = (k: string, max = 600) => String(f.get(k) ?? "").trim().slice(0, max);
+      const problems: string[] = [];
+      // Their pictures: files first, then links (each at most 10 MB, and only real images).
+      const fetchImage = async (url: string): Promise<Uint8Array | null> => {
+        const link = asLink(url);
+        if (!/^https:\/\//i.test(link)) return null;
+        try {
+          const r = await fetch(link, { redirect: "follow", signal: AbortSignal.timeout(15_000) });
+          if (!r.ok || !/^image\//i.test(r.headers.get("content-type") ?? "") || Number(r.headers.get("content-length") ?? 0) > 10_000_000) return null;
+          const b = new Uint8Array(await r.arrayBuffer());
+          return b.length <= 10_000_000 ? b : null;
+        } catch {
+          return null;
+        }
+      };
+      const fileBytes = async (v: FormDataEntryValue): Promise<Uint8Array | null> =>
+        typeof v !== "string" && v.size > 0 && v.size <= 10_000_000 && /^image\//i.test(v.type) ? new Uint8Array(await v.arrayBuffer()) : null;
+      const photoSources: (Uint8Array | null)[] = [];
+      for (const v of f.getAll("photos")) if (photoSources.length < 8) photoSources.push(await fileBytes(v));
+      for (const l of text("photoLinks", 4000).split(/\s+/).filter(Boolean)) if (photoSources.length < 8) photoSources.push(await fetchImage(l));
+      const photos: Uint8Array[] = [];
+      for (const b of photoSources) {
+        const fit = b ? await fitImage(env, b, 1600) : null;
+        if (fit) photos.push(fit);
+        else problems.push("a photo couldn't be read");
+      }
+      const logoFile = f.get("logo");
+      const logoRaw = (logoFile ? await fileBytes(logoFile) : null) ?? (text("logoLink") ? await fetchImage(text("logoLink")) : null);
+      const logo = logoRaw ? await fitImage(env, logoRaw, 600, "webp") : null;
+      if ((logoFile && typeof logoFile !== "string" && logoFile.size) || text("logoLink")) if (!logo) problems.push("the logo couldn't be read");
+      // Save what came, then swap their photos in at once (no AI needed for that).
+      for (let k = 0; k < photos.length; k++) await saveImage(env, slug, demo.liveVersion, `own-${k + 1}.jpg`, "The business's own photo", photos[k]!);
+      if (photos.length) await useOwnPhotos(env, slug, demo.liveVersion, photos.length);
+      if (logo) await saveImage(env, slug, demo.liveVersion, "logo.webp", "The business's logo", logo);
+      // Their corrected details.
+      const intake = { ...demo.intake };
+      const facts: ("phone" | "address" | "hours" | "reviews")[] = [];
+      for (const k of ["phone", "address", "hours", "reviews"] as const) {
+        const v = text(k, k === "reviews" ? 4000 : 300);
+        if (v && v !== intake[k]) {
+          intake[k] = v;
+          facts.push(k);
+        }
+      }
+      if (facts.length) await updateIntake(env, slug, intake);
+      if (facts.length) await addToBrief(env, slug, demo.liveVersion, facts.map((k) => `${{ phone: "Phone", address: "Address", hours: "Opening hours", reviews: "Real reviews" }[k]}: ${intake[k]}`).join("\n"));
+      const edits = text("edits", 1500);
+      const editPath = text("editPath", 200) || "/";
+      const needsAi = !!(logo || facts.length || edits);
+      if (needsAi && !aiOn) return redirect(withMsg(`/demos/${slug}`, "error", "Their photos are in, but the logo, details and edits need Claude, which is switched off."));
+      if (!photos.length && !needsAi) return redirect(withMsg(`/demos/${slug}`, "error", problems.length ? `Nothing went in: ${problems.join("; ")}.` : "Add their photos, logo, details or what they want changed."));
+      await setHandover(env, slug, { at: new Date().toISOString(), status: needsAi ? "working" : "done", error: "", photos: photos.length, logo: !!logo, facts, edits, editPath });
+      if (needsAi) await env.BUILDS.send({ slug, version: demo.liveVersion, stage: "handover" });
+      const said = [photos.length ? `${photos.length === 1 ? "their photo is" : `${photos.length} of their photos are`} on the site now` : "", needsAi ? "their logo, details and edits are going in (usually 2–5 minutes)" : "", problems.length ? `not used: ${[...new Set(problems)].join("; ")}` : ""].filter(Boolean).join("; ");
+      return redirect(withMsg(`/demos/${slug}`, "ok", `${said.charAt(0).toUpperCase()}${said.slice(1)}.`));
+    }
+    if (action === "/extend" && post) {
+      const until = await extendDemo(env, s.tenant.id, slug);
+      return redirect(withMsg(`/demos/${slug}`, "ok", until ? `The link now works until ${until.slice(0, 10)}.` : "That demo doesn't exist."));
     }
     if (action === "/lead" && post) {
       const f = await req.formData();
@@ -304,7 +399,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
       await setLeadStatus(env, s.tenant.id, slug, s.user.id, status, String(f.get("reason") ?? ""), String(f.get("note") ?? ""));
       const fresh = await getDemo(env, slug, { tenantId: s.tenant.id });
       ctx.waitUntil(deliver(env, s.tenant, "demo.lead_status", fresh).catch(() => ""));
-      const said = { new: "Marked as not sent yet.", sent: "Marked as sent.", replied: "Marked as replied.", won: "Marked as won.", lost: "Marked as lost. The reason is kept with the site." }[status];
+      const said = { new: "Marked as not sent yet.", sent: "Marked as sent.", replied: "Marked as replied. Next: put their real photos, logo and details in, below.", won: "Marked as won.", lost: "Marked as lost. The reason is kept with the site." }[status];
       return redirect(withMsg(`/demos/${slug}`, "ok", said));
     }
     if ((action === "/rewrite" || action === "/rebuild") && post) {
@@ -380,6 +475,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     }
     if (action === "/archive" && post) {
       await archiveDemo(env, slug, s.tenant.id);
+      await removeDomain(env, slug);
       return redirect(withMsg("/", "ok", `Archived ${demo.intake.businessName}. Its links stop working within 30 seconds.`));
     }
   }

@@ -155,6 +155,23 @@ interface MediaBinding {
 const images = (env: Env) => (env as unknown as { IMAGES?: ImagesBinding }).IMAGES;
 const media = (env: Env) => (env as unknown as { MEDIA?: MediaBinding }).MEDIA;
 
+/**
+ * A picture someone uploaded, made fit for the site: at most `width` wide, as JPEG (or WebP for a logo,
+ * which keeps its transparency). Without the Images binding, a JPEG under 2 MB is kept as it is.
+ */
+export async function fitImage(env: Env, bytes: Uint8Array, width: number, as: "jpeg" | "webp" = "jpeg"): Promise<Uint8Array | null> {
+  const img = images(env);
+  if (!img) return as === "jpeg" && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes.length < 2_000_000 ? bytes : null;
+  try {
+    const out = await img.input(new Blob([new Uint8Array(bytes)]).stream()).transform({ width, fit: "scale-down" }).output({ format: as === "webp" ? "image/webp" : "image/jpeg", quality: 82 });
+    const b = new Uint8Array(await new Response(out.image()).arrayBuffer());
+    return b.length > 200 ? b : null;
+  } catch (e) {
+    console.log("image not usable", e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+
 /** The picture's subject on a transparent background (WebP), or null. */
 export async function cutOut(env: Env, bytes: Uint8Array, width?: number): Promise<Uint8Array | null> {
   const img = images(env);

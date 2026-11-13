@@ -185,6 +185,16 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
     await op.goto(`${BASE}/?lead=lost`); ok((await op.content()).includes(`/demos/${slug}`), "filter lost the site");
     await op.goto(`${BASE}/?lead=won`); ok(!(await op.content()).includes(`href="/demos/${slug}"`), "filter shows the wrong site");
   });
+  await step("a won site gets the handover and its own address; the expiry note shows", async () => {
+    await op.goto(`${BASE}/demos/${slug}`); const before = await op.content(); ok(before.includes("This link works until") || before.includes("never expires"), "expiry note missing");
+    await op.click("#lead label.choice:has(input[value=won])"); await op.click("#lead button[type=submit]");
+    const t = await op.content(); ok(t.includes("never expires"), "won site should never expire");
+    const ai = t.includes("Designed by Claude");
+    if (ai) { ok(await op.isVisible("#handover"), "handover card missing"); ok(await op.isVisible("#domain"), "domain card missing");
+      await op.fill("#domain input[name=domain]", "www.dummy-plumbing.test"); await op.click("#domain button[type=submit]");
+      ok((await op.content()).includes("www.dummy-plumbing.test"), "address not saved"); await op.locator("#domain").screenshot({ path: SHOTS + "/qa-app-domain.png" }); await op.locator("#handover").screenshot({ path: SHOTS + "/qa-app-handover.png" }); }
+    else console.log("      (template site: no handover or address, as designed)");
+  });
   await step("a real visitor is counted; a headless bot is not", async () => {
     const c = await browser.newContext({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", viewport: { width: 390, height: 844 } });
     const v = await c.newPage(); await v.goto(`${BASE}/s/${slug}`); await v.waitForTimeout(800); await c.close();

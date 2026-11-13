@@ -98,6 +98,7 @@ async function demoJson(env: Env, d: Stored, siteUrl: string) {
     status: d.buildStatus === "building" ? "building" : d.buildStatus === "failed" ? "failed" : d.liveVersion ? "ready" : "template",
     site_url: siteUrl,
     lead_status: d.leadStatus,
+    expires_at: d.leadStatus === "won" ? null : d.expiresAt,
     pages: kit ? pagesOf(kit).map((p) => ({ name: p.name, url: `${siteUrl}${p.path === "/" ? "" : p.path}` })) : [],
     ...(d.buildStatus === "failed" ? { error: d.buildError } : {}),
     created_at: d.createdAt,

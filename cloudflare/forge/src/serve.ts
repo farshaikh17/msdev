@@ -4,7 +4,7 @@
  * credit, chat widget, hero videos) are applied as each page is served.
  */
 import { BEFORE_PAGE } from "./review";
-import { renderPage, renderSite } from "../../../src/forge/render";
+import { esc, renderPage, renderSite } from "../../../src/forge/render";
 import {
   countLeads,
   countView,
@@ -13,7 +13,9 @@ import {
   getImage,
   getKit,
   getPage,
+  getSetting,
   imageNames,
+  isExpired,
   listLibrary,
   recordAttempt,
   saveLead,
@@ -58,11 +60,43 @@ export async function fromCache(cache: Cache, req: Request, ms = 1500): Promise<
 }
 
 /** A demo that can be shown to the public: not archived, and its account is active. */
-async function publicDemo(env: Env, slug: string) {
+/**
+ * A demo anyone may see: its account is active and its link hasn't expired (a featured example never
+ * expires). With allowExpired, an expired demo comes back marked, so its page can say so.
+ */
+async function publicDemo(env: Env, slug: string, allowExpired = false) {
   const demo = await getDemo(env, slug);
   if (!demo) return null;
   const tenant = await getTenant(env, demo.tenantId);
-  return tenant && tenant.status === "active" ? { demo, tenant } : null;
+  if (!tenant || tenant.status !== "active") return null;
+  // Featured on the public Examples page: never expires (same list as web.ts's getShowcaseSlugs).
+  const expired = isExpired(demo) && !((await getSetting(env, "web_showcase")) || "").split(/\s+/).includes(slug);
+  if (expired && !allowExpired) return null;
+  return { demo, tenant, expired };
+}
+
+/**
+ * The business's own photos (own-N.jpg, sent when they replied) in place of the preview photos they
+ * replace. The cut-out made from the first preview photo goes too once that photo is theirs.
+ */
+export function ownFirst(names: string[]): string[] {
+  const own = names.filter((n) => /^own-\d+\.jpg$/.test(n));
+  if (!own.length) return names;
+  const out = names.map((n) => {
+    const m = n.match(/^photo-(\d+)\.jpg$/);
+    return m && own.includes(`own-${m[1]}.jpg`) ? `own-${m[1]}.jpg` : n;
+  });
+  const kept = own.includes("own-1.jpg") ? out.filter((n) => n !== "subject.webp") : out;
+  return [...new Set([...kept, ...own])];
+}
+
+/** What a visitor sees once a demo link has expired. */
+function expiredPage(businessName: string): Response {
+  const b = esc(businessName);
+  return new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>This preview has ended</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.6 system-ui,sans-serif;background:#f6f4ef;color:#222}main{max-width:34rem;padding:32px;text-align:center}h1{font-size:1.6rem;margin:0 0 8px}</style></head><body><main><h1>This preview has ended</h1><p>The website preview made for ${b} was only kept for a while. Ask whoever sent you the link for a fresh one.</p></main></body></html>`,
+    { status: 410, headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "public, max-age=60" } },
+  );
 }
 
 /** A demo website page. `prefix` is the demo's address on this origin ("/<slug>" or "/s/<slug>"); `sub` the page path ("" for home). */
@@ -73,8 +107,9 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
     trackView(req, env, ctx, slug);
     return hit;
   }
-  const found = await publicDemo(env, slug);
+  const found = await publicDemo(env, slug, true);
   if (!found) return text("This demo isn't available.", 404);
+  if (found.expired) return expiredPage(found.demo.intake.businessName);
   const { demo, tenant } = found;
   trackView(req, env, ctx, slug);
   const pageUrl = new URL(req.url);
@@ -93,15 +128,15 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
     const path = before ? "/" : sub || "/";
     const kit = await getKit(env, slug, demo.liveVersion);
     if (!kit) return text("This page isn't available.", 404);
-    if (!pagesOf(kit).some((p) => p.path === path)) return Response.redirect(new URL(prefix, req.url).toString(), 302);
+    if (!pagesOf(kit).some((p) => p.path === path)) return Response.redirect(new URL(prefix || "/", req.url).toString(), 302);
     const page = await getPage(env, slug, demo.liveVersion, before ? BEFORE_PAGE : path);
-    if (!page && before) return Response.redirect(new URL(prefix, req.url).toString(), 302);
+    if (!page && before) return Response.redirect(new URL(prefix || "/", req.url).toString(), 302);
     if (!page) return text("This page isn't available.", 404);
     html = assemble(kit, page, slug, creditFor(tenant));
     accent = kit.accent || demo.intake.primaryColor;
     current = path;
-    const names = await imageNames(env, slug, demo.liveVersion);
-    photos = names.filter((n) => /^photo-\d+\.jpg$/.test(n)).map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`);
+    const names = ownFirst(await imageNames(env, slug, demo.liveVersion));
+    photos = names.filter((n) => /^(photo|own)-\d+\.jpg$/.test(n)).map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`);
     ogImage = names.includes("og.jpg") ? "og.jpg" : names.includes("photo-1.jpg") ? "photo-1.jpg" : null;
     if (ogImage) ogImage = new URL(`${prefix}/_img/${demo.liveVersion}/${ogImage}`, req.url).toString();
     ogTitle = page.title;
@@ -112,7 +147,7 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
     }
   } else {
     // A single-page design (or the template while the first design is built).
-    if (sub) return Response.redirect(new URL(prefix, req.url).toString(), 302);
+    if (sub) return Response.redirect(new URL(prefix || "/", req.url).toString(), 302);
     html = templateCredit(demo.html ?? renderPage(demo), tenant);
     accent = demo.intake.primaryColor || demo.content.theme.primary;
   }
@@ -144,7 +179,7 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
  * rest: one picture (or its spotlight twin), several scenes, or a second scene to dive into.
  */
 export function heroFor(kit: Kit, library: LibraryEntry[], intake: Stored["intake"], slug: string, version: string, names: string[], base: string, clipBase: string): HeroFill {
-  const photos = names.filter((n) => /^photo-\d+\.jpg$/.test(n)).map((n) => base + n);
+  const photos = names.filter((n) => /^(photo|own)-\d+\.jpg$/.test(n)).map((n) => base + n);
   const services = pagesOf(kit).map((p) => p.name).join(" ");
   if (kit.style !== "studio") return { motion: heroMotion(matchVideo(library, intake, slug, services), photos.slice(0, 3)) };
   const sig = heroById(kit.hero);

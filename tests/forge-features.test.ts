@@ -955,3 +955,66 @@ describe("revisions send only their edits", () => {
     expect(() => applyEdits(page, [])).toThrow("no edits");
   });
 });
+
+import { ownFirst } from "../cloudflare/forge/src/serve";
+describe("they replied: make it theirs", () => {
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...Array.from({ length: 400 }, (_, k) => k % 251)]);
+  const send = (cookie: string, slug: string, fields: Record<string, string | File | File[]>) => {
+    const fd = new FormData();
+    for (const [k, v] of Object.entries(fields)) for (const x of Array.isArray(v) ? v : [v]) fd.append(k, x);
+    return worker.fetch(new Request(`https://app.test/demos/${slug}/handover`, { method: "POST", body: fd, headers: { cookie, "cf-connecting-ip": "203.0.113.5" } }), h.env, { waitUntil: () => undefined } as never);
+  };
+
+  it("swaps their photos in at once, then puts their details and edits in, and the site uses their photos", async () => {
+    const { b, slug, demo } = await liveDemo();
+    const version = demo.liveVersion!;
+    h.db.prepare("UPDATE site_pages SET body = REPLACE(body, '</main>', ?) WHERE slug = ? AND path IN ('/', '/about')").run(`<img src="/${slug}/_img/${version}/photo-1.jpg" alt=""></main>`, slug);
+    h.db.prepare("INSERT OR REPLACE INTO site_images (slug, version, name, description, data) VALUES (?, ?, 'photo-1.jpg', 'preview', x'ffd8')").run(slug, version);
+    await call(h, `/demos/${slug}/lead`, { cookie: b.cookie, form: { status: "replied" } });
+    expect(await html(await call(h, `/demos/${slug}`, { cookie: b.cookie }))).toContain("They replied: make it theirs");
+    vi.mocked(fixChrome).mockResolvedValue({ header: '<header><a href="tel:+13085550142">Call</a></header>', footer: '<footer><a href="/privacy">Privacy Policy</a><a href="/terms">Terms</a><!--mianro-credit--></footer>', usage: { cost_usd: 0.02 } });
+    const r = await send(b.cookie, slug, { photos: [new File([jpeg], "van.jpg", { type: "image/jpeg" }), new File([new Uint8Array([1, 2, 3])], "not.txt", { type: "text/plain" })], phone: "(308) 555-0142", reviews: "Fixed our heater in an hour. — Dana", edits: "Say we're family-run", editPath: "/about" });
+    const said = loc(r);
+    expect(said).toContain("Their photo is on the site now");
+    expect(said).toContain("a photo couldn't be read");
+    // Their photo is saved under a new name and the pages point at it.
+    expect(h.db.prepare("SELECT count(*) n FROM site_images WHERE slug = ? AND name = 'own-1.jpg'").get(slug)).toEqual({ n: 1 });
+    expect((await getPage(h.env, slug, version, "/"))!.body).toContain(`_img/${version}/own-1.jpg`);
+    expect((await getPage(h.env, slug, version, "/"))!.body).not.toContain("photo-1.jpg");
+    // Their details are kept and outrank the original facts.
+    const d = (await getDemo(h.env, slug))!;
+    expect(d.intake.phone).toBe("(308) 555-0142");
+    expect(d.handover).toMatchObject({ status: "working", photos: 1, logo: false, facts: ["phone", "reviews"], edits: "Say we're family-run", editPath: "/about" });
+    expect((await getKit(h.env, slug, version))!.brief).toContain("Sent by the business itself");
+    // The background job: header and footer, the pages that show details, their edits, then QA.
+    await drain(h);
+    expect(vi.mocked(fixChrome).mock.calls[0]![2]).toContain("(308) 555-0142");
+    const asks = vi.mocked(designSitePage).mock.calls.filter((c) => c[3]?.instruction).map((c) => [c[2].path, c[3]!.instruction!]);
+    expect(asks.find(([p]) => p === "/about")![1]).toContain("What the business asked to change: Say we're family-run");
+    expect(asks.find(([p]) => p === "/")![1]).toContain("(308) 555-0142");
+    expect((await getDemo(h.env, slug))!.handover).toMatchObject({ status: "done" });
+    expect(await html(await call(h, `/demos/${slug}`, { cookie: b.cookie }))).toContain("went into the site");
+  });
+
+  it("refuses an empty form, and a second one while the first is going in", async () => {
+    const { b, slug } = await liveDemo();
+    expect(loc(await send(b.cookie, slug, {}))).toContain("Add their photos, logo, details or what they want changed");
+    await send(b.cookie, slug, { edits: "Bigger logo" });
+    expect(loc(await send(b.cookie, slug, { edits: "Again" }))).toContain("still going in");
+  });
+
+  it("serves their photos in place of the previews, and drops the cut-out of the replaced first photo", () => {
+    expect(ownFirst(["photo-1.jpg", "photo-2.jpg", "subject.webp", "og.jpg"])).toEqual(["photo-1.jpg", "photo-2.jpg", "subject.webp", "og.jpg"]);
+    expect(ownFirst(["photo-1.jpg", "photo-2.jpg", "subject.webp", "own-1.jpg"])).toEqual(["own-1.jpg", "photo-2.jpg"]);
+    expect(ownFirst(["photo-1.jpg", "photo-2.jpg", "subject.webp", "own-2.jpg", "own-3.jpg"])).toEqual(["photo-1.jpg", "own-2.jpg", "subject.webp", "own-3.jpg"]);
+  });
+});
+
+import { IMAGE_PATH } from "../cloudflare/forge/src/index";
+describe("their pictures are served", () => {
+  it("serves their own photos and logo", () => {
+    expect(IMAGE_PATH.test("/bravo-1234/_img/mwabc123/own-3.jpg")).toBe(true);
+    expect(IMAGE_PATH.test("/bravo-1234/_img/mwabc123/logo.webp")).toBe(true);
+    expect(IMAGE_PATH.test("/bravo-1234/_img/mwabc123/secret.jpg")).toBe(false);
+  });
+});

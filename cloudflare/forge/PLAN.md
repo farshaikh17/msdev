@@ -105,6 +105,8 @@ Small slices. Each is one session for a cheaper model, and nothing starts until 
 - Kept on Opus: the design system and the first screen. Tested on DeepSeek, the design system invented a phone number for a business with none, so identity stays with Opus.
 - Estimated now: about $2.20 a Studio site (design system ~$1.16, first screen ~$0.35, art pass ~$0.45, the rest ~$0.25). To be confirmed on the next build.
 
+**Selling tools (13 Nov 2026), live.** Each site carries its lead status (not sent yet, sent, replied, won, lost, with the reason and their words, every change kept), counted and filtered on the dashboard, through the API and a `demo.lead_status` webhook. Demo links expire 30 days after they are built (one press extends; a new design starts the 30 days again; won sites and featured examples never expire; visitors see "This preview has ended"). "They replied: make it theirs": their photos (uploads or links) replace the preview photos at once; their logo, details and real reviews go in, then their one round of edits, then the QA pass, no credit used. Won sites can move to their own address: the app side is done; the one-time Cloudflare for SaaS setup is in `DOMAINS.md`.
+
 **Gate A: start using it on real prospects.** Those five pilot-trade builds: no failed measured check; every site flagged correctly for missing phone; you say they are different from each other and good. Total to here: 8 real builds, about $28.
 
 **Later, each only if real use shows that named problem:**

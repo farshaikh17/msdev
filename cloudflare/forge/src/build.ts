@@ -15,6 +15,7 @@ import {
   recentLooks,
   listLibrary,
   saveChrome,
+  setHandover,
   saveQa,
   setTrade,
   PAIRS_NOTE,
@@ -217,6 +218,10 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
   }
   if (job.stage === "change") {
     if (demo && demo.liveVersion === job.version) await applyChange(env, job.slug, job.version, job.path, job.instruction, attempts);
+    return "done";
+  }
+  if (job.stage === "handover") {
+    if (demo && demo.liveVersion === job.version) await applyHandover(env, job.slug, job.version, attempts);
     return "done";
   }
   // Ignore jobs from a build that has since been replaced, finished or failed.
@@ -435,6 +440,65 @@ async function applyChange(env: Env, slug: string, version: string, path: string
   } catch (e) {
     if (e instanceof TryLater && attempts < BUSY_TRIES) throw e;
     await note("failed", errText(e));
+  }
+}
+
+/**
+ * "They replied": what the business sent goes into the live site. Their photos were already swapped in
+ * when the form was sent; here their logo and corrected details go into the header and footer, the
+ * details and real reviews into the pages that show them, then their one round of edits, then the QA
+ * pass (which adds tap-to-call links once there is a phone). Recorded as a change, no credit taken.
+ */
+async function applyHandover(env: Env, slug: string, version: string, attempts: number): Promise<void> {
+  const demo = await getDemo(env, slug);
+  const h = demo?.handover;
+  if (!demo || !h || h.status !== "working") return;
+  let usd = 0;
+  let calls = 0;
+  const spent = (u: unknown) => ((usd += Number((u as { cost_usd?: number }).cost_usd) || 0), calls++);
+  try {
+    let kit = await getKit(env, slug, version);
+    if (!kit) throw new Error("The site isn't live.");
+    const i = demo.intake;
+    const base = `${env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : ""}/${slug}/_img/${version}/`;
+    const details = [i.phone && `Phone: ${i.phone}`, i.address && `Address: ${i.address}`, i.hours && `Opening hours: ${i.hours}`].filter(Boolean).join("\n");
+    // The header and footer: their logo, and the details that belong there.
+    const chrome = [
+      h.logo ? `Show the business's own logo (${base}logo.webp) in the header in place of the name set in type, about 36–48px tall, with alt text "${i.businessName}", linking home; use it in the footer too where the name stands. Never stretch it.` : "",
+      h.facts.some((f) => ["phone", "address", "hours"].includes(f)) && details ? `The business's details are now:\n${details}\nShow the phone as a tap-to-call link (tel:) in the header and the footer, and the address and hours in the footer. Replace any old or placeholder details.` : "",
+    ].filter(Boolean);
+    if (chrome.length) {
+      const fixed = await fixChrome(env, kit, chrome.join("\n\n"));
+      await saveChrome(env, slug, version, fixed.header, fixed.footer);
+      kit = { ...kit, header: fixed.header, footer: fixed.footer };
+      spent(fixed.usage);
+    }
+    // The pages: corrected details where they are shown, their real reviews in place of the samples, then their edits.
+    const work = new Map<string, string[]>();
+    const add = (path: string, what: string) => work.set(path, [...(work.get(path) ?? []), what]);
+    for (const spec of pagesOf(kit)) {
+      if (spec.kind !== "ai") continue;
+      const page = await getPage(env, slug, version, spec.path);
+      if (!page) continue;
+      if (details && h.facts.some((f) => ["phone", "address", "hours"].includes(f)) && (spec.path === "/contact" || spec.path === "/" || /tel:|opening hours|\bhours\b/i.test(page.body))) add(spec.path, `The business's details are now:\n${details}\nUse exactly these wherever the page shows contact details or hours (a phone as a tap-to-call link), replacing anything older or made up.`);
+      if (h.facts.includes("reviews") && i.reviews && /sample review/i.test(page.body)) add(spec.path, `Replace the sample reviews with these real ones, word for word, and remove the note saying they are samples:\n${i.reviews}`);
+    }
+    if (h.edits) add(h.editPath || "/", `What the business asked to change: ${h.edits}`);
+    for (const [path, asks] of work) {
+      const spec = pagesOf(kit).find((p) => p.path === path);
+      const current = await getPage(env, slug, version, path);
+      if (!spec || !current) continue;
+      const { page, usage } = await designSitePage(env, kit, spec, { instruction: asks.join("\n\n"), current });
+      await savePage(env, slug, version, path, page, usage);
+      spent(usage);
+    }
+    const qa = await qaPass(env, slug, version).catch(() => null);
+    usd += qa?.costUsd ?? 0;
+    await recordBuildCost(env, demo.tenantId, slug, `${version}:handover:${Date.now()}`, usd, calls, "change");
+    await setHandover(env, slug, { ...h, status: "done", error: "" });
+  } catch (e) {
+    if (e instanceof TryLater && attempts < BUSY_TRIES) throw e;
+    await setHandover(env, slug, { ...h, status: "failed", error: errText(e).slice(0, 200) });
   }
 }
 

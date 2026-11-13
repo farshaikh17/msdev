@@ -5,7 +5,7 @@
 import { draftContent } from "../../../src/forge/copy";
 import { Intake, type Demo } from "../../../src/forge/schema";
 import { startBuild, type StartResult } from "./build";
-import { getDemo, makeSlug, saveDemo, type Stored } from "./db";
+import { freshenExpiry, getDemo, makeSlug, saveDemo, type Stored } from "./db";
 import type { Env } from "./env";
 import { conceptById } from "./concepts";
 import { heroById } from "./heroes";
@@ -187,6 +187,8 @@ export async function redesignDemo(env: Env, tenant: Tenant, userId: number | nu
   const fresh = await getDemo(env, demo.slug, { tenantId: tenant.id });
   const cost = buildCost((fresh ?? demo).intake);
   if (!canBuild(tenant, cost) && env.ANTHROPIC_API_KEY) throw new NoCredits(cost, tenant.credits);
+  // A new design is a new start: its link works for the full time again.
+  await freshenExpiry(env, tenant.id, demo.slug);
   return startBuild(env, tenant, userId, demo.slug, !raw && fresh?.buildStatus === "failed" ? fresh.buildVersion : null);
 }
 
