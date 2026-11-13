@@ -32,7 +32,7 @@ import {
   throttled,
   viewStats,
 } from "./db";
-import { Invalid, NoCredits, checkWidget, createDemo, noCreditsText, rawFields, redesignDemo, startMessage } from "./demos";
+import { Invalid, NoCredits, asLink, checkWidget, createDemo, noCreditsText, rawFields, redesignDemo, startMessage } from "./demos";
 import { pagesOf, sitemapFor } from "./designer";
 import { DEFAULT_FOLDER, FOLDER_KEY, folderId, syncFolder } from "./drive";
 import type { Ctx, Env } from "./env";
@@ -221,7 +221,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     const lines = String(f.get("bulk") ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 25);
     if (!lines.length) return redirect(withMsg("/", "error", "Paste at least one business, one per line."));
     // A Studio line without a link is built as Standard (below), so it costs one credit.
-    const linked = (l: string) => /^https?:\/\//i.test(l.split("|")[2]?.trim() ?? "");
+    const linked = (l: string) => /^https?:\/\//i.test(asLink(l.split("|")[2]));
     const need = lines.reduce((n, l) => n + (style === "studio" && linked(l) ? STUDIO_CREDITS : 1), 0);
     if (!s.tenant.unlimited && s.tenant.credits < need && aiOn)
       return redirect(withMsg("/", "error", `${lines.length} builds need ${need} credits and this account has ${s.tenant.credits}.`));
@@ -231,10 +231,10 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
       // name | city | website or Facebook link | phone (everything after the name is optional).
       const [first, second, third, fourth] = line.split("|").map((x) => x.trim());
       const raw: Record<string, string> = /^https?:\/\//i.test(first) ? { googleUrl: first, city: second ?? "" } : { businessName: first, city: second ?? "" };
-      const link = /^https?:\/\//i.test(third ?? "") ? third! : "";
+      const link = /^https?:\/\//i.test(asLink(third)) ? asLink(third) : "";
       if (link && /facebook\.com|fb\.com|instagram\.com/i.test(link)) raw.notes = `Their social page: ${link}`;
       else if (link) raw.websiteUrl = link;
-      const phone = [third, fourth].find((x) => x && !/^https?:/i.test(x) && /\d{7,}/.test(x.replace(/\D/g, "")));
+      const phone = [third, fourth].find((x) => x && !/^https?:/i.test(asLink(x)) && /\d{7,}/.test(x.replace(/\D/g, "")));
       if (phone) raw.phone = phone;
       // A Studio site needs one real thing to build its idea on; a bare line is built as Standard instead.
       raw.style = style === "studio" && !link ? "standard" : style;

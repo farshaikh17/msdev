@@ -218,7 +218,7 @@ export interface ReuseChoice {
 
 export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = []): string {
   const t = (name: keyof Intake, label: string, ph: string, required = false, type = "text") =>
-    `<label for="f-${name}">${label}<input id="f-${name}" name="${name}" type="${type}" value="${esc((v?.[name] as string) ?? "")}" placeholder="${esc(ph)}"${required ? " required" : ""}></label>`;
+    `<label for="f-${name}">${label}<input id="f-${name}" name="${name}" ${type === "url" ? 'type="text" inputmode="url" autocomplete="off"' : `type="${type}"`} value="${esc((v?.[name] as string) ?? "")}" placeholder="${esc(ph)}"${required ? " required" : ""}></label>`;
   const a = (name: keyof Intake, label: string, ph: string) =>
     `<label class="full" for="f-${name}">${label}<textarea id="f-${name}" name="${name}" rows="3" placeholder="${esc(ph)}">${esc((v?.[name] as string) ?? "")}</textarea></label>`;
   const mode = v?.mode ?? "auto";
@@ -258,13 +258,13 @@ export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = []): string {
 <p class="note" style="margin:0">Every site gets a light/dark switch; this sets which one it opens in.</p></fieldset>`;
   return `<div class="grid"><label class="full big-field" for="f-businessName">Business name or Google Maps link<input id="f-businessName" name="businessName" value="${esc(v?.businessName ?? "")}" placeholder="e.g. Vanguard Pipe & Water   or   https://maps.app.goo.gl/…" required autocomplete="off"></label>
 ${t("phone", "Phone (gives the site a call button)", "e.g. (646) 594-9379", false, "tel")}${t("city", "City (optional; a Maps link fills it in)", "e.g. Myrtle Beach, SC")}${t("industry", "What they do (optional)", "e.g. Plumbing, Roofing, Hair salon")}
-<label class="full" for="f-saw">What you saw (one line; Studio needs this or their website)<input id="f-saw" name="saw" value="${esc(v?.saw ?? "")}" placeholder="e.g. Red trucks with a 24/7 number; banner on the high school field; on Main St since 1984" maxlength="600"></label></div>
+<label class="full" for="f-saw">What you saw (one line; Studio needs this or their website)<input id="f-saw" name="saw" value="${esc(v?.saw ?? "")}" placeholder="e.g. Red trucks with a 24/7 number; banner on the high school field; on Main St since 1984" maxlength="600"></label>
+<label class="full" for="f-websiteUrl">Their website or Facebook page (optional; we read it for facts, logo, colours and photos)<input id="f-websiteUrl" name="websiteUrl" inputmode="url" autocomplete="off" value="${esc(v?.websiteUrl ?? "")}" placeholder="e.g. joesplumbing.com"></label></div>
 ${tier}
 <details><summary>More options</summary><div style="display:grid;gap:16px;margin-top:12px">
 <p class="note" style="margin:0">Everything here is optional. Left alone, Forge picks what suits the business.</p>
 ${reuseSel}${look}
 <div class="grid">${t("googleUrl", "Google Maps link", "https://maps.app.goo.gl/…", false, "url")}
-${t("websiteUrl", "Their current website (we read it for facts, photos and contact details)", "https://…", false, "url")}
 ${a("services", "Services", "Comma or line separated, e.g. Drain cleaning, Water heaters")}
 ${a("serviceAreas", "Service areas", "e.g. Myrtle Beach, Conway, Surfside Beach")}
 ${t("address", "Street address", "e.g. 100 Main St, Myrtle Beach, SC 29577")}${t("hours", "Opening hours", "e.g. Mon–Fri 8am–5pm")}

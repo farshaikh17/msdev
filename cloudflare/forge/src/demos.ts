@@ -79,9 +79,26 @@ export function checkWidget(v: string): void {
  * Turn what was typed (or sent) into a checked intake. A Google Maps link supplies the business
  * name (when none was typed) and the map position.
  */
+/** A link as people type it ("joes.com", "www.joes.com/about") made into a full one; anything else is left as typed. */
+export function asLink(v: string | undefined): string {
+  const t = (v ?? "").trim();
+  if (!t || /^https?:\/\//i.test(t)) return t;
+  if (/^\/\//.test(t)) return `https:${t}`;
+  return /^([a-z0-9-]+\.)+[a-z]{2,}(:\d+)?([/?#].*)?$/i.test(t) && !/\s/.test(t) ? `https://${t}` : t;
+}
+const MAPS = /(^|\.)(google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl\/maps)/i;
+const LINK_LABELS: Record<string, string> = { websiteUrl: "Their website", googleUrl: "Google Maps link", logoUrl: "Their logo", heroImageUrl: "Storefront, van or team photo" };
+
 export async function prepareIntake(raw: Record<string, string>): Promise<Intake> {
-  // One box takes either: a link typed where the name goes is the Google Maps link.
-  if (/^https?:\/\//i.test(raw.businessName ?? "")) raw = { ...raw, googleUrl: raw.googleUrl || raw.businessName, businessName: "" };
+  raw = { ...raw };
+  for (const k of ["websiteUrl", "googleUrl", "logoUrl", "heroImageUrl"]) if (raw[k] !== undefined) raw[k] = asLink(raw[k]);
+  // One box takes either: a link typed where the name goes is the Google Maps link, or their website.
+  const typed = asLink(raw.businessName);
+  if (/^https?:\/\//i.test(typed)) {
+    if (MAPS.test(typed.replace(/^https?:\/\//i, ""))) raw = { ...raw, googleUrl: raw.googleUrl || typed, businessName: "" };
+    else
+      throw new Invalid("That looks like their website, not their name. Type the business name in the first box and put the website in \"Their website\".");
+  }
   const g = (k: string) => raw[k] ?? "";
   let place: MapsPlace | null = null;
   if (g("googleUrl")) {
@@ -119,7 +136,11 @@ export async function prepareIntake(raw: Record<string, string>): Promise<Intake
   });
   if (!parsed.success) {
     const missingName = parsed.error.issues.some((i) => i.path[0] === "businessName");
-    throw new Invalid(missingName ? "Enter the business name, or paste its Google Maps link." : parsed.error.issues.map((i) => `${String(i.path[0])}: ${i.message}`).join(". "));
+    throw new Invalid(
+      missingName
+        ? "Enter the business name, or paste its Google Maps link."
+        : parsed.error.issues.map((i) => (LINK_LABELS[String(i.path[0])] ? `${LINK_LABELS[String(i.path[0])]}: that isn't a link we can open. Paste the whole address, e.g. https://joesplumbing.com` : `${String(i.path[0])}: ${i.message}`)).join(". "),
+    );
   }
   checkWidget(parsed.data.chatWidget);
   return parsed.data;

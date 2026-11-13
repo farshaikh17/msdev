@@ -805,7 +805,7 @@ describe("the art director's pass (Studio)", () => {
 });
 
 import { brandHex } from "../cloudflare/forge/src/scrape";
-import { hasFact, prepareIntake } from "../cloudflare/forge/src/demos";
+import { asLink, hasFact, prepareIntake } from "../cloudflare/forge/src/demos";
 
 describe("real identity (Studio)", () => {
   it("keeps a website's theme colour only when it is a real brand colour", () => {
@@ -837,5 +837,24 @@ describe("real identity (Studio)", () => {
     expect(by["Beta Bakery"].notes).toContain("https://instagram.com/beta");
     expect(by["Beta Bakery"].style).toBe("studio");
     expect(by["Gamma Pest"]).toMatchObject({ phone: "251-555-0199", style: "standard" });
+  });
+});
+
+describe("links as people type them", () => {
+  it("accepts a link without https://, and says plainly when a link can't be used", async () => {
+    expect(asLink("joes.com")).toBe("https://joes.com");
+    expect(asLink("www.facebook.com/joes")).toBe("https://www.facebook.com/joes");
+    for (const v of ["813.555.0101", "(813) 555-0101", "Joe's Plumbing", ""]) expect(asLink(v)).toBe(v);
+    expect((await prepareIntake({ businessName: "Joe's", websiteUrl: "joesplumbing.com", logoUrl: "joes.com/logo.png" })).websiteUrl).toBe("https://joesplumbing.com");
+    await expect(prepareIntake({ businessName: "Joe's", websiteUrl: "not a link" })).rejects.toThrow("Their website: that isn't a link we can open");
+    await expect(prepareIntake({ businessName: "joesplumbing.com" })).rejects.toThrow("That looks like their website, not their name");
+  });
+
+  it("a bulk Studio line whose website has no https:// is still a Studio line", async () => {
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 20);
+    await call(h, "/demos/bulk", { cookie: b.cookie, form: { bulk: "Delta Dental | Mobile, AL | deltadental-mobile.com | 251.555.0100", style: "studio" } });
+    const i = JSON.parse((h.db.prepare("SELECT intake FROM demos").get() as { intake: string }).intake);
+    expect(i).toMatchObject({ websiteUrl: "https://deltadental-mobile.com", phone: "251.555.0100", style: "studio" });
   });
 });
