@@ -220,15 +220,25 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     const style = f.get("style") === "studio" ? "studio" : "standard";
     const lines = String(f.get("bulk") ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 25);
     if (!lines.length) return redirect(withMsg("/", "error", "Paste at least one business, one per line."));
-    const each = style === "studio" ? STUDIO_CREDITS : 1;
-    if (!s.tenant.unlimited && s.tenant.credits < lines.length * each && aiOn)
-      return redirect(withMsg("/", "error", `${lines.length} ${style === "studio" ? "Studio " : ""}builds need ${lines.length * each} credits and this account has ${s.tenant.credits}.`));
-    let started = 0, queued = 0;
+    // A Studio line without a link is built as Standard (below), so it costs one credit.
+    const linked = (l: string) => /^https?:\/\//i.test(l.split("|")[2]?.trim() ?? "");
+    const need = lines.reduce((n, l) => n + (style === "studio" && linked(l) ? STUDIO_CREDITS : 1), 0);
+    if (!s.tenant.unlimited && s.tenant.credits < need && aiOn)
+      return redirect(withMsg("/", "error", `${lines.length} builds need ${need} credits and this account has ${s.tenant.credits}.`));
+    let started = 0, queued = 0, standard = 0;
     const problems: string[] = [];
     for (const line of lines) {
-      const [first, second] = line.split("|").map((x) => x.trim());
+      // name | city | website or Facebook link | phone (everything after the name is optional).
+      const [first, second, third, fourth] = line.split("|").map((x) => x.trim());
       const raw: Record<string, string> = /^https?:\/\//i.test(first) ? { googleUrl: first, city: second ?? "" } : { businessName: first, city: second ?? "" };
-      raw.style = style;
+      const link = /^https?:\/\//i.test(third ?? "") ? third! : "";
+      if (link && /facebook\.com|fb\.com|instagram\.com/i.test(link)) raw.notes = `Their social page: ${link}`;
+      else if (link) raw.websiteUrl = link;
+      const phone = [third, fourth].find((x) => x && !/^https?:/i.test(x) && /\d{7,}/.test(x.replace(/\D/g, "")));
+      if (phone) raw.phone = phone;
+      // A Studio site needs one real thing to build its idea on; a bare line is built as Standard instead.
+      raw.style = style === "studio" && !link ? "standard" : style;
+      if (raw.style !== style) standard++;
       try {
         const r = await createDemo(env, (await getTenant(env, s.tenant.id)) ?? s.tenant, s.user.id, raw);
         if (r.start === "busy") {
@@ -240,7 +250,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
         problems.push(`${first.slice(0, 40)}: ${e instanceof NoCredits ? "no credits left" : e instanceof Invalid ? e.message : "couldn't start"}`);
       }
     }
-    const msg = `Started ${started} build${started === 1 ? "" : "s"}${queued ? `, ${queued} queued (they start as slots free up)` : ""}.${problems.length ? ` Skipped: ${problems.join("; ")}` : ""}`;
+    const msg = `Started ${started} build${started === 1 ? "" : "s"}${queued ? `, ${queued} queued (they start as slots free up)` : ""}.${standard ? ` ${standard} had no website or social link, so ${standard === 1 ? "it was" : "they were"} built as Standard (Studio needs one real thing about the business).` : ""}${problems.length ? ` Skipped: ${problems.join("; ")}` : ""}`;
     return redirect(withMsg("/", problems.length && !started && !queued ? "error" : "ok", msg));
   }
 

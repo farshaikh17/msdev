@@ -61,6 +61,8 @@ export interface Listed {
   createdAt: string;
   /** The live version, when it has a desktop screenshot to show as a picture. */
   shot?: string;
+  /** No phone number was given: the site shouldn't be sent to anyone yet. */
+  noPhone?: boolean;
 }
 
 /** A build that has made no progress this long was stopped by the platform (a queue job runs at most 15 minutes). */
@@ -150,10 +152,10 @@ export async function listDemos(env: Env, tenantId: number): Promise<Listed[]> {
     .bind(tenantId)
     .all<Row & { shot: string | null }>();
   return results.map((r) => {
-    const intake = JSON.parse(r.intake) as { city?: string };
+    const intake = JSON.parse(r.intake) as { city?: string; phone?: string };
     const content = JSON.parse(r.content) as { industry?: string };
     const stale = r.build_status === "building" && Date.now() - Date.parse(r.updated_at ?? r.created_at) > STALE_MS;
-    return { buildStatus: stale ? "failed" : r.build_status, slug: r.slug, businessName: r.business_name, industry: content.industry ?? "", city: intake.city ?? "", createdAt: r.created_at, ...(r.shot ? { shot: r.shot } : {}) };
+    return { buildStatus: stale ? "failed" : r.build_status, slug: r.slug, businessName: r.business_name, industry: content.industry ?? "", city: intake.city ?? "", createdAt: r.created_at, ...(r.shot ? { shot: r.shot } : {}), ...(intake.phone ? {} : { noPhone: true }) };
   });
 }
 

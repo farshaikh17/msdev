@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../cloudflare/forge/src/index";
 import { designKit, designSitePage, fixChrome, planPairs, planSite } from "../cloudflare/forge/src/designer";
 import { beforeAfterImages } from "../cloudflare/forge/src/images";
-import { countView, getDemo, getKit, getPage, getQa, getReview, viewStats } from "../cloudflare/forge/src/db";
+import { countView, getDemo, getKit, getPage, getQa, getReview, pagesDone, viewStats } from "../cloudflare/forge/src/db";
 import type { BuildJob, Env, VideoJob } from "../cloudflare/forge/src/env";
 import { qrSvg } from "../cloudflare/forge/src/outreach";
 import { pitchPage } from "../cloudflare/forge/src/pitch";
@@ -28,7 +28,7 @@ vi.mock("../cloudflare/forge/src/brief", async (orig) => {
   const real = await orig<typeof import("../cloudflare/forge/src/brief")>();
   return { ...real, writeBrief: vi.fn(async () => { throw new Error("no brief in tests"); }) };
 });
-vi.mock("../cloudflare/forge/src/scrape", () => ({ readWebsite: vi.fn() }));
+vi.mock("../cloudflare/forge/src/scrape", async (orig) => ({ ...(await orig<typeof import("../cloudflare/forge/src/scrape")>()), readWebsite: vi.fn() }));
 vi.mock("../cloudflare/forge/src/outreach", async (orig) => {
   const real = await orig<typeof import("../cloudflare/forge/src/outreach")>();
   return { ...real, writeOutreach: vi.fn(async () => ({ subject: "A new website for Bravo Barbers", email: "Hi there, EMAIL", sms: "SMS text", call: "CALL script", at: new Date().toISOString(), costUsd: 0.0004 })) };
@@ -269,8 +269,9 @@ describe("bulk builds", () => {
   it("checks the credits for the whole batch first", async () => {
     const admin = await setupAdmin(h);
     const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 2);
-    const r = await call(h, "/demos/bulk", { cookie: b.cookie, form: { bulk: "A\nB\nC", style: "studio" } });
-    expect(loc(r)).toContain("3 Studio builds need 9 credits and this account has 2");
+    const r = await call(h, "/demos/bulk", { cookie: b.cookie, form: { bulk: "A | X | https://a.test\nB | Y | https://b.test\nC", style: "studio" } });
+    // Two Studio lines with a link (3 each) and one bare line built as Standard (1).
+    expect(loc(r)).toContain("3 builds need 7 credits and this account has 2");
     expect((h.db.prepare("SELECT count(*) c FROM demos").get() as { c: number }).c).toBe(0);
   });
 });
@@ -408,8 +409,8 @@ describe("Studio art directions", () => {
     expect(page).toContain("Neo-brutalist");
     // A Studio build with a chosen direction passes it on to the designer, and an Auto build passes one that suits the trade.
     const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 9);
-    await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Alpha Plumbing", industry: "Plumbing", city: "Tampa, FL", style: "studio", concept: "swiss" } });
-    await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Beta Plumbing", industry: "Plumbing", city: "Tampa, FL", style: "studio" } });
+    await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Alpha Plumbing", industry: "Plumbing", city: "Tampa, FL", style: "studio", saw: "A small family plumbing van parked out front.", concept: "swiss" } });
+    await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Beta Plumbing", industry: "Plumbing", city: "Tampa, FL", style: "studio", saw: "A small family plumbing van parked out front." } });
     await drain(h);
     const concepts = vi.mocked(designKit).mock.calls.map((c) => c[4]);
     expect(concepts[0]).toBe("swiss");
@@ -692,5 +693,149 @@ describe("the review's page visits", () => {
     expect(r.skipped).toBeUndefined();
     expect(waits.filter((w) => w !== 500)).toEqual([5500, 5500, 5500]);
     expect(order.slice(0, 3)).toEqual(["goto", "wait", "shot"]);
+  });
+});
+
+/** A browser for a long Studio page: it can be scrolled, and some screens down it can be empty. */
+function scrollingBrowser(facts: Record<string, unknown>, emptyStops: number[] = []) {
+  let y = 0;
+  const stops: number[] = [];
+  const page = {
+    setViewport: async () => undefined,
+    goto: async () => void (y = 0),
+    screenshot: async () => new Uint8Array([0xff, 0xd8, 0xff, y % 251]),
+    evaluate: async (fn: unknown) => {
+      const s = String(fn);
+      if (s.includes("scrollHeight") && s.includes("Math.max")) return 6400 as never;
+      if (s === "innerHeight") return 800 as never;
+      const to = s.match(/^window\.scrollTo\(0, (\d+)\)$/);
+      if (to) {
+        y = Number(to[1]);
+        if (y) stops.push(y);
+        return undefined as never;
+      }
+      if (s.includes("elementFromPoint")) return (emptyStops.includes(stops.length - 1) ? 0 : 20) as never;
+      return facts as never;
+    },
+    on: () => undefined,
+    close: async () => undefined,
+  };
+  return { browser: { newPage: async () => page as never, close: async () => undefined } as Browser, stops };
+}
+
+describe("the art director's pass (Studio)", () => {
+  const studioLive = async () => {
+    const { slug, demo, b } = await liveDemo();
+    const version = demo.liveVersion!;
+    const row = h.db.prepare("SELECT kit FROM site_versions WHERE slug = ? AND version = ?").get(slug, version) as { kit: string };
+    const idea = { lens: "place", truth: "A barbershop on the corner since the mill closed.", evidence: "e", idea: "The corner as a stage.", refuses: "No stock razors." };
+    h.db.prepare("UPDATE site_versions SET kit = ? WHERE slug = ? AND version = ?").run(JSON.stringify({ ...JSON.parse(row.kit), style: "studio", idea }), slug, version);
+    return { slug, version, b };
+  };
+  const moving = (links: string[]) => ({ ...goodFacts(links), held: 1, brighten: 2, parallax: 3, bands: 1 });
+
+  it("sees the page as a visitor scrolls it, revises the home page once from the notes, and keeps the original at /_before", async () => {
+    const { slug, version } = await studioLive();
+    const original = (await getPage(h.env, slug, version, "/"))!.body;
+    const { browser, stops } = scrollingBrowser(moving([`/${slug}/about`]));
+    const critique = vi.fn<ReviewDeps["critique"]>(async () => ({ score: 7, verdict: "Good.", strengths: [], issues: [], costUsd: 0.02 }));
+    const artDirect = vi.fn<NonNullable<ReviewDeps["artDirect"]>>(async () => ({ notes: ["Screen 4: cut the second services grid", "Screen 6: make the map the whole screen"], keep: "The first screen.", costUsd: 0.05 }));
+    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => browser, critique, artDirect, sleep: async () => undefined });
+    // Eight desktop screens below the first and three on a phone reach the critic, in order.
+    const shots = critique.mock.calls[0]![1];
+    expect(shots.frames).toHaveLength(8);
+    expect(shots.phoneFrames).toHaveLength(3);
+    expect(stops.length).toBeGreaterThanOrEqual(11);
+    // The art director is told the idea, and its notes (with what to keep) go to the one revision.
+    expect(artDirect.mock.calls[0]![2]).toContain("The corner as a stage.");
+    const rev = vi.mocked(designSitePage).mock.calls.find((c) => c[3]?.notes)![3]!;
+    expect(rev.notes).toContain("Screen 4: cut the second services grid");
+    expect(rev.notes).toContain("Keep: The first screen.");
+    expect(rev.current?.body).toBe(original);
+    expect(r.artPass).toMatchObject({ kept: true, notes: ["Screen 4: cut the second services grid", "Screen 6: make the map the whole screen"] });
+    expect(r.fixed).toBe(true);
+    expect(r.blank).toBe(0);
+    expect(r.costUsd).toBeCloseTo(0.02 + 0.05 + 0.01, 5);
+    // The score-driven rewrite doesn't also run.
+    expect(vi.mocked(designSitePage).mock.calls.filter((c) => c[3]?.notes)).toHaveLength(1);
+    expect((await getPage(h.env, slug, version, "/"))!.body).toContain("FIXED");
+    expect((await getPage(h.env, slug, version, "/_before"))!.body).toBe(original);
+    // A second review never overwrites the first original.
+    await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => scrollingBrowser(moving([`/${slug}/about`])).browser, critique, artDirect, sleep: async () => undefined });
+    expect((await getPage(h.env, slug, version, "/_before"))!.body).toBe(original);
+    // It isn't one of the site's pages (it is served at /<slug>/_before, checked on the live site).
+    expect(await pagesDone(h.env, slug, version)).not.toContain("/_before");
+  });
+
+  it("counts blank screens, and puts the original back when the revision fails a check the original passed", async () => {
+    const { slug, version } = await studioLive();
+    const original = (await getPage(h.env, slug, version, "/"))!.body;
+    let launches = 0;
+    const deps: ReviewDeps = {
+      // The first look: two empty screens. The second look (the revision): no heading.
+      launch: async () => (++launches === 1 ? scrollingBrowser(moving([`/${slug}/about`]), [2, 5]).browser : scrollingBrowser({ ...moving([`/${slug}/about`]), h1: 0 }).browser),
+      critique: async () => ({ score: 8, verdict: "v", strengths: [], issues: [], costUsd: 0.01 }),
+      artDirect: async () => ({ notes: ["Screen 3 is empty: fill it with the shop's chairs"], keep: "", costUsd: 0.04 }),
+      sleep: async () => undefined,
+    };
+    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, deps);
+    expect(r.blank).toBe(2);
+    expect(r.checks!.find((c) => c.id === "blank")).toMatchObject({ ok: false, detail: "2 of 8 screens below the first look empty" });
+    // The blank screens are a measured failure the revision is told to fix.
+    expect(vi.mocked(designSitePage).mock.calls.find((c) => c[3]?.notes)![3]!.notes!.join(" ")).toContain("No blank screens while scrolling: FAILED");
+    expect(r.artPass?.kept).toBe(false);
+    expect(r.artPass?.why).toContain("original was kept");
+    expect(r.fixed).toBeFalsy();
+    expect((await getPage(h.env, slug, version, "/"))!.body).toBe(original);
+  });
+
+  it("can be turned off, and a Standard site never gets it", async () => {
+    const { slug, version, b } = await studioLive();
+    const artDirect = vi.fn();
+    const critique = vi.fn<ReviewDeps["critique"]>(async () => ({ score: 9, verdict: "v", strengths: [], issues: [], costUsd: 0.01 }));
+    await reviewSite({ ...h.env, BROWSER: {}, FORGE_ART_PASS: "off" } as Env, slug, version, { launch: async () => scrollingBrowser(moving([`/${slug}/about`])).browser, critique, artDirect, sleep: async () => undefined });
+    expect(artDirect).not.toHaveBeenCalled();
+    const other = slugOf(await build(h, b.cookie, "Charlie Barbers"));
+    await drain(h);
+    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, other, (await getDemo(h.env, other))!.liveVersion!, { launch: async () => scrollingBrowser(goodFacts([`/${other}/about`])).browser, critique, artDirect, sleep: async () => undefined });
+    expect(artDirect).not.toHaveBeenCalled();
+    expect(critique.mock.calls.at(-1)![1].frames).toBeUndefined();
+    expect(r.blank).toBeUndefined();
+  });
+});
+
+import { brandHex } from "../cloudflare/forge/src/scrape";
+import { hasFact, prepareIntake } from "../cloudflare/forge/src/demos";
+
+describe("real identity (Studio)", () => {
+  it("keeps a website's theme colour only when it is a real brand colour", () => {
+    expect(brandHex("#C0392B")).toBe("#c0392b");
+    expect(brandHex("#e33")).toBe("#ee3333");
+    for (const v of ["#ffffff", "#000000", "#777777", "#f7f7f5", "red", ""]) expect(brandHex(v)).toBeUndefined();
+  });
+
+  it("takes what the rep saw from the form, and a Studio site needs one real thing", async () => {
+    const i = await prepareIntake({ businessName: "Bravo Barbers", saw: " A red-and-white pole by the door. " });
+    expect(i.saw).toBe("A red-and-white pole by the door.");
+    expect(hasFact(i)).toBe(true);
+    expect(hasFact(await prepareIntake({ businessName: "Bravo Barbers" }))).toBe(false);
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 9);
+    const r = await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Bare Barbers", style: "studio" } });
+    expect(decodeURIComponent(loc(r))).toContain("Studio needs one real thing about the business");
+    expect((await getTenant(h.env, b.id))!.credits).toBe(9);
+  });
+
+  it("reads bulk lines: a website becomes the site to read, a social link a note, a phone the phone; a bare Studio line is built as Standard", async () => {
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 20);
+    const r = await call(h, "/demos/bulk", { cookie: b.cookie, form: { bulk: "Alpha Roofing | Tampa, FL | https://alpha.test | (813) 555-0101\nBeta Bakery | Austin, TX | https://instagram.com/beta\nGamma Pest | Mobile, AL | 251-555-0199", style: "studio" } });
+    expect(decodeURIComponent(loc(r))).toContain("1 had no website or social link, so it was built as Standard");
+    const rows = h.db.prepare("SELECT intake FROM demos").all() as { intake: string }[];
+    const by = Object.fromEntries(rows.map((x) => JSON.parse(x.intake)).map((i) => [i.businessName, i]));
+    expect(by["Alpha Roofing"]).toMatchObject({ websiteUrl: "https://alpha.test", phone: "(813) 555-0101", style: "studio" });
+    expect(by["Beta Bakery"].notes).toContain("https://instagram.com/beta");
+    expect(by["Beta Bakery"].style).toBe("studio");
+    expect(by["Gamma Pest"]).toMatchObject({ phone: "251-555-0199", style: "standard" });
   });
 });

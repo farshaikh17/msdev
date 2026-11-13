@@ -3,6 +3,7 @@
  * sign-in. A demo is served only while its account is active; the account's settings (footer
  * credit, chat widget, hero videos) are applied as each page is served.
  */
+import { BEFORE_PAGE } from "./review";
 import { renderPage, renderSite } from "../../../src/forge/render";
 import {
   countLeads,
@@ -87,11 +88,14 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
   let ogTitle = `${demo.intake.businessName}${demo.content.industry ? ` | ${demo.content.industry}` : ""}${demo.intake.city ? ` in ${demo.intake.city}` : ""}`;
   let ogDesc = `A new website for ${demo.intake.businessName}.`;
   if (demo.liveVersion) {
-    const path = sub || "/";
+    // /_before: the home page as it was before the art director's pass (Studio), for comparing.
+    const before = sub === BEFORE_PAGE;
+    const path = before ? "/" : sub || "/";
     const kit = await getKit(env, slug, demo.liveVersion);
     if (!kit) return text("This page isn't available.", 404);
     if (!pagesOf(kit).some((p) => p.path === path)) return Response.redirect(new URL(prefix, req.url).toString(), 302);
-    const page = await getPage(env, slug, demo.liveVersion, path);
+    const page = await getPage(env, slug, demo.liveVersion, before ? BEFORE_PAGE : path);
+    if (!page && before) return Response.redirect(new URL(prefix, req.url).toString(), 302);
     if (!page) return text("This page isn't available.", 404);
     html = assemble(kit, page, slug, creditFor(tenant));
     accent = kit.accent || demo.intake.primaryColor;

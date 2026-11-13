@@ -303,7 +303,7 @@ describe("notifications and Mianro's own builds", () => {
 });
 
 describe("Studio builds", () => {
-  const studio = (cookie: string, name: string) => call(h, "/demos", { cookie, form: { businessName: name, city: "Orlando, FL", style: "studio" } });
+  const studio = (cookie: string, name: string) => call(h, "/demos", { cookie, form: { businessName: name, city: "Orlando, FL", style: "studio", saw: "A busy barbershop on the corner with a red-and-white pole." } });
   /** The page as visitors get it (the same assembly the sites Worker does, minus Cloudflare's HTML rewriter). */
   const site = async (slug: string, path = "") => {
     const demo = (await getDemo(h.env, slug))!;

@@ -14,8 +14,8 @@ import { conceptById } from "./concepts";
 import { heroById } from "./heroes";
 import { ownScreen } from "./brief";
 import Anthropic from "@anthropic-ai/sdk";
-import { getDemo, getKit, getPage, getReview, getSetting, saveImage, savePage, saveReview, setSetting } from "./db";
-import { costOf, designSitePage, pagesOf, type Kit } from "./designer";
+import { getDemo, getKit, getPage, getReview, getSetting, saveImage, savePage, saveReview, setSetting, type Stored } from "./db";
+import { costOf, designSitePage, MODEL, pagesOf, parseParts, type Kit } from "./designer";
 import type { Env } from "./env";
 import { recordBuildCost } from "./tenants";
 
@@ -82,6 +82,10 @@ export interface Review {
   tries?: number;
   /** Which screenshots were saved (image names under the version). */
   shots?: string[];
+  /** Screens that looked blank as the page was scrolled (Studio), counted on desktop. */
+  blank?: number;
+  /** The art director's pass (Studio): what it asked for, and whether the revised page was kept. The page before it is kept at /_before. */
+  artPass?: { notes: string[]; kept: boolean; why?: string };
 }
 
 /** What the page tells us about itself, from inside the browser. */
@@ -154,7 +158,7 @@ async function rescore(env: Env, deps: ReviewDeps, url: string, settle: number, 
     await visit(page, url, settle, sleep);
     const phone = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
     await page.close();
-    const crit = await deps.critique(env, { desktop, phone }, `${facts}\n\nThis page has just been revised after an earlier review; score it as it is now.`, studio);
+    const crit = await deps.critique(env, { desktop, phone }, facts, studio);
     return { crit, desktop, phone };
   } finally {
     await browser.close().catch(() => undefined);
@@ -241,7 +245,19 @@ export interface ReviewDeps {
   launch(env: Env): Promise<Browser>;
   /** Wait (a stand-in in tests, so they don't sit through the intro animations). */
   sleep?(ms: number): Promise<void>;
-  critique(env: Env, shots: { desktop: Uint8Array; phone: Uint8Array }, facts: string, studio?: boolean): Promise<{ score: number; verdict: string; strengths: string[]; issues: Issue[]; costUsd: number }>;
+  critique(env: Env, shots: Shots, facts: string, studio?: boolean): Promise<{ score: number; verdict: string; strengths: string[]; issues: Issue[]; costUsd: number }>;
+  /** The art director's look at the whole page (Studio): concrete notes for one revision. Absent: the real one. */
+  artDirect?(env: Env, shots: Shots, brief: string): Promise<{ notes: string[]; keep: string; costUsd: number }>;
+}
+
+/** What a reviewer is shown: the first screen on desktop and phone, and further screens as a visitor scrolls (Studio). */
+export interface Shots {
+  desktop: Uint8Array;
+  phone: Uint8Array;
+  /** Desktop screens below the first, in order, taken after the motion engine settled at each. */
+  frames?: Uint8Array[];
+  /** Phone screens further down. */
+  phoneFrames?: Uint8Array[];
 }
 
 async function launchReal(env: Env): Promise<Browser> {
@@ -256,7 +272,7 @@ const b64 = (u: Uint8Array) => {
   return btoa(s);
 };
 
-const CRITIQUE_SYSTEM = `You are the creative director at Mianro Systems reviewing a website home page your studio just built for a local business. You see the page as a visitor would: a desktop screenshot and a phone screenshot. Be exacting but fair; this is a first version and your notes go straight back to the designer.
+const CRITIQUE_SYSTEM = `You are an experienced creative director reviewing the home page of a website for a local business. You do not know who made it. You see the page as a visitor would: the first screen on a desktop and on a phone and, when given, the screens further down as the visitor scrolls. Judge the whole page you are shown, not just the first screen: screens that are empty, thin, repetitive or about nothing in particular count against it. Be exacting but fair; your notes go straight back to the designer.
 
 Score the page from 1 to 10 overall, weighing: first impression and distinctiveness (does it look custom and expensive, or like an AI template?), hierarchy and typography, colour and contrast, layout and spacing on desktop AND on the phone, use of imagery, clarity of the offer and the call to action, trust signals, and copy. Mark these down hard: text cut off or overlapping, elements running off the screen, unreadable contrast, an empty or broken-looking area, a hero that doesn't explain what the business does, the same card grid repeated section after section, a label above every single heading, gradient text used as decoration, nested cards, cards rounded like pills.
 
@@ -264,15 +280,68 @@ Judge the design, not missing information. The designer is forbidden to invent f
 
 Reply with JSON only, no markdown: {"score": 1-10, "verdict": "one sentence", "strengths": ["..."], "issues": [{"what": "...", "fix": "a concrete instruction the designer can act on", "severity": "high|medium|low"}]}. Never use double quote characters inside any text value (write quoted words with single quotes). At most 8 issues, most important first. If the page is genuinely excellent, say so and keep the issues list short.`;
 
-async function critiqueReal(env: Env, shots: { desktop: Uint8Array; phone: Uint8Array }, facts: string, studio = false) {
-  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 120_000 });
-  const content = [
-    { type: "text" as const, text: "Desktop (1280×800):" },
-    { type: "image" as const, source: { type: "base64" as const, media_type: "image/jpeg" as const, data: b64(shots.desktop) } },
-    { type: "text" as const, text: "Phone (390×844):" },
-    { type: "image" as const, source: { type: "base64" as const, media_type: "image/jpeg" as const, data: b64(shots.phone) } },
-    { type: "text" as const, text: `Facts measured in the browser (treat as true):\n${facts}` },
+const img = (u: Uint8Array) => ({ type: "image" as const, source: { type: "base64" as const, media_type: "image/jpeg" as const, data: b64(u) } });
+const txt = (text: string) => ({ type: "text" as const, text });
+
+/** The screenshots as message content, each labelled, in the order a visitor sees them. */
+function shotContent(s: Shots) {
+  return [
+    txt("Desktop (1280×800), first screen:"),
+    img(s.desktop),
+    ...(s.frames ?? []).flatMap((f, n) => [txt(`Desktop, scrolled down: screen ${n + 2}`), img(f)]),
+    txt("Phone (390×844), first screen:"),
+    img(s.phone),
+    ...(s.phoneFrames ?? []).flatMap((f, n) => [txt(`Phone, further down (${n + 1})`), img(f)]),
   ];
+}
+
+const ART_SYSTEM = `You are the art director of a small, very good design studio. You are looking at the home page a designer built for a local business, as a visitor sees it while scrolling, and at the idea the site was meant to be built on. You will write the notes for ONE revision of the page. Follow the reply format exactly.`;
+
+/**
+ * The art director's look at the whole page (Opus, with the screens): where it stops being about this
+ * business, where it is empty or thin, what to cut; then concrete notes for one revision. Unlike the
+ * old score-driven rewrite, the writer's notes come from seeing the page, all the way down.
+ */
+async function artDirectReal(env: Env, shots: Shots, brief: string): Promise<{ notes: string[]; keep: string; costUsd: number }> {
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 180_000 });
+  const res = await client.messages.create({
+    model: env.CLAUDE_MODEL || MODEL,
+    max_tokens: 5000,
+    system: ART_SYSTEM,
+    messages: [
+      {
+        role: "user",
+        content: [
+          ...shotContent(shots),
+          txt(`${brief}
+
+Look at every screen in order and judge it against the idea. Then reply with exactly these parts:
+@@@ SCREENS
+One line per desktop screen: what it shows, and whether it serves the idea (yes / weakly / no).
+@@@ WEAKEST
+The three weakest screens and why: empty, thin, repetitive, generic, off the idea, or hard to read.
+@@@ NOTES
+At most eight numbered instructions for the revision, most important first. Each names the screen or section and says exactly what to change, cut, merge or add, in design terms (layout, scale, picture, motion, words). Make the page more about this business, not busier. Never ask for facts that are not on the page.
+@@@ KEEP
+One or two sentences: what works and must not change.`),
+        ],
+      },
+    ],
+  });
+  const text = res.content.map((c) => (c.type === "text" ? c.text : "")).join("");
+  const p = parseParts(text);
+  const notes = (p.NOTES ?? "")
+    .split("\n")
+    .map((l) => l.replace(/^\s*\d+[.)]\s*/, "").trim())
+    .filter((l) => l.length > 8)
+    .slice(0, 8);
+  const weakest = (p.WEAKEST ?? "").trim();
+  return { notes: weakest ? [...notes, `The weakest screens, as the art director saw them: ${weakest.replace(/\s+/g, " ").slice(0, 600)}`] : notes, keep: (p.KEEP ?? "").replace(/\s+/g, " ").trim().slice(0, 400), costUsd: costOf(env.CLAUDE_MODEL || MODEL, res.usage as unknown as Record<string, unknown>) };
+}
+
+async function critiqueReal(env: Env, shots: Shots, facts: string, studio = false) {
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 120_000 });
+  const content = [...shotContent(shots), { type: "text" as const, text: `Facts measured in the browser (treat as true):\n${facts}` }];
   const messages: { role: "user" | "assistant"; content: string | typeof content }[] = [{ role: "user", content }];
   let cost = 0;
   let p: { score?: unknown; verdict?: unknown; strengths?: unknown; issues?: unknown } | null = null;
@@ -311,7 +380,43 @@ async function critiqueReal(env: Env, shots: { desktop: Uint8Array; phone: Uint8
   };
 }
 
-export const realDeps: ReviewDeps = { launch: launchReal, critique: critiqueReal };
+export const realDeps: ReviewDeps = { launch: launchReal, critique: critiqueReal, artDirect: artDirectReal };
+
+/** In the browser: how much there is to see on the current screen (words, pictures, drawing), sampled on a 5x5 grid. Near zero is a blank screen. */
+const FILLED = `(() => {
+  const W = innerWidth, H = innerHeight; let n = 0;
+  const shown = (e) => { for (let x = e, k = 0; x && k < 6; x = x.parentElement, k++) { const c = getComputedStyle(x); if (c.visibility === "hidden" || parseFloat(c.opacity) < 0.15) return false; } return true; };
+  for (let i = 1; i < 6; i++) for (let j = 1; j < 6; j++) {
+    const e = document.elementFromPoint(W * i / 6, H * j / 6); if (!e || !shown(e)) continue;
+    if (e.closest("img, video, canvas, svg, picture, iframe")) { n++; continue; }
+    let bg = false; for (let x = e, k = 0; x && k < 4; x = x.parentElement, k++) if (getComputedStyle(x).backgroundImage !== "none") { bg = true; break; }
+    if (bg || ((e.innerText || "").trim().length > 0 && e.children.length < 8)) n++;
+  }
+  return n;
+})()`;
+
+/**
+ * Screens further down the page, as a visitor sees them: scroll for real (so pinned scenes and
+ * scrubbed motion play), wait for the engine to settle at each stop, and take the screen. A full-page
+ * screenshot can't do this: pinned scenes come out as blank gaps. Also counts screens that look blank.
+ */
+async function scrollFrames(page: BrowserPage, sleep: (ms: number) => Promise<void>, count: number, wait: number): Promise<{ frames: Uint8Array[]; blank: number }> {
+  const height = Number(await page.evaluate<number>("Math.max(document.documentElement.scrollHeight, document.body.scrollHeight)")) || 0;
+  const vh = Number(await page.evaluate<number>("innerHeight")) || 800;
+  const last = Math.max(0, height - vh);
+  if (last < vh * 0.5) return { frames: [], blank: 0 };
+  const stops = Array.from({ length: count }, (_, k) => Math.round(Math.min(last, vh + ((last - vh) * k) / Math.max(1, count - 1))));
+  const frames: Uint8Array[] = [];
+  let blank = 0;
+  for (const y of [...new Set(stops)]) {
+    await page.evaluate(`window.scrollTo(0, ${y})`);
+    await sleep(wait);
+    frames.push(bytesOf(await page.screenshot({ type: "jpeg", quality: 62 })));
+    if (Number(await page.evaluate<number>(FILLED)) <= 2) blank++;
+  }
+  await page.evaluate("window.scrollTo(0, 0)");
+  return { frames, blank };
+}
 
 /** Browser seconds used this month, and the key they live under. */
 export async function browserUsed(env: Env): Promise<{ key: string; seconds: number }> {
@@ -389,6 +494,99 @@ async function visit(page: BrowserPage, url: string, settleMs: number, sleep: (m
 
 const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/** The checks that matter for keeping a revision: a revised page may not fail one the original passed. */
+const KEEP_CHECKS = ["overflow", "h1", "images", "links", "console", "empty", "scroll-motion", "blank"];
+
+/**
+ * The art director's pass (Studio): look at the whole page, write notes, revise the home page once,
+ * and keep the revision only if the measured checks still pass. The original is kept at /_before so
+ * the two can be compared (the pass stays only if people prefer what it makes).
+ */
+async function artPass(
+  env: Env,
+  deps: ReviewDeps,
+  o: { slug: string; version: string; kit: Kit; demo: Stored; shots: Shots; failed: Check[]; settle: number; sleep: (ms: number) => Promise<void>; url: string; prefix: string },
+  review: Review,
+): Promise<void> {
+  const spec = pagesOf(o.kit).find((p) => p.path === "/");
+  const current = await getPage(env, o.slug, o.version, "/");
+  if (!spec || !current) return;
+  const i = o.kit.idea;
+  const brief = i ? `The idea this site was meant to be built on: ${i.idea}\nThe true thing it stands on: ${i.truth}\nIt refuses: ${i.refuses}${i.arc ? `\nThe home page's intended story:\n${i.arc}` : ""}` : `This is a Studio site for ${o.demo.intake.businessName} (${o.demo.intake.industry || "a local business"}, ${o.demo.intake.city || "a local town"}). It should feel made for this business and no other.`;
+  try {
+    const look = await (deps.artDirect ?? artDirectReal)(env, o.shots, brief);
+    review.costUsd = (review.costUsd ?? 0) + look.costUsd;
+    const notes = [...o.failed.map((c) => `${c.label}: FAILED${c.detail ? ` (${c.detail})` : ""}. Fix this.`), ...look.notes, ...(look.keep ? [`Keep: ${look.keep}`] : [])];
+    if (!notes.length) return;
+    const { page: revised, usage } = await designSitePage(env, o.kit, spec, { notes, current });
+    review.costUsd += Number((usage as { cost_usd?: number }).cost_usd) || 0;
+    // The first version is kept once (a later review never overwrites it), for the side-by-side.
+    if (!(await getPage(env, o.slug, o.version, BEFORE_PAGE))) await savePage(env, o.slug, o.version, BEFORE_PAGE, current, null);
+    await savePage(env, o.slug, o.version, "/", revised, usage);
+    const after = await recheck(env, deps, o.url, o.settle, o.sleep, o.kit, o.prefix, !!o.demo.intake.phone);
+    const before = new Set((review.checks ?? []).filter((c) => !c.ok).map((c) => c.id));
+    const worse = after?.checks.filter((c) => !c.ok && !before.has(c.id) && KEEP_CHECKS.includes(c.id)) ?? [];
+    if (!after) {
+      review.artPass = { notes: look.notes, kept: true, why: "kept without a second look (no browser time left)" };
+    } else if (worse.length) {
+      await savePage(env, o.slug, o.version, "/", current, null);
+      review.artPass = { notes: look.notes, kept: false, why: `the revision failed ${worse.map((c) => c.label.toLowerCase()).join(", ")}, so the original was kept` };
+    } else {
+      review.artPass = { notes: look.notes, kept: true };
+      review.fixed = true;
+      review.checks = after.checks.concat((review.checks ?? []).filter((c) => !after.checks.some((a) => a.id === c.id)));
+      await saveImage(env, o.slug, o.version, "shot-desktop.jpg", "The home page on desktop", after.desktop);
+      await saveImage(env, o.slug, o.version, "shot-phone.jpg", "The home page on a phone", after.phone);
+    }
+  } catch (e) {
+    review.fixError = `The art director's pass didn't finish: ${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`;
+  }
+}
+
+/** Open the revised home page and measure it again (no critique): desktop and phone, the same checks. */
+async function recheck(env: Env, deps: ReviewDeps, url: string, settle: number, sleep: (ms: number) => Promise<void>, kit: Kit, prefix: string, hasPhone: boolean): Promise<{ checks: Check[]; desktop: Uint8Array; phone: Uint8Array } | null> {
+  if ((await browserUsed(env)).seconds >= BROWSER_BUDGET_SECONDS) return null;
+  const started = Date.now();
+  const browser = await deps.launch(env);
+  try {
+    const page = await browser.newPage();
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(String(e.message || e)));
+    await page.setViewport({ width: 1280, height: 800 });
+    await visit(page, url, settle, sleep);
+    const desktop = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
+    const d = factsOf(await page.evaluate<PageFacts>(FACTS));
+    const down = kit.style === "studio" ? await scrollFrames(page, sleep, 8, 600).catch(() => ({ frames: [] as Uint8Array[], blank: 0 })) : { frames: [], blank: 0 };
+    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true });
+    await visit(page, url, settle, sleep);
+    const phone = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
+    const p = factsOf(await page.evaluate<PageFacts>(FACTS));
+    await page.close();
+    const checks = checksFor(d, p, pagesOf(kit).map((x) => x.path), prefix, errors, hasPhone);
+    if (kit.style === "studio") checks.push(motionCheck(kit, d));
+    if (down.frames.length) checks.push({ id: "blank", label: "No blank screens while scrolling", ok: down.blank === 0, detail: down.blank ? `${down.blank} of ${down.frames.length} screens below the first look empty` : undefined });
+    return { checks, desktop, phone };
+  } finally {
+    await browser.close().catch(() => undefined);
+    await addBrowserSeconds(env, (Date.now() - started) / 1000).catch(() => undefined);
+  }
+}
+
+/** The page moves as it is scrolled (Studio): built on an idea, three kinds with one held; otherwise the older floor. */
+function motionCheck(kit: Kit, f: PageFacts): Check {
+  if (kit.idea) {
+    const kinds = { held: (f.held ?? 0) > 0, brighten: (f.brighten ?? 0) > 0, drift: (f.parallax ?? 0) >= 2, band: (f.bands ?? 0) > 0 };
+    const n = Object.values(kinds).filter(Boolean).length;
+    const moving = kinds.held && n >= 3;
+    return { id: "scroll-motion", label: "The page moves as it is scrolled", ok: moving, detail: moving ? undefined : `${n} kind${n === 1 ? "" : "s"} of scroll motion${kinds.held ? "" : ", none of them held (a pinned scene, a sideways gallery, stacking cards or the brand moment)"}; a Studio page needs at least three, one of them held` };
+  }
+  const moving = (f.parallax ?? 0) >= 3 && (f.pins ?? 0) >= 1 && (f.scrubs ?? 0) >= 1;
+  return { id: "scroll-motion", label: "The page moves as it is scrolled", ok: moving, detail: moving ? undefined : `${f.parallax ?? 0} moving pictures, ${f.pins ?? 0} pinned sequences, ${f.scrubs ?? 0} scrubbed statements; a Studio page needs at least 3, 1 and 1 (see the scroll floor)` };
+}
+
+/** Where the home page from before the art director's pass is kept (never one of the site's own pages). */
+export const BEFORE_PAGE = "/_before";
+
 /** Run the review for a version that is live. Never throws: whatever happens is recorded on the version. */
 export async function reviewSite(env: Env, slug: string, version: string, deps: ReviewDeps = realDeps): Promise<Review> {
   const at = new Date().toISOString();
@@ -432,10 +630,14 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     await visit(page, siteUrl, settle, sleep);
     const desktop = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
     const dFacts = factsOf(await page.evaluate<PageFacts>(FACTS));
+    // A Studio site: the screens below the first, as a visitor scrolling sees them.
+    const studioSite = kit.style === "studio";
+    const down = studioSite ? await scrollFrames(page, sleep, 8, 1000).catch(() => ({ frames: [] as Uint8Array[], blank: 0 })) : { frames: [] as Uint8Array[], blank: 0 };
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true });
     await visit(page, siteUrl, settle, sleep);
     const phone = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
     const pFacts = factsOf(await page.evaluate<PageFacts>(FACTS));
+    const phoneDown = studioSite ? await scrollFrames(page, sleep, 3, 800).catch(() => ({ frames: [] as Uint8Array[], blank: 0 })) : { frames: [] as Uint8Array[], blank: 0 };
     // The other main pages, at phone width: a layout that doesn't collapse pushes content off the screen.
     const wide: { path: string; px: number; fixed?: boolean }[] = [];
     const inner = pagesOf(kit).filter((p) => p.kind === "ai" && p.path !== "/");
@@ -462,18 +664,8 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
       consoleErrors.filter((e) => !/favicon|ERR_BLOCKED|net::|Failed to load resource/i.test(e)),
       !!demo.intake.phone,
     );
-    if (kit.style === "studio") {
-      if (kit.idea) {
-        // Built on an idea: at least three kinds of scroll motion, one of them a held piece, chosen by the idea (not the same trio every time).
-        const kinds = { held: (dFacts.held ?? 0) > 0, brighten: (dFacts.brighten ?? 0) > 0, drift: (dFacts.parallax ?? 0) >= 2, band: (dFacts.bands ?? 0) > 0 };
-        const n = Object.values(kinds).filter(Boolean).length;
-        const moving = kinds.held && n >= 3;
-        checks.push({ id: "scroll-motion", label: "The page moves as it is scrolled", ok: moving, detail: moving ? undefined : `${n} kind${n === 1 ? "" : "s"} of scroll motion${kinds.held ? "" : ", none of them held (a pinned scene, a sideways gallery, stacking cards or the brand moment)"}; a Studio page needs at least three, one of them held` });
-      } else {
-        const moving = (dFacts.parallax ?? 0) >= 3 && (dFacts.pins ?? 0) >= 1 && (dFacts.scrubs ?? 0) >= 1;
-        checks.push({ id: "scroll-motion", label: "The page moves as it is scrolled", ok: moving, detail: moving ? undefined : `${dFacts.parallax ?? 0} moving pictures, ${dFacts.pins ?? 0} pinned sequences, ${dFacts.scrubs ?? 0} scrubbed statements; a Studio page needs at least 3, 1 and 1 (see the scroll floor)` });
-      }
-    }
+    if (kit.style === "studio") checks.push(motionCheck(kit, dFacts));
+    if (down.frames.length) checks.push({ id: "blank", label: "No blank screens while scrolling", ok: down.blank === 0, detail: down.blank ? `${down.blank} of ${down.frames.length} screens below the first look empty` : undefined });
     checks.splice(2, 0, { id: "overflow-inner", label: "Other pages fit a phone screen", ok: !wide.length, detail: wide.length ? wide.map((x) => `${x.path} is ${x.px}px too wide`).join(", ") : undefined });
 
     // The business's current website, for the before/after.
@@ -509,8 +701,9 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     const look = studio ? conceptById(kit.concept) : undefined;
     const sig = heroById(kit.hero);
     const direction = look ? `\n\nThis site's art direction is "${look.name}". Its first screen should be: ${firstScreenWanted(kit, sig, look)}\nRuled out for it: ${look.never}\nIf the first screen doesn't match that description (for example it is a big headline over a darkened full-bleed photo when the direction says otherwise), say so as a high-severity issue with the fix, and score no higher than 6.` : "";
-    const crit = await deps.critique(env, { desktop, phone }, facts + direction, studio);
-    review = { at, ...(wide.length ? { wide } : {}), score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues, checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
+    const shotSet: Shots = { desktop, phone, ...(down.frames.length ? { frames: down.frames } : {}), ...(phoneDown.frames.length ? { phoneFrames: phoneDown.frames } : {}) };
+    const crit = await deps.critique(env, shotSet, facts + direction, studio);
+    review = { at, ...(down.frames.length ? { blank: down.blank } : {}), ...(wide.length ? { wide } : {}), score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues, checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
 
     // Fix: write the home page again with the notes, when it isn't good enough.
     const failed = checks.filter((c) => !c.ok && !["tel", "form", "text", "alt", "overflow-inner"].includes(c.id));
@@ -521,8 +714,12 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     // A Studio page whose first screen was already built alone, looked at and revised during the build
     // isn't rewritten again on score alone (in production that cost $0.50 to $0.80 a site and moved no
     // score): only a measured failure does it. The notes stay, with the fix buttons, for whoever wants them.
+    // A Studio site gets the art director's pass instead: one revision from seeing the whole page.
+    if (studio && down.frames.length && env.FORGE_ART_PASS !== "off") {
+      await artPass(env, deps, { slug, version, kit, demo, shots: shotSet, failed, settle, sleep, url: `${base}${prefix}?r=${version}-art`, prefix }, review);
+    }
     const heroFirst = studio && !!(await getPage(env, slug, version, "/_hero"));
-    if (((crit.score < (studio ? FIX_BELOW_STUDIO : FIX_BELOW) && !heroFirst) || failed.length) && notes.length) {
+    if (!(studio && down.frames.length && env.FORGE_ART_PASS !== "off") && ((crit.score < (studio ? FIX_BELOW_STUDIO : FIX_BELOW) && !heroFirst) || failed.length) && notes.length) {
       const spec = pagesOf(kit).find((p) => p.path === "/");
       const current = await getPage(env, slug, version, "/");
       if (spec && current) {

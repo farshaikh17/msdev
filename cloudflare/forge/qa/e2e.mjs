@@ -153,6 +153,7 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
     await op.goto(BASE + "/"); ok(await op.isVisible("text=Studio · 3 credits"), "Studio choice should be in the open"); ok(!(await op.isVisible(".concepts")), "Studio looks should wait for Studio"); await op.click("label.choice:has(input[name=style][value=studio])"); ok(await op.isVisible(".heroes"), "first-screen choice missing"); await op.waitForTimeout(1500); await op.locator(".concepts").screenshot({ path: SHOTS + "/qa-app-looks.png" }); ok((await op.locator(".concepts input[name=concept]").count()) === 10, "ten Studio looks expected");
     ok((await op.content()).includes("Studio · 3 credits"), "credit wording missing");
     await op.fill("input[name=businessName]", "Dummy Studio Roofing"); await op.fill("input[name=city]", "105 Court St, Cynthiana, KY 41031, United States");
+    await op.fill("input[name=saw]", "A two-truck roofing crew working out of a shop on Court Street.");
     await op.click("label.choice:has(input[name=style][value=studio])"); ok(await op.isChecked("input[name=style][value=studio]"), "Studio not selected");
     await op.locator("button[type=submit]:has-text('Build')").first().click(); await op.waitForURL(/\/demos\/[a-z0-9-]+/);
     ok(await op.isVisible("h1 .pill:has-text('Studio')"), "no Studio label");
@@ -172,7 +173,7 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
     await op.goto(`${BASE}/demos/${slug}`); await op.screenshot({ path: SHOTS + "/qa-app-site.png", fullPage: true }); const t = await op.content();
     for (const x of ["Who's looked", "Outreach kit", "<svg"]) ok(t.includes(x), x + " missing");
     // The quality check and change box need a Claude-built site; a template draft (no AI key here) has neither, by design.
-    const ai = t.includes("Designed by Claude"); ok(ai ? t.includes("Quality check") && t.includes("Request a change") : !t.includes("Request a change"), "sections don't match the site type");
+    const ai = t.includes("Designed by Claude"); const changeBox = t.includes(`/demos/${slug}/change"`); ok(ai ? t.includes("Quality check") && changeBox : !changeBox, "sections don't match the site type");
   });
   await step("a real visitor is counted; a headless bot is not", async () => {
     const c = await browser.newContext({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", viewport: { width: 390, height: 844 } });

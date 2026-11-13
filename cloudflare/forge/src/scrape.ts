@@ -11,6 +11,10 @@ export interface SiteFacts {
   description: string;
   text: string;
   images: string[];
+  /** Their logo (an image in the header or named "logo", else the touch icon), when one is found. */
+  logo?: string;
+  /** The brand colour the site declares (meta theme-color), as #rrggbb. */
+  themeColor?: string;
   /** The details the business publishes about itself (schema.org data, tel: links), when it does. */
   business?: BusinessInfo;
 }
@@ -57,7 +61,21 @@ export async function readWebsite(url: string): Promise<SiteFacts | null> {
     }
   };
 
+  let logo = "";
+  let touchIcon = "";
+  const takeLogo = (src: string | null) => {
+    if (logo || !src || /^data:/.test(src)) return;
+    try {
+      const abs = new URL(src.trim().split(/\s+/)[0]!, base).toString();
+      if (/^https?:\/\//.test(abs) && !/(sprite|pixel|tracking|spacer|blank|loader)/i.test(abs)) logo = abs;
+    } catch {
+      /* not a usable link */
+    }
+  };
   const rewriter = new HTMLRewriter()
+    .on('img[src*="logo"], img[class*="logo"], img[id*="logo"], img[alt*="logo"], img[alt*="Logo"], header img, .logo img, #logo img', { element: (e) => takeLogo(e.getAttribute("src") ?? e.getAttribute("data-src")) })
+    .on('link[rel="apple-touch-icon"], link[rel="apple-touch-icon-precomposed"]', { element: (e) => void (touchIcon ||= e.getAttribute("href") ?? "") })
+    .on('meta[name="theme-color"]', { element: (e) => void (facts.themeColor ||= (e.getAttribute("content") ?? "").trim()) })
     .on("title", { element: () => void (inTitle = true), text: (t) => { if (inTitle) facts.title += t.text; if (t.lastInTextNode) inTitle = false; } })
     .on('meta[name="description"], meta[property="og:description"]', {
       element: (e) => void (facts.description ||= e.getAttribute("content") ?? ""),
@@ -93,6 +111,9 @@ export async function readWebsite(url: string): Promise<SiteFacts | null> {
     return null;
   }
   facts.business = pickBusiness(ld, tels);
+  if (!logo && touchIcon) takeLogo(touchIcon);
+  if (logo) facts.logo = logo;
+  facts.themeColor = brandHex(facts.themeColor ?? "");
   facts.title = facts.title.replace(/\s+/g, " ").trim().slice(0, 200);
   facts.description = facts.description.trim().slice(0, 500);
   facts.text = facts.text.replace(/\s+/g, " ").trim().slice(0, TEXT_CAP);
@@ -101,4 +122,15 @@ export async function readWebsite(url: string): Promise<SiteFacts | null> {
     return null;
   }
   return facts;
+}
+
+/** A declared brand colour worth using: #rgb or #rrggbb, and not (nearly) white, black or grey. */
+export function brandHex(v: string): string | undefined {
+  let h = v.trim().toLowerCase();
+  if (/^#[0-9a-f]{3}$/.test(h)) h = `#${[...h.slice(1)].map((c) => c + c).join("")}`;
+  if (!/^#[0-9a-f]{6}$/.test(h)) return undefined;
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const max = Math.max(r!, g!, b!), min = Math.min(r!, g!, b!);
+  if (max - min < 28 || max < 30 || min > 235) return undefined;
+  return h;
 }

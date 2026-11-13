@@ -95,6 +95,8 @@ Small slices. Each is one session for a cheaper model, and nothing starts until 
 
 **Slice 3. The revision pass (5 real builds, about $17).** Add the art-director pass (C). Five builds in the pilot trade, each shown to you blind, with and without the revision. **Pass: you prefer the revised page on 4 of 5**; otherwise the pass is removed and the plan continues without it.
 
+**Status (13 Nov 2026).** Slice 1 passed. Slices 2a, 2b and 3 are built and deployed but **not yet tested on real builds** (the owner chose to build everything first and test after). What is in place: the brief leads the design; the "What you saw" field, the logo and brand colour read from a website, the wordmark and thin-data rules, the "add phone" flag; a Studio build refuses to start without one real fact; the review scrolls the page for real (8 desktop screens, 3 phone), counts blank screens, and shows the critic the whole page; the art director's pass revises the home page once and keeps the original at `/<slug>/_before` for the blind comparison (`FORGE_ART_PASS=off` turns it off). Testing follows the slices' pass rules above, in order.
+
 **Gate A: start using it on real prospects.** Those five pilot-trade builds: no failed measured check; every site flagged correctly for missing phone; you say they are different from each other and good. Total to here: 8 real builds, about $28.
 
 **Later, each only if real use shows that named problem:**

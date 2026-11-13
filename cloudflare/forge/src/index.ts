@@ -47,6 +47,8 @@ async function handleSites(req: Request, env: Env, ctx: Ctx): Promise<Response> 
   if (m && read) return servePitch(req, env, m[1], `/${m[1]}`);
   m = path.match(/^\/([a-z0-9-]{3,64})\/_draft\/([a-z0-9]{6,40})$/);
   if (m && read) return serveDraft(req, env, m[1], m[2], `/${m[1]}`);
+  m = path.match(/^\/([a-z0-9-]{3,64})\/_before$/);
+  if (m && read) return serveSite(req, env, ctx, m[1], "/_before", `/${m[1]}`, false);
   m = path.match(PAGE_PATH);
   if (m && read) return serveSite(req, env, ctx, m[1], m[2] ?? "", `/${m[1]}`, false);
   return text("Nothing here. Demo links look like /business-name-1a2b3c4d.", 404);

@@ -47,6 +47,8 @@ export const Intake = z.object({
   reviews: z.string().trim().max(4000).default(""),
   /** Anything else true about the business: years in business, licence, owner's name, offers… */
   notes: z.string().trim().max(4000).default(""),
+  /** What the rep saw (the sign, the van, the storefront, how long they have been there): one line the site's idea can stand on. */
+  saw: z.string().trim().max(600).default(""),
   logoUrl: z.union([z.literal(""), z.url()]).default(""),
   heroImageUrl: z.union([z.literal(""), z.url()]).default(""),
   primaryColor: z.union([z.literal(""), hex]).default(""),

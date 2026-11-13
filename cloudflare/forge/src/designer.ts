@@ -453,6 +453,8 @@ Our system assembles each page as: <!doctype html><html data-theme="light|dark">
 
 ## The floor (never, on any page; our checks fail a page for these)
 - The tells of a machine-made page: a small label above a heading (an "eyebrow"); labels, captions, tags or nav links in tracked-out capitals (set them in the text face, sentence case, a step smaller), unless this site's art direction makes tracked capitals its own material, and then only where it says; one coloured, italic or underlined word or phrase inside a heading (a heading is one weight and one colour); facts strung together with middle dots or bullets ("Lewistown · Motel · Since 1984"); decorative status dots; an emoji used as an icon; a card inside a card; gradient text; a purple-to-blue gradient; a drawn fake browser, phone or app window; any invented number, rating, award, logo, customer name or year.
+- The logo: the logo image if one was given; otherwise the business's full name set in type as a wordmark. Never a single letter in a square or circle, and never a made-up symbol standing in for their logo.
+- When a fact wasn't given, the block that needs it is left out: no team section without names, no star rating, no "since" or "years of experience" line, no opening-hours table, no awards or licences. A missing block isn't noticed; a wrong one loses the sale.
 - Never write a placeholder where a fact is missing: no "shown on the map", "ask in store", "call for details", "TBD" or "coming soon" as the value of an address, hours, price or detail row. When a fact wasn't given, leave that row out entirely (a sentence inviting people to call is fine).
 - Text sits on the picture or on a solid panel, never on a highlighter box behind each line.
 - One idea per screen, set big. Fullness comes from scale and pictures, never from more words: about 80 words on any one screen.
@@ -694,6 +696,7 @@ export function factsBlock(i: Intake, site: SiteFacts | null, slug: string, plan
   add("Services", splitList(i.services).join("; ") || (plan?.services.length ? `${plan.services.join("; ")} (typical for this niche; describe them generally, without claims specific to this business)` : ""));
   add("Service areas", splitList(i.serviceAreas).join("; ") || (i.city ? `(not given: show ${i.city} and say "and surrounding areas"; don't list other towns)` : ""));
   add("Other facts", i.notes);
+  add("What our rep saw at the business (true; use it)", i.saw);
   const reviews = parseReviews(i.reviews);
   if (reviews.length) lines.push(`Real reviews (quote these):\n${reviews.map((r) => `- "${r.quote}" — ${r.name}${r.context ? `, ${r.context}` : ""}`).join("\n")}`);
   else lines.push("Real reviews: none supplied (use clearly-labelled samples).");

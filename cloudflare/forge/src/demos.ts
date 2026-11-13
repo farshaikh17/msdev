@@ -48,6 +48,7 @@ export const INTAKE_FIELDS = [
   "serviceAreas",
   "reviews",
   "notes",
+  "saw",
   "logoUrl",
   "heroImageUrl",
   "primaryColor",
@@ -102,6 +103,7 @@ export async function prepareIntake(raw: Record<string, string>): Promise<Intake
     serviceAreas: g("serviceAreas"),
     reviews: g("reviews"),
     notes: g("notes"),
+    saw: g("saw"),
     logoUrl: g("logoUrl"),
     heroImageUrl: g("heroImageUrl"),
     primaryColor: color,
@@ -129,8 +131,15 @@ const canBuild = (t: Tenant, cost = 1) => t.unlimited || t.credits >= cost;
  * Create a demo: a quick template site that works at once, then Claude's full design queued
  * in the background (using one credit).
  */
+/** What a Studio site's idea can stand on: their website, what the rep saw, or facts typed in. */
+export const hasFact = (i: Intake) => !!(i.websiteUrl || i.saw || i.notes || i.reviews || i.services);
+
+/** A Studio build needs one real thing about the business, or its idea has nothing true to stand on. */
+export const STUDIO_NEEDS_FACT = "Studio needs one real thing about the business to build its idea on: their website, or one line of what you saw (the sign, the van, the storefront). Add it, or choose Standard.";
+
 export async function createDemo(env: Env, tenant: Tenant, userId: number | null, raw: Record<string, string>): Promise<{ slug: string; start: StartResult }> {
   const intake = await prepareIntake(raw);
+  if (intake.style === "studio" && !intake.reuseFrom && !hasFact(intake)) throw new Invalid(STUDIO_NEEDS_FACT);
   if (!canBuild(tenant, buildCost(intake)) && env.ANTHROPIC_API_KEY) throw new NoCredits(buildCost(intake), tenant.credits);
   const now = new Date().toISOString();
   const demo: Demo = { slug: makeSlug(intake.businessName), intake, content: draftContent(intake), writtenBy: "draft", createdAt: now, updatedAt: now };
@@ -143,6 +152,7 @@ export async function redesignDemo(env: Env, tenant: Tenant, userId: number | nu
   if (demo.buildStatus === "building") throw new Invalid("A design is already being built. Wait for it to finish.");
   if (raw) {
     const intake = await prepareIntake(raw);
+    if (intake.style === "studio" && !intake.reuseFrom && !hasFact(intake)) throw new Invalid(STUDIO_NEEDS_FACT);
     await saveDemo(env, { ...demo, intake, content: draftContent(intake), writtenBy: "draft", updatedAt: new Date().toISOString() }, tenant.id);
   }
   const fresh = await getDemo(env, demo.slug, { tenantId: tenant.id });

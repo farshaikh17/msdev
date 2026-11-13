@@ -257,7 +257,8 @@ export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = []): string {
 <input name="customColor" type="color" value="${custom ? esc(color) : "#2f5fd0"}" aria-label="Custom colour" style="width:44px;height:36px;padding:2px"></div>
 <p class="note" style="margin:0">Every site gets a light/dark switch; this sets which one it opens in.</p></fieldset>`;
   return `<div class="grid"><label class="full big-field" for="f-businessName">Business name or Google Maps link<input id="f-businessName" name="businessName" value="${esc(v?.businessName ?? "")}" placeholder="e.g. Vanguard Pipe & Water   or   https://maps.app.goo.gl/…" required autocomplete="off"></label>
-${t("phone", "Phone (gives the site a call button)", "e.g. (646) 594-9379", false, "tel")}${t("city", "City (optional; a Maps link fills it in)", "e.g. Myrtle Beach, SC")}${t("industry", "What they do (optional)", "e.g. Plumbing, Roofing, Hair salon")}</div>
+${t("phone", "Phone (gives the site a call button)", "e.g. (646) 594-9379", false, "tel")}${t("city", "City (optional; a Maps link fills it in)", "e.g. Myrtle Beach, SC")}${t("industry", "What they do (optional)", "e.g. Plumbing, Roofing, Hair salon")}
+<label class="full" for="f-saw">What you saw (one line; Studio needs this or their website)<input id="f-saw" name="saw" value="${esc(v?.saw ?? "")}" placeholder="e.g. Red trucks with a 24/7 number; banner on the high school field; on Main St since 1984" maxlength="600"></label></div>
 ${tier}
 <details><summary>More options</summary><div style="display:grid;gap:16px;margin-top:12px">
 <p class="note" style="margin:0">Everything here is optional. Left alone, Forge picks what suits the business.</p>
@@ -270,7 +271,7 @@ ${t("address", "Street address", "e.g. 100 Main St, Myrtle Beach, SC 29577")}${t
 ${a("reviews", "Real reviews to quote", "One per paragraph, optionally ending — Name, Town. Leave empty for clearly-marked sample reviews.")}
 ${a("notes", "Other facts about the business", "e.g. Family owned since 2009, owner Matt, free estimates, 24/7")}
 ${a("photoUrls", "Photo links (one per line)", "Links to photos of their work, team or premises, e.g. from their Google listing or Facebook")}
-${t("logoUrl", "Logo image link", "https://…", false, "url")}${t("heroImageUrl", "Main photo link", "https://…", false, "url")}
+${t("logoUrl", "Their logo (image link)", "https://…", false, "url")}${t("heroImageUrl", "Storefront, van or team photo (image link)", "https://…", false, "url")}
 ${t("chatWidget", "Chat widget (GoHighLevel)", "Empty: the account's widget. Or paste a widget ID / embed code, or type off")}
 </div></div></details>`;
 }
@@ -286,7 +287,9 @@ function siteCard(d: Listed, url: string): string {
         ? `<span class="tag dim">Waiting its turn</span>`
         : d.buildStatus === "failed"
           ? `<span class="tag bad">Needs attention</span>`
-          : `<span class="tag ok">Ready</span>`;
+          : d.noPhone
+            ? `<span class="tag dim" title="Add their phone number before sending it">Ready · add phone</span>`
+            : `<span class="tag ok">Ready</span>`;
   const thumb = d.shot ? `<img loading="lazy" src="${esc(url)}/_img/${esc(d.shot)}/shot-desktop.jpg" alt="">` : `<span>${esc(d.businessName.slice(0, 1).toUpperCase())}</span>`;
   return `<article class="site-card"><a class="thumb" href="/demos/${esc(d.slug)}" aria-label="${esc(d.businessName)}">${thumb}</a>
 <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><div style="min-width:0"><a class="site-name" href="/demos/${esc(d.slug)}">${esc(d.businessName)}</a><div class="note">${esc([d.city, d.createdAt.slice(0, 10)].filter(Boolean).join(" · "))}</div></div>${state}</div>
@@ -312,7 +315,7 @@ ${fields(undefined, reuse)}
 <div class="row"><button class="btn ember big" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build website</button><span class="note">Ready in about 10–20 minutes. You can close this page; it keeps building.</span></div></form>
 <section style="display:grid;gap:14px"><h2>Your websites${demos.length ? ` (${demos.length})` : ""}</h2>${list}</section>
 <details class="card"><summary>Have a list? Build several at once</summary><form method="post" action="/demos/bulk" style="display:grid;gap:14px">
-<label for="bulk">One business per line: a name, <b>name | city</b>, or a Google Maps link (up to 25)<textarea id="bulk" name="bulk" rows="6" placeholder="Joe's Plumbing | Tampa, FL&#10;https://maps.app.goo.gl/…&#10;Bright Smile Dental | Austin, TX"></textarea></label>
+<label for="bulk">One business per line: <b>name | city | website or Facebook link | phone</b> (everything after the name is optional), or a Google Maps link (up to 25). Studio lines without a link are built as Standard.<textarea id="bulk" name="bulk" rows="6" placeholder="Joe's Plumbing | Tampa, FL | https://joesplumbing.com | (813) 555-0142&#10;Bright Smile Dental | Austin, TX | https://facebook.com/brightsmile&#10;https://maps.app.goo.gl/…"></textarea></label>
 <div class="look-row"><label class="choice"><input type="radio" name="style" value="standard" checked><span>Standard · 1 credit each</span></label><label class="choice"><input type="radio" name="style" value="studio"><span>Studio · ${STUDIO_CREDITS} credits each</span></label></div>
 <p class="note" style="margin:0">Three build at a time; the rest wait their turn and start by themselves.</p>
 <div><button class="btn" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build them all</button></div></form></details></main>`,
@@ -352,7 +355,7 @@ ${r.shots?.includes("shot-desktop.jpg") ? `<div class="row" style="align-items:f
 ${r.checks ? checkList(r.checks) : ""}
 ${r.strengths?.length ? `<p class="note" style="margin:0">What works: ${esc(r.strengths.join(" · "))}</p>` : ""}
 ${r.old ? `<p class="note" style="margin:0">Their current website scored <b>${r.old.score}/10</b> on the same checks${r.old.loaded ? "" : " (it didn't load)"}.</p>` : ""}
-${r.fixed ? `<p class="note" style="margin:0">The home page was already rewritten once, automatically, after this check.</p>` : r.fixError ? `<p class="note" style="margin:0">The automatic fix didn't finish: ${esc(r.fixError)}</p>` : ""}</div></details>`;
+${r.artPass ? `<p class="note" style="margin:0">${r.artPass.kept ? "An art director looked at the whole page and the home page was revised once from its notes." : `An art director's revision was tried, but ${esc(r.artPass.why ?? "it wasn't kept")}.`} <a href="${esc(links.site)}/_before" target="_blank" rel="noreferrer">Compare with the version before ↗</a></p>${r.artPass.notes.length ? `<ul class="note" style="margin:4px 0 0">${r.artPass.notes.slice(0, 8).map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}` : r.fixed ? `<p class="note" style="margin:0">The home page was already rewritten once, automatically, after this check.</p>` : r.fixError ? `<p class="note" style="margin:0">The automatic fix didn't finish: ${esc(r.fixError)}</p>` : ""}</div></details>`;
 }
 
 /** Step 1: what the site looks like and how good it is. */
@@ -386,7 +389,7 @@ function lookStep(d: Stored, r: Review | null | undefined, links: { site: string
   if (d.liveVersion) {
     if (r?.score) quality = `<div class="row" style="justify-content:space-between"><div class="row"><span class="score">${r.score}<small>/10</small></span><div><b>Quality check: ${esc(scoreWord(r.score))}</b>${r.before && r.before !== r.score ? ` <span class="note">(${r.before}/10 before the automatic fixes)</span>` : ""}${r.verdict ? `<div class="note" style="max-width:62ch">${esc(r.verdict)}</div>` : ""}</div></div>${again}</div>${checkDetail(d, r, links)}`;
     else if (r?.skipped)
-      quality = `<div class="row" style="justify-content:space-between"><div><b>Quality check: ${r.skipped.startsWith("error") ? "didn't finish" : "not run"}</b><div class="note">${r.skipped.startsWith("error") ? "It tries again by itself within the hour, or press the button to try now." : "Press the button to run it."} <span title="${esc(r.skipped)}">(details)</span></div></div>${again}</div>`;
+      quality = `<div class="row" style="justify-content:space-between"><div><b>Quality check: ${r.skipped.startsWith("error") ? "didn't finish" : "not run"}</b><div class="note">${r.skipped.startsWith("error") ? "It tries again by itself within the hour, or press the button to try now." : /budget|browser time/i.test(r.skipped) ? "Skipped: this month's browser time is used up." : "Press the button to run it."} <span title="${esc(r.skipped)}">(details)</span></div></div>${again}</div>`;
     else quality = `<div class="row" style="justify-content:space-between"><div><b>Quality check: on its way</b><div class="note">A few minutes after a build we open the site on a desktop and a phone, score it, and list anything worth fixing.</div></div>${again}</div>`;
   }
   return `<section class="card step"><h2><span class="stepn">1</span>Look at it</h2>
@@ -436,7 +439,8 @@ ${issues
 function sendStep(d: Stored, links: { site: string }, extra: DemoExtra, n: number): string {
   const v = extra.views;
   const seen = v ? `Opened <b>${v.week}</b> time${v.week === 1 ? "" : "s"} in the last 7 days${v.today ? ` (<b>${v.today} today</b>)` : ""}${v.lastAt ? `, last on ${when(v.lastAt)}` : ""}.` : "Nobody has opened the link yet. We'll show it here when they do.";
-  return `<section class="card step"><h2><span class="stepn">${n}</span>Send it</h2>
+  const noPhone = d.intake.phone ? "" : `<div class="flash bad" role="status" style="margin:0"><b>Not ready to send yet:</b> this site has no phone number, so it has no call button. Add their phone under "Start over with a new design" (or "Request a change") before sending it.</div>`;
+  return `<section class="card step"><h2><span class="stepn">${n}</span>Send it</h2>${noPhone}
 <div class="share"><div class="share-row"><div><b>Website link</b><span>${esc(links.site)}</span></div><button class="btn" data-copy="${esc(links.site)}">Copy</button></div>
 ${extra.pitch ? `<div class="share-row"><div><b>Before &amp; after page</b><span>Their current website next to the new one, with scores. A strong thing to send first.</span></div><div class="row"><a class="btn ghost" href="${esc(extra.pitch)}" target="_blank" rel="noreferrer">Open ↗</a><button class="btn ghost" data-copy="${esc(extra.pitch)}">Copy</button></div></div>` : ""}</div>
 <p class="note" style="margin:0">${seen}</p></section>`;
