@@ -16,6 +16,9 @@ import {
   getQa,
   getReview,
   getSetting,
+  leadHistory,
+  leadStatusOf,
+  setLeadStatus,
   listDemos,
   listLeads,
   listOwnVideos,
@@ -211,7 +214,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
   // ---- Dashboard and demos -------------------------------------------------------------------
   if (path === "/" && req.method === "GET") {
     const [demos, views, usage] = await Promise.all([listDemos(env, s.tenant.id), viewStats(env, { tenantId: s.tenant.id }), tenantUsage(env, s.tenant.id)]);
-    return homePage(s, demos.map((d) => ({ ...d, views: views.get(d.slug) })), site, aiOn, usage, q("error"), q("ok"));
+    return homePage(s, demos.map((d) => ({ ...d, views: views.get(d.slug) })), site, aiOn, usage, q("error"), q("ok"), q("lead") ?? "");
   }
 
   // Several at once: one business per line (a name, "name | city", or a Google Maps link).
@@ -266,7 +269,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     }
   }
 
-  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/fix|\/replace|\/review|\/pairs)?$/);
+  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/fix|\/replace|\/review|\/pairs|\/lead)?$/);
   if (m) {
     const [, slug, action] = m;
     // Always scoped to this account: another account's demo is simply "not found".
@@ -284,7 +287,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
       ]);
       const pages = liveKit ? pagesOf(liveKit).map((p) => ({ name: p.name, path: p.path, url: `${site(slug)}${p.path === "/" ? "" : p.path}` })) : [];
       const total = (buildKit ? pagesOf(buildKit) : sitemapFor(demo.intake)).length;
-      const [review, views, qa] = await Promise.all([demo.liveVersion ? getReview(env, slug, demo.liveVersion) : null, viewStats(env, { slugs: [slug] }), demo.liveVersion ? getQa(env, slug, demo.liveVersion) : null]);
+      const [review, views, qa, leadLog] = await Promise.all([demo.liveVersion ? getReview(env, slug, demo.liveVersion) : null, viewStats(env, { slugs: [slug] }), demo.liveVersion ? getQa(env, slug, demo.liveVersion) : null, leadHistory(env, s.tenant.id, slug)]);
       return demoPage(s, demo, { site: site(slug), ghl: ghlLink(s.tenant.ghlPageUrl, slug), pages }, { done, total }, leads, q("ok"), q("error"), {
         review,
         qa,
@@ -292,7 +295,17 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
         pitch: review?.shots?.length ? `${site(slug)}/_pitch` : "",
         qr: qrSvg(site(slug)),
         idea: liveKit?.idea ?? null,
+        leadLog,
       });
+    }
+    if (action === "/lead" && post) {
+      const f = await req.formData();
+      const status = leadStatusOf(f.get("status"));
+      await setLeadStatus(env, s.tenant.id, slug, s.user.id, status, String(f.get("reason") ?? ""), String(f.get("note") ?? ""));
+      const fresh = await getDemo(env, slug, { tenantId: s.tenant.id });
+      ctx.waitUntil(deliver(env, s.tenant, "demo.lead_status", fresh).catch(() => ""));
+      const said = { new: "Marked as not sent yet.", sent: "Marked as sent.", replied: "Marked as replied.", won: "Marked as won.", lost: "Marked as lost. The reason is kept with the site." }[status];
+      return redirect(withMsg(`/demos/${slug}`, "ok", said));
     }
     if ((action === "/rewrite" || action === "/rebuild") && post) {
       try {

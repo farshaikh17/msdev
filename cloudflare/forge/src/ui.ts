@@ -1,7 +1,7 @@
 /** The Forge Demo screens: sign-in, set-up, invites, the dashboard and a demo. Plain HTML, no framework. */
 import { esc } from "../../../src/forge/render";
 import type { Intake } from "../../../src/forge/schema";
-import type { ChangeNote, Lead, Listed, Stored, ViewStat } from "./db";
+import { LEAD_LABELS, LEAD_STATUSES, LOST_REASONS, type ChangeNote, type Lead, type LeadChange, type LeadStatus, type Listed, type Stored, type ViewStat } from "./db";
 import type { Review } from "./review";
 import { QA_RULES, type QaResult, type QaRule } from "./qa";
 import { SWATCHES } from "./designer";
@@ -78,6 +78,9 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 .tag{font:600 .72rem var(--body);padding:3px 9px;border-radius:999px;background:var(--steel-soft);color:var(--steel)}
 .tag.bad{background:var(--bad-soft);color:var(--bad)}
 .tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.dim{background:var(--chrome);color:var(--muted)}
+.lead{font:600 .72rem var(--body);padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.lead.sent{color:var(--steel);border-color:var(--steel)}.lead.replied{color:var(--ember);border-color:var(--ember)}.lead.won{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}.lead.lost{color:var(--bad);border-color:var(--bad)}
+.leads-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.leads-bar a{text-decoration:none}.leads-bar a.on .lead{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 .credits{font:600 .78rem var(--body);padding:4px 10px;border-radius:999px;background:var(--steel-soft);color:var(--steel);max-width:100%;overflow-wrap:anywhere}
 .right{margin-left:auto}
 .hero-form{padding:28px;gap:18px;border-color:var(--ember);box-shadow:0 18px 50px -34px var(--ember)}
@@ -279,6 +282,33 @@ ${t("chatWidget", "Chat widget (GoHighLevel)", "Empty: the account's widget. Or 
 const stat = (label: string, value: string | number) => `<div class="card" style="gap:2px;padding:16px"><span class="note">${esc(label)}</span><b style="font:800 1.6rem var(--display)">${esc(String(value))}</b></div>`;
 
 /** One website on the home screen: a picture of it, its state in plain words, and the two things people do with it. */
+const leadPill = (st: LeadStatus) => `<span class="lead ${st}" title="Where this lead stands">${LEAD_LABELS[st]}</span>`;
+
+/** Counts of the account's sites by lead status, as filter links (the one shown is highlighted). */
+function leadsBar(demos: Listed[], on: string): string {
+  const count = (st: LeadStatus) => demos.filter((d) => d.leadStatus === st).length;
+  if (!demos.some((d) => d.leadStatus !== "new")) return "";
+  const link = (st: string, label: string, n: number) => `<a href="/${st ? `?lead=${st}` : ""}" class="${on === st ? "on" : ""}"><span class="lead ${st}">${label} · ${n}</span></a>`;
+  return `<div class="leads-bar"><span class="note">Leads:</span>${link("", "All", demos.length)}${LEAD_STATUSES.map((st) => link(st, LEAD_LABELS[st], count(st))).join("")}</div>`;
+}
+
+/** Where a site stands as a lead: change it in one press, with the reason when it's lost, and every change kept. */
+function leadCard(d: Stored, log: LeadChange[]): string {
+  const st = d.leadStatus;
+  const choice = (v: LeadStatus) => `<label class="choice"><input type="radio" name="status" value="${v}"${v === st ? " checked" : ""}><span>${LEAD_LABELS[v]}</span></label>`;
+  const history = log.length
+    ? `<ul class="note" style="margin:0;padding-left:18px;display:grid;gap:4px">${log
+        .map((c) => `<li><b>${LEAD_LABELS[c.status]}</b>${c.reason ? ` (${esc(c.reason)})` : ""} · ${when(c.at)} · ${esc(c.by)}${c.note ? `<br>“${esc(c.note)}”` : ""}</li>`)
+        .join("")}</ul>`
+    : "";
+  return `<form method="post" action="/demos/${esc(d.slug)}/lead" class="card" id="lead"><h2>Where this lead stands ${leadPill(st)}</h2>
+<p class="note" style="margin:0">Keep this up to date as you go: sent, replied, won or lost. When one is lost, say why, and write down anything they said in their words, above all every “this isn't us”. It's how we learn what to change.</p>
+<div class="look-row">${LEAD_STATUSES.map(choice).join("")}</div>
+<div class="grid"><label>If lost, why<select name="reason"><option value="">(choose)</option>${LOST_REASONS.map((r) => `<option>${esc(r)}</option>`).join("")}</select></label>
+<label class="full">What they said (optional)<input name="note" maxlength="1000" placeholder="e.g. Loved the photos, but we don't do emergency calls"></label></div>
+<div><button class="btn" type="submit">Save</button></div>${history}</form>`;
+}
+
 function siteCard(d: Listed, url: string): string {
   const state =
     d.buildStatus === "building"
@@ -293,17 +323,21 @@ function siteCard(d: Listed, url: string): string {
   const thumb = d.shot ? `<img loading="lazy" src="${esc(url)}/_img/${esc(d.shot)}/shot-desktop.jpg" alt="">` : `<span>${esc(d.businessName.slice(0, 1).toUpperCase())}</span>`;
   return `<article class="site-card"><a class="thumb" href="/demos/${esc(d.slug)}" aria-label="${esc(d.businessName)}">${thumb}</a>
 <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><div style="min-width:0"><a class="site-name" href="/demos/${esc(d.slug)}">${esc(d.businessName)}</a><div class="note">${esc([d.city, d.createdAt.slice(0, 10)].filter(Boolean).join(" · "))}</div></div>${state}</div>
-<div class="row"><a class="btn ghost" href="/demos/${esc(d.slug)}">Open</a><button class="btn ghost" data-copy="${esc(url)}">Copy link</button></div></article>`;
+<div class="row" style="justify-content:space-between"><div class="row"><a class="btn ghost" href="/demos/${esc(d.slug)}">Open</a><button class="btn ghost" data-copy="${esc(url)}">Copy link</button></div>${d.buildStatus === "ready" || d.leadStatus !== "new" ? leadPill(d.leadStatus) : ""}</div></article>`;
 }
 
-export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string): Response {
+export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string, leadFilter = ""): Response {
   const out = !s.tenant.unlimited && s.tenant.credits < 1;
   const reuse: ReuseChoice[] = demos
     .filter((d) => d.buildStatus === "ready" && d.shot)
     .slice(0, 12)
     .map((d) => ({ slug: d.slug, name: d.businessName, trade: d.industry, thumb: `${siteUrl(d.slug)}/_img/${d.shot}/shot-desktop.jpg` }));
-  const list = demos.length
-    ? `<div class="cards">${demos.map((d) => siteCard(d, siteUrl(d.slug))).join("")}</div>`
+  const on = (LEAD_STATUSES as readonly string[]).includes(leadFilter) ? leadFilter : "";
+  const shown = on ? demos.filter((d) => d.leadStatus === on) : demos;
+  const list = shown.length
+    ? `<div class="cards">${shown.map((d) => siteCard(d, siteUrl(d.slug))).join("")}</div>`
+    : demos.length
+      ? `<div class="card empty">No websites marked “${esc(LEAD_LABELS[on as LeadStatus])}” yet. <a href="/">Show all</a></div>`
     : `<div class="card empty">Your websites will appear here. Build the first one above: it takes one line.</div>`;
   return page(
     "Websites",
@@ -313,7 +347,7 @@ ${out ? `<div class="flash bad" role="alert">You have no builds left. Ask your F
 <p class="lead">Type the business name or paste its Google Maps link. That's all we need.${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template.)"}</p></div>
 ${fields(undefined, reuse)}
 <div class="row"><button class="btn ember big" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build website</button><span class="note">Ready in about 10–20 minutes. You can close this page; it keeps building.</span></div></form>
-<section style="display:grid;gap:14px"><h2>Your websites${demos.length ? ` (${demos.length})` : ""}</h2>${list}</section>
+<section style="display:grid;gap:14px"><h2>Your websites${demos.length ? ` (${demos.length})` : ""}</h2>${leadsBar(demos, on)}${list}</section>
 <details class="card"><summary>Have a list? Build several at once</summary><form method="post" action="/demos/bulk" style="display:grid;gap:14px">
 <label for="bulk">One business per line: <b>name | city | website or Facebook link | phone</b> (everything after the name is optional), or a Google Maps link (up to 25). Studio lines without a link are built as Standard.<textarea id="bulk" name="bulk" rows="6" placeholder="Joe's Plumbing | Tampa, FL | https://joesplumbing.com | (813) 555-0142&#10;Bright Smile Dental | Austin, TX | https://facebook.com/brightsmile&#10;https://maps.app.goo.gl/…"></textarea></label>
 <div class="look-row"><label class="choice"><input type="radio" name="style" value="standard" checked><span>Standard · 1 credit each</span></label><label class="choice"><input type="radio" name="style" value="studio"><span>Studio · ${STUDIO_CREDITS} credits each</span></label></div>
@@ -334,6 +368,8 @@ export interface DemoExtra {
   qr?: string;
   /** The idea a Studio site was built on (see brief.ts). */
   idea?: Idea | null;
+  /** The changes to its lead status, newest first. */
+  leadLog?: LeadChange[];
 }
 
 const checkList = (checks: { label: string; ok: boolean; detail?: string }[]) =>
@@ -513,6 +549,7 @@ ${next}
 ${lookStep(d, r, links, owner, extra.qa, extra.idea)}
 ${improve}
 ${sendStep(d, links, extra, improve ? 3 : 2)}
+${busy ? "" : leadCard(d, extra.leadLog ?? [])}
 <details class="card"><summary>More tools</summary><div style="display:grid;gap:16px;margin-top:12px">
 ${outreachCard(d, links, extra.qr ?? "", true)}
 ${viewsCard(extra.views)}

@@ -3,7 +3,8 @@
  * key (Authorization: Bearer fk_live_…). Every call works only on the key's own account.
  */
 import { Invalid, NoCredits, createDemo, noCreditsText, rawFields, startMessage } from "./demos";
-import { getDemo, getKit, listDemos, listLeads, recordAttempt, throttled, type Stored } from "./db";
+import { LEAD_STATUSES, LOST_REASONS, getDemo, getKit, leadHistory, listDemos, listLeads, recordAttempt, setLeadStatus, throttled, type LeadStatus, type Stored } from "./db";
+import { deliver } from "./webhook";
 import { pagesOf } from "./designer";
 import type { Env } from "./env";
 import { findApiKey, getTenant } from "./tenants";
@@ -26,7 +27,7 @@ export async function handleApi(req: Request, env: Env, path: string, sitesBase:
 
   if (path === "/api/v1/demos" && req.method === "GET") {
     const demos = await listDemos(env, tenant.id);
-    return json({ demos: demos.slice(0, 100).map((d) => ({ slug: d.slug, business_name: d.businessName, status: d.buildStatus === "building" ? "building" : d.buildStatus === "failed" ? "failed" : "ready", site_url: site(d.slug), created_at: d.createdAt })) });
+    return json({ demos: demos.slice(0, 100).map((d) => ({ slug: d.slug, business_name: d.businessName, status: d.buildStatus === "building" ? "building" : d.buildStatus === "failed" ? "failed" : "ready", site_url: site(d.slug), lead_status: d.leadStatus, created_at: d.createdAt })) });
   }
 
   if (path === "/api/v1/demos" && req.method === "POST") {
@@ -63,6 +64,29 @@ export async function handleApi(req: Request, env: Env, path: string, sitesBase:
     return json({ leads: (await listLeads(env, d.slug)).map((l) => ({ page: l.page, fields: l.fields, received_at: l.createdAt })) });
   }
 
+  const lead = path.match(/^\/api\/v1\/demos\/([a-z0-9-]{3,64})\/lead$/);
+  if (lead && req.method === "GET") {
+    const d = await getDemo(env, lead[1], { tenantId: tenant.id });
+    if (!d) return fail(404, "No demo with that slug on this account.");
+    return json({ lead_status: d.leadStatus, history: (await leadHistory(env, tenant.id, d.slug)).map((c) => ({ status: c.status, reason: c.reason, note: c.note, by: c.by, at: c.at })) });
+  }
+  if (lead && req.method === "POST") {
+    let body: Record<string, unknown>;
+    try {
+      body = (await req.json()) as Record<string, unknown>;
+    } catch {
+      return fail(400, 'Send a JSON object, e.g. {"status":"sent"}.');
+    }
+    const status = String(body?.status ?? "");
+    if (!(LEAD_STATUSES as readonly string[]).includes(status)) return fail(422, `status must be one of: ${LEAD_STATUSES.join(", ")}.`);
+    const reason = String(body.reason ?? "");
+    if (status === "lost" && reason && !(LOST_REASONS as readonly string[]).includes(reason)) return fail(422, `reason must be one of: ${LOST_REASONS.join(", ")}.`);
+    if (!(await setLeadStatus(env, tenant.id, lead[1], null, status as LeadStatus, reason, String(body.note ?? "")))) return fail(404, "No demo with that slug on this account.");
+    const d = await getDemo(env, lead[1], { tenantId: tenant.id });
+    await deliver(env, tenant, "demo.lead_status", d).catch(() => "");
+    return json({ lead_status: status });
+  }
+
   return fail(404, "Unknown API path. See the API page in the app.");
 }
 
@@ -73,6 +97,7 @@ async function demoJson(env: Env, d: Stored, siteUrl: string) {
     business_name: d.intake.businessName,
     status: d.buildStatus === "building" ? "building" : d.buildStatus === "failed" ? "failed" : d.liveVersion ? "ready" : "template",
     site_url: siteUrl,
+    lead_status: d.leadStatus,
     pages: kit ? pagesOf(kit).map((p) => ({ name: p.name, url: `${siteUrl}${p.path === "/" ? "" : p.path}` })) : [],
     ...(d.buildStatus === "failed" ? { error: d.buildError } : {}),
     created_at: d.createdAt,

@@ -9,6 +9,8 @@ import { parseKeywords, parseVideoUrls, type LibraryEntry } from "./hero";
 import { recordBuildCost, refundBuild } from "./tenants";
 
 interface Row {
+  lead_status?: string | null;
+  lead_at?: string | null;
   outreach?: string | null;
   change_note?: string | null;
   html: string | null;
@@ -48,7 +50,49 @@ export type Stored = Demo & {
   buildError: string;
   /** What the live design cost to build (US$) and how many Claude calls it took; null before the first build. */
   buildCost: { usd: number; calls: number } | null;
+  /** Where this demo stands as a sales lead, and when that last changed. */
+  leadStatus: LeadStatus;
+  leadAt: string | null;
 };
+
+/** A demo as a sales lead: not sent yet, sent, they replied, won or lost. */
+export const LEAD_STATUSES = ["new", "sent", "replied", "won", "lost"] as const;
+export type LeadStatus = (typeof LEAD_STATUSES)[number];
+export const LEAD_LABELS: Record<LeadStatus, string> = { new: "Not sent yet", sent: "Sent", replied: "Replied", won: "Won", lost: "Lost" };
+/** Why a lead was lost: kept short and fixed so they can be counted. "This isn't us" is the one to learn from. */
+export const LOST_REASONS = ["No answer", "Not interested", "Already has a website", "Too expensive", "This isn't us", "Other"] as const;
+export const leadStatusOf = (v: unknown): LeadStatus => (LEAD_STATUSES as readonly string[]).includes(String(v)) ? (v as LeadStatus) : "new";
+
+export interface LeadChange {
+  status: LeadStatus;
+  reason: string;
+  note: string;
+  by: string;
+  at: string;
+}
+
+/**
+ * Set where a demo stands as a lead, and log the change (who, when, why). Only on the account's own
+ * demo; returns false when there is no such demo. A reason is kept only for a lost lead.
+ */
+export async function setLeadStatus(env: Env, tenantId: number, slug: string, userId: number | null, status: LeadStatus, reason = "", note = ""): Promise<boolean> {
+  const at = new Date().toISOString();
+  const r = await env.DB.prepare("UPDATE demos SET lead_status = ?, lead_at = ? WHERE slug = ? AND tenant_id = ?").bind(status, at, slug, tenantId).run();
+  if (!r.meta.changes) return false;
+  const why = status === "lost" ? ((LOST_REASONS as readonly string[]).includes(reason) ? reason : "Other") : "";
+  await env.DB.prepare("INSERT INTO lead_log (slug, tenant_id, status, reason, note, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(slug, tenantId, status, why, note.trim().slice(0, 1000), userId, at).run();
+  return true;
+}
+
+/** The changes to a demo's lead status, newest first. */
+export async function leadHistory(env: Env, tenantId: number, slug: string): Promise<LeadChange[]> {
+  const { results } = await env.DB.prepare(
+    "SELECT l.status, l.reason, l.note, l.created_at, COALESCE(u.email, '') AS who FROM lead_log l LEFT JOIN users u ON u.id = l.user_id WHERE l.slug = ? AND l.tenant_id = ? ORDER BY l.id DESC LIMIT 50",
+  )
+    .bind(slug, tenantId)
+    .all<{ status: string; reason: string; note: string; created_at: string; who: string }>();
+  return results.map((r) => ({ status: leadStatusOf(r.status), reason: r.reason, note: r.note, by: r.who || "API", at: r.created_at }));
+}
 
 export interface Listed {
   buildStatus: string;
@@ -63,6 +107,8 @@ export interface Listed {
   shot?: string;
   /** No phone number was given: the site shouldn't be sent to anyone yet. */
   noPhone?: boolean;
+  /** Where it stands as a sales lead. */
+  leadStatus: LeadStatus;
 }
 
 /** A build that has made no progress this long was stopped by the platform (a queue job runs at most 15 minutes). */
@@ -104,6 +150,8 @@ function toDemo(r: Row): Stored {
     buildVersion: r.build_version ?? null,
     buildStage: r.build_stage === "kit" || r.build_stage === "pages" ? r.build_stage : null,
     buildCost: costFrom(r.build_usage),
+    leadStatus: leadStatusOf(r.lead_status),
+    leadAt: r.lead_at ?? null,
     buildStatus: stale ? "failed" : r.build_status === "building" || r.build_status === "failed" || r.build_status === "queued" ? r.build_status : "ready",
     outreach: parseJson<Outreach>(r.outreach),
     changeNote: parseJson<ChangeNote>(r.change_note),
@@ -147,7 +195,7 @@ export async function getDemo(env: Env, slug: string, opts: { tenantId?: number;
 
 export async function listDemos(env: Env, tenantId: number): Promise<Listed[]> {
   const { results } = await env.DB.prepare(
-    "SELECT slug, business_name, intake, content, created_at, updated_at, build_status, (SELECT v.version FROM site_versions v WHERE v.slug = demos.slug AND v.version = demos.live_version AND v.review LIKE '%shot-desktop.jpg%') AS shot FROM demos WHERE tenant_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 200",
+    "SELECT slug, business_name, intake, content, created_at, updated_at, build_status, lead_status, (SELECT v.version FROM site_versions v WHERE v.slug = demos.slug AND v.version = demos.live_version AND v.review LIKE '%shot-desktop.jpg%') AS shot FROM demos WHERE tenant_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 200",
   )
     .bind(tenantId)
     .all<Row & { shot: string | null }>();
@@ -155,7 +203,7 @@ export async function listDemos(env: Env, tenantId: number): Promise<Listed[]> {
     const intake = JSON.parse(r.intake) as { city?: string; phone?: string };
     const content = JSON.parse(r.content) as { industry?: string };
     const stale = r.build_status === "building" && Date.now() - Date.parse(r.updated_at ?? r.created_at) > STALE_MS;
-    return { buildStatus: stale ? "failed" : r.build_status, slug: r.slug, businessName: r.business_name, industry: content.industry ?? "", city: intake.city ?? "", createdAt: r.created_at, ...(r.shot ? { shot: r.shot } : {}), ...(intake.phone ? {} : { noPhone: true }) };
+    return { buildStatus: stale ? "failed" : r.build_status, slug: r.slug, businessName: r.business_name, industry: content.industry ?? "", city: intake.city ?? "", createdAt: r.created_at, leadStatus: leadStatusOf(r.lead_status), ...(r.shot ? { shot: r.shot } : {}), ...(intake.phone ? {} : { noPhone: true }) };
   });
 }
 

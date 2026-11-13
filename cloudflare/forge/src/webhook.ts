@@ -32,7 +32,7 @@ async function sign(secret: string, message: string): Promise<string> {
   return [...new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message)))].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export type WebhookEvent = "demo.ready" | "demo.failed" | "demo.viewed" | "lead.created" | "ping";
+export type WebhookEvent = "demo.ready" | "demo.failed" | "demo.viewed" | "demo.lead_status" | "lead.created" | "ping";
 
 /** Sent with demo.viewed: the first time a demo is opened each day. */
 export interface ViewInfo {
@@ -64,6 +64,7 @@ export async function webhookBody(env: Env, event: WebhookEvent, demo: Stored | 
           status: demo.buildStatus === "failed" ? "failed" : demo.liveVersion ? "ready" : "building",
           site_url: `${base}/${demo.slug}`,
           pages,
+          lead_status: demo.leadStatus ?? "new",
           ...(demo.buildStatus === "failed" ? { error: demo.buildError } : {}),
         }
       : null,

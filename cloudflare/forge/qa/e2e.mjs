@@ -175,6 +175,16 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
     // The quality check and change box need a Claude-built site; a template draft (no AI key here) has neither, by design.
     const ai = t.includes("Designed by Claude"); const changeBox = t.includes(`/demos/${slug}/change"`); ok(ai ? t.includes("Quality check") && changeBox : !changeBox, "sections don't match the site type");
   });
+  await step("owner marks the lead as sent, then lost with a reason; the dashboard counts and filters it", async () => {
+    await op.goto(`${BASE}/demos/${slug}`); ok(await op.isVisible("#lead"), "lead card missing");
+    await op.click("#lead label.choice:has(input[value=sent])"); await op.click("#lead button[type=submit]");
+    ok((await op.content()).includes("Marked as sent"), "no confirmation");
+    await op.click("#lead label.choice:has(input[value=lost])"); await op.selectOption("#lead select[name=reason]", "This isn't us"); await op.fill("#lead input[name=note]", "Not our style"); await op.click("#lead button[type=submit]");
+    const t = await op.content(); ok(t.includes("Not our style") && t.includes("This isn"), "history missing"); await op.locator("#lead").screenshot({ path: SHOTS + "/qa-app-lead.png" });
+    await op.goto(`${BASE}/`); ok((await op.content()).includes("Lost · 1"), "dashboard count missing");
+    await op.goto(`${BASE}/?lead=lost`); ok((await op.content()).includes(`/demos/${slug}`), "filter lost the site");
+    await op.goto(`${BASE}/?lead=won`); ok(!(await op.content()).includes(`href="/demos/${slug}"`), "filter shows the wrong site");
+  });
   await step("a real visitor is counted; a headless bot is not", async () => {
     const c = await browser.newContext({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", viewport: { width: 390, height: 844 } });
     const v = await c.newPage(); await v.goto(`${BASE}/s/${slug}`); await v.waitForTimeout(800); await c.close();
