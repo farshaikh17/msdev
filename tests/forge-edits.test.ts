@@ -68,3 +68,42 @@ describe("page revisions", () => {
     expect(((requests[0]!.messages as { content: { text: string }[] }[])[0]!.content[1]!.text)).not.toContain("Reply with ONLY the changes");
   });
 });
+
+describe("Studio inner pages on Workers AI", () => {
+  const studioKit = { ...kit, style: "studio", pages: [...(kit.pages as never[]), { path: "/about", name: "About", kind: "ai", brief: "About." }] } as unknown as Kit;
+  const about = { path: "/about", name: "About", kind: "ai", brief: "About." } as never;
+  const ai = (reply: unknown) => {
+    const calls: { model: string; input: Record<string, unknown> }[] = [];
+    return { calls, AI: { run: async (model: string, input: Record<string, unknown>) => (calls.push({ model, input }), typeof reply === "function" ? (reply as () => unknown)() : reply) } };
+  };
+
+  it("writes them with DeepSeek, thinking off, and counts what it cost", async () => {
+    const w = ai({ choices: [{ message: { content: "@@@ TITLE\nAbout\n@@@ MAIN\n<main><h1>About us</h1></main>" }, finish_reason: "stop" }], usage: { prompt_tokens: 20000, completion_tokens: 5000, neurons: 1200 } });
+    const r = await designSitePage({ ...env, AI: w.AI } as never, studioKit, about, {});
+    expect(r.page.body).toBe("<main><h1>About us</h1></main>");
+    expect(requests).toHaveLength(0); // Claude wasn't called
+    expect(w.calls[0]!.model).toBe("@cf/deepseek-ai/deepseek-v4.1-flash-1017");
+    expect(w.calls[0]!.input.chat_template_kwargs).toEqual({ thinking: false });
+    expect((r.usage as { cost_usd: number }).cost_usd).toBeCloseTo(0.0132, 4);
+  });
+
+  it("falls back to Sonnet when Workers AI fails, runs out of room, or replies in the wrong shape", async () => {
+    for (const bad of [() => { throw new Error("3040: capacity"); }, { choices: [{ message: { content: "@@@ MAIN\n<main><h1>Half" }, finish_reason: "length" }] }, { choices: [{ message: { content: "Sure! Here is a page." }, finish_reason: "stop" }] }]) {
+      requests.length = 0;
+      replies.push("@@@ TITLE\nAbout\n@@@ MAIN\n<main><h1>From Sonnet</h1></main>");
+      const r = await designSitePage({ ...env, AI: ai(bad).AI } as never, studioKit, about, {});
+      expect(r.page.body).toContain("From Sonnet");
+      expect(requests[0]!.model).toBe("claude-sonnet-5-5");
+    }
+  });
+
+  it("can be switched back to Sonnet, and never touches the home page or Standard sites", async () => {
+    replies.push("@@@ MAIN\n<main><h1>S</h1></main>", "@@@ MAIN\n<main><h1>H</h1></main>", "@@@ MAIN\n<main><h1>Std</h1></main>");
+    const w = ai({});
+    await designSitePage({ ...env, AI: w.AI, FORGE_INNER_MODEL: "claude" } as never, studioKit, about, {});
+    await designSitePage({ ...env, AI: w.AI } as never, studioKit, spec, {});
+    await designSitePage({ ...env, AI: w.AI } as never, kit, about, {});
+    expect(w.calls).toHaveLength(0);
+    expect(requests.map((q) => q.model)).toEqual(["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"]);
+  });
+});

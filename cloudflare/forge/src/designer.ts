@@ -22,6 +22,30 @@ export const MODEL = "claude-opus-5-5";
 export const PAGE_MODEL = "claude-haiku-5-5";
 /** Studio sites write their inner pages on Sonnet: more design judgement than Haiku, a fraction of Opus. */
 export const STUDIO_PAGE_MODEL = "claude-sonnet-5-5";
+/**
+ * Studio inner pages are written on Cloudflare Workers AI (DeepSeek V4.1 Flash, thinking off): tested
+ * on the same input, as full as Sonnet's pages at about a quarter of the cost, and billed to Cloudflare.
+ * FORGE_INNER_MODEL picks another Workers AI model, or "claude" to go back to Sonnet. Any failure falls back to Sonnet.
+ */
+export const CF_INNER_MODEL = "@cf/deepseek-ai/deepseek-v4.1-flash-1017";
+const WORKERS_AI_USD_PER_NEURON = 0.011 / 1000;
+
+/** One call to a Workers AI text model, shaped like ask()'s result (thinking off: it can otherwise spend the whole budget thinking). */
+export async function askWorkersAi(env: Env, model: string, system: string, prompt: string, maxTokens: number): Promise<{ text: string; usage: Record<string, unknown>; cut: boolean }> {
+  if (!env.AI) throw new Error("no Workers AI binding");
+  const out = (await env.AI.run(model, { messages: [{ role: "system", content: system }, { role: "user", content: prompt }], max_tokens: Math.min(maxTokens, 24000), chat_template_kwargs: { thinking: false } })) as {
+    response?: string;
+    choices?: { message?: { content?: string | null }; finish_reason?: string }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number; neurons?: number };
+  };
+  const text = out.choices?.[0]?.message?.content ?? out.response ?? "";
+  const u = out.usage ?? {};
+  return {
+    text,
+    usage: { model, input_tokens: u.prompt_tokens ?? 0, output_tokens: u.completion_tokens ?? 0, neurons: u.neurons ?? 0, cost_usd: (u.neurons ?? 0) * WORKERS_AI_USD_PER_NEURON },
+    cut: out.choices?.[0]?.finish_reason === "length",
+  };
+}
 export type Style = "standard" | "studio";
 
 /** US$ per million tokens (Anthropic list prices; cache writes are 1.25x input, reads 0.1x on Haiku). */
@@ -1036,6 +1060,18 @@ export async function designSitePage(env: Env, kit: Kit, page: PageSpec, rev: Pa
 /** One call that writes a page (whole) or its edits. */
 async function writePage(env: Env, kit: Kit, page: PageSpec, rev: PageRevision, edit: boolean): Promise<{ text: string; usage: Record<string, unknown>; cut: boolean }> {
   const r = pageRequest(env, kit, page, rev, edit);
+  if (r.model.startsWith("@cf/")) {
+    try {
+      const out = await askWorkersAi(env, r.model, r.system, `${r.shared}\n\n${r.task}`, r.maxTokens);
+      // Only a reply that finished, in the shape asked for, is kept; anything else goes to Sonnet.
+      const ok = edit ? parseEdits(out.text).length > 0 : !out.cut && /<\/main>/i.test(parseParts(out.text).MAIN ?? "");
+      if (ok) return out;
+      console.log("workers ai reply unusable; using Sonnet", page.path, out.cut ? "cut" : "shape");
+    } catch (e) {
+      console.log("workers ai failed; using Sonnet", page.path, e instanceof Error ? e.message : String(e));
+    }
+    r.model = STUDIO_PAGE_MODEL;
+  }
   return ask(
     env,
     [
@@ -1097,7 +1133,8 @@ ${page.brief}${current}${notes}${change}${adapt}${first}${only}${edit ? `\n\n## 
   // The home page is the showcase, so it gets the design model; the rest follow the kit on the cheaper one.
   const home = page.path === "/";
   const studio = kit.style === "studio";
-  const model = rev.cheap ? STUDIO_PAGE_MODEL : home && !kit.reuse ? env.CLAUDE_MODEL || MODEL : home ? STUDIO_PAGE_MODEL : studio ? STUDIO_PAGE_MODEL : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
+  const cfInner = env.FORGE_INNER_MODEL === "claude" ? "" : env.FORGE_INNER_MODEL?.startsWith("@cf/") ? env.FORGE_INNER_MODEL : CF_INNER_MODEL;
+  const model = rev.cheap ? STUDIO_PAGE_MODEL : home && !kit.reuse ? env.CLAUDE_MODEL || MODEL : home ? STUDIO_PAGE_MODEL : studio ? (env.AI && cfInner ? cfInner : STUDIO_PAGE_MODEL) : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
   return {
     shared,
     task,

@@ -14,6 +14,8 @@ export interface Env {
   FORGE_ART_PASS?: string;
   /** "on" brings back the automatic rewrite after a quality check on sites without the art pass (off by default: it cost about $0.40 a time). */
   FORGE_AUTO_FIX?: string;
+  /** The Workers AI model for Studio inner pages (default DeepSeek V4.1 Flash), or "claude" for Sonnet. */
+  FORGE_INNER_MODEL?: string;
   /** Overrides the model for the inner pages (default claude-haiku-5-5; the design kit and home page use CLAUDE_MODEL). */
   CLAUDE_PAGE_MODEL?: string;
   /** Overrides the design model's effort: low (default), medium or high. Higher costs more. */
