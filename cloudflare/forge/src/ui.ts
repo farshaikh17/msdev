@@ -9,6 +9,7 @@ import type { Session } from "./auth";
 import { STUDIO_CREDITS, buildCost, type Usage } from "./tenants";
 import { CONCEPTS } from "./concepts";
 import { HEROES } from "./heroes";
+import type { Idea } from "./brief";
 import { ic } from "./web-ui";
 
 const THEME_BOOT = `(function(){var d=document.documentElement,t;try{t=localStorage.getItem("forge-theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";d.setAttribute("data-theme",t)})()`;
@@ -328,6 +329,8 @@ export interface DemoExtra {
   pitch?: string;
   /** Inline SVG QR code for the site link. */
   qr?: string;
+  /** The idea a Studio site was built on (see brief.ts). */
+  idea?: Idea | null;
 }
 
 const checkList = (checks: { label: string; ok: boolean; detail?: string }[]) =>
@@ -371,7 +374,13 @@ function qaBlock(qa: QaResult | null | undefined): string {
     .join("")}</ul></details></div>`;
 }
 
-function lookStep(d: Stored, r: Review | null | undefined, links: { site: string }, owner: boolean, qa?: QaResult | null): string {
+/** The idea a Studio site was built on, so anyone can read why it looks the way it does. */
+function ideaBlock(i: Idea | null | undefined): string {
+  if (!i) return "";
+  return `<details class="idea"><summary><b>The idea behind this design:</b> ${esc(i.idea)}</summary><div class="note" style="display:grid;gap:6px;margin-top:8px;max-width:72ch">${i.headline ? `<div><b>Headline:</b> "${esc(i.headline)}"</div>` : ""}<div><b>Built on:</b> ${esc(i.truth)}</div><div><b>From:</b> ${esc(i.evidence)}</div><div><b>It refuses:</b> ${esc(i.refuses)}</div>${i.why ? `<div><b>Why this idea:</b> ${esc(i.why)}</div>` : ""}</div></details>`;
+}
+
+function lookStep(d: Stored, r: Review | null | undefined, links: { site: string }, owner: boolean, qa?: QaResult | null, idea?: Idea | null): string {
   const again = owner && d.liveVersion ? `<form method="post" action="/demos/${esc(d.slug)}/review"><button class="btn ghost" type="submit" data-busy="Queued…">${r ? "Check again" : "Check it now"}</button></form>` : "";
   let quality = "";
   if (d.liveVersion) {
@@ -383,7 +392,7 @@ function lookStep(d: Stored, r: Review | null | undefined, links: { site: string
   return `<section class="card step"><h2><span class="stepn">1</span>Look at it</h2>
 <iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(d.intake.businessName)}"></iframe>
 <div class="row"><a class="btn" href="${esc(links.site)}" target="_blank" rel="noreferrer">Open the full site ↗</a><span class="note">Check it on your phone too.</span></div>
-${quality}${qaBlock(qa)}</section>`;
+${ideaBlock(idea)}${quality}${qaBlock(qa)}</section>`;
 }
 
 /** Step 2: fix what the check found (one press each), or ask for anything else. */
@@ -497,7 +506,7 @@ export function demoPage(
       s.user.role === "admin" && d.buildCost ? ` · built for <b>$${d.buildCost.usd.toFixed(2)}</b> (${d.buildCost.calls} Claude calls)` : ""
     }</p></div>
 ${next}
-${lookStep(d, r, links, owner, extra.qa)}
+${lookStep(d, r, links, owner, extra.qa, extra.idea)}
 ${improve}
 ${sendStep(d, links, extra, improve ? 3 : 2)}
 <details class="card"><summary>More tools</summary><div style="display:grid;gap:16px;margin-top:12px">

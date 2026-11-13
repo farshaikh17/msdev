@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../cloudflare/forge/src/index";
 import { adaptKit, designKit, designSitePage, planSite, systemFor, Fatal, TryLater } from "../cloudflare/forge/src/designer";
+import { writeBrief } from "../cloudflare/forge/src/brief";
 import { MOTION_LIBS } from "../cloudflare/forge/src/motion";
 import { getDemo, getKit, getPage, pagesDone, saveReview } from "../cloudflare/forge/src/db";
 import { assemble } from "../cloudflare/forge/src/site";
@@ -27,6 +28,11 @@ vi.mock("../cloudflare/forge/src/images", () => ({
     { name: "photo-2.jpg", description: "a shop front", bytes: new Uint8Array([4, 5, 6]) },
   ]),
 }));
+// The brief calls Claude; in these tests it is faked (a test below gives it a real reply to follow through).
+vi.mock("../cloudflare/forge/src/brief", async (orig) => {
+  const real = await orig<typeof import("../cloudflare/forge/src/brief")>();
+  return { ...real, writeBrief: vi.fn(async () => { throw new Error("no brief in tests"); }) };
+});
 vi.mock("../cloudflare/forge/src/scrape", () => ({ readWebsite: vi.fn() }));
 
 type Job = BuildJob | VideoJob;
@@ -322,6 +328,22 @@ describe("Studio builds", () => {
       expect(page).toContain("--m-accent:#aa3333");
       expect(page).toContain("m-curtain");
     }
+  });
+
+  it("writes the brief first: its idea picks the look and the first screen, leads the design and is kept with the site", async () => {
+    const concept = { lens: "name", truth: "A barber shop named for its street.", evidence: '"Studio Barbers"', idea: "The chair as the town's front porch.", refuses: "No stock fades.", headline: "Pull up a chair.", look: "americana - sign-painter craft", firstScreen: "breakout - the barber leans out of the frame", object: "none", moment: "none" };
+    vi.mocked(writeBrief).mockResolvedValueOnce({ tier: "none", concepts: [concept], chosen: 0, why: "Only this shop", invented: [], cost: 0.05 });
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 5);
+    const slug = slugOf(await studio(b.cookie, "Studio Barbers"));
+    await drain(h);
+    const call0 = vi.mocked(designKit).mock.calls[0]!;
+    expect(call0[4]).toBe("americana");
+    expect(call0[6]).toBe("breakout");
+    expect(call0[7]).toMatchObject({ idea: "The chair as the town's front porch.", why: "Only this shop" });
+    expect(call0[2][0]!.brief).toContain("in the order its idea gives");
+    expect(call0[2][0]!.brief).not.toContain("data-perch");
+    expect((await getDemo(h.env, slug))!.buildStatus).toBe("ready");
   });
 
   it("a site built on another site's design costs one credit and skips the fresh design", async () => {

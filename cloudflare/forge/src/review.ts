@@ -12,6 +12,7 @@
  */
 import { conceptById } from "./concepts";
 import { heroById } from "./heroes";
+import { ownScreen } from "./brief";
 import Anthropic from "@anthropic-ai/sdk";
 import { getDemo, getKit, getPage, getReview, getSetting, saveImage, savePage, saveReview, setSetting } from "./db";
 import { costOf, designSitePage, pagesOf, type Kit } from "./designer";
@@ -27,6 +28,14 @@ const FIX_BELOW = 7;
 /** A Studio site has to be exceptional, so it is rewritten below this. */
 const FIX_BELOW_STUDIO = 8;
 /** A first screen scoring this or better (with nothing measured wrong) is built on as it is. */
+/** What a site's first screen should be, for the critique: its signature hero, the screen its idea described, or the look's own. */
+function firstScreenWanted(kit: Kit, sig: ReturnType<typeof heroById>, look: { hero: string }): string {
+  const idea = kit.idea ? ` It is built on this idea: ${kit.idea.idea}` : "";
+  if (sig) return `the "${sig.name}" signature hero: ${sig.check}, in the site's own type and colours.${idea}`;
+  if (kit.hero === "own" && kit.idea) return `the first screen its idea describes: ${ownScreen(kit.idea)}.${idea}`;
+  return `${look.hero}${idea}`;
+}
+
 export const HERO_GOOD = 8;
 
 export interface Check {
@@ -87,6 +96,10 @@ interface PageFacts {
   /** Scroll-driven motion on the page: pictures with parallax, pinned sequences, scrubbed statements. */
   parallax?: number;
   pins?: number;
+  /** Held scroll pieces (pinned scenes, sideways galleries, stacking cards, brand moments), brightening statements and running bands. */
+  held?: number;
+  brighten?: number;
+  bands?: number;
   scrubs?: number;
   eyebrows?: number;
   accentWord?: boolean;
@@ -111,6 +124,9 @@ export const FACTS = `(() => ({
   parallax: document.querySelectorAll("main [data-parallax], main [data-perch], main .hero-subject").length,
   pins: document.querySelectorAll("main [data-pin] [data-pin-stage], main [data-horizontal] [data-horizontal-track], main [data-stack]").length,
   scrubs: document.querySelectorAll("main [data-scrub-text], main [data-write]").length,
+  held: document.querySelectorAll("main [data-pin] [data-pin-stage], main [data-horizontal] [data-horizontal-track], main [data-stack], main [data-mask-zoom], main [data-particles]").length,
+  brighten: document.querySelectorAll("main [data-scrub-text]").length,
+  bands: document.querySelectorAll("main [data-marquee]").length,
   eyebrows: Array.from(document.querySelectorAll("main h1, main h2, main h3")).filter((h) => { const p = h.previousElementSibling; if (!p || !(p.innerText || "").trim() || (p.innerText || "").length > 70 || /^H[1-6]$/.test(p.tagName)) return false; const c = getComputedStyle(p); return c.textTransform === "uppercase" && parseFloat(c.letterSpacing) >= 1 && parseFloat(c.fontSize) <= 16; }).length,
   accentWord: (() => { const h = document.querySelector("main h1"); if (!h) return false; const b = getComputedStyle(h); return Array.from(h.querySelectorAll("em, i, span, strong, mark, u")).some((e) => { if (!(e.innerText || "").trim() || e.closest(".m-line-mask, .m-line, .m-char, .m-word") === e || /^m-/.test(e.className || "")) return false; const c = getComputedStyle(e); return c.color !== b.color || c.fontStyle !== b.fontStyle; }); })(),
   h1Words: ((document.querySelector("main h1") || {}).innerText || "").split(/\\s+/).filter(Boolean).length,
@@ -196,7 +212,7 @@ export async function reviewHero(env: Env, slug: string, version: string, kit: K
     ].filter((x): x is string => typeof x === "string");
     const look = conceptById(kit.concept);
     const sig = heroById(kit.hero);
-    const direction = look ? `\n\nThis is ONLY the first screen of the home page; the rest isn't written yet, so don't mark it down for missing sections, reviews or a form. Its art direction is "${look.name}". The first screen should be: ${sig ? `the "${sig.name}" signature hero: ${sig.check}, in the art direction's type and colours` : look.hero}\nRuled out for it: ${look.never}\nIf it doesn't match that description (for example it is a big headline over a darkened full-bleed photo when the direction says otherwise), say so as a high-severity issue with the fix, and score no higher than 6.` : "\n\nThis is ONLY the first screen of the home page; the rest isn't written yet.";
+    const direction = look ? `\n\nThis is ONLY the first screen of the home page; the rest isn't written yet, so don't mark it down for missing sections, reviews or a form. Its art direction is "${look.name}". The first screen should be: ${firstScreenWanted(kit, sig, look)}\nRuled out for it: ${look.never}\nIf it doesn't match that description (for example it is a big headline over a darkened full-bleed photo when the direction says otherwise), say so as a high-severity issue with the fix, and score no higher than 6.` : "\n\nThis is ONLY the first screen of the home page; the rest isn't written yet.";
     const crit = await deps.critique(env, { desktop, phone }, `${measured.length ? measured.map((m) => `- FAILED: ${m}`).join("\n") : "- The measured checks passed."}${direction}`, true);
     const notes = [...measured, ...crit.issues.filter((i) => i.severity !== "low").map((i) => `${i.what} → ${i.fix}`)];
     return { score: crit.score, notes: crit.score >= HERO_GOOD && !measured.length ? [] : notes, costUsd: crit.costUsd };
@@ -447,8 +463,16 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
       !!demo.intake.phone,
     );
     if (kit.style === "studio") {
-      const moving = (dFacts.parallax ?? 0) >= 3 && (dFacts.pins ?? 0) >= 1 && (dFacts.scrubs ?? 0) >= 1;
-      checks.push({ id: "scroll-motion", label: "The page moves as it is scrolled", ok: moving, detail: moving ? undefined : `${dFacts.parallax ?? 0} moving pictures, ${dFacts.pins ?? 0} pinned sequences, ${dFacts.scrubs ?? 0} scrubbed statements; a Studio page needs at least 3, 1 and 1 (see the scroll floor)` });
+      if (kit.idea) {
+        // Built on an idea: at least three kinds of scroll motion, one of them a held piece, chosen by the idea (not the same trio every time).
+        const kinds = { held: (dFacts.held ?? 0) > 0, brighten: (dFacts.brighten ?? 0) > 0, drift: (dFacts.parallax ?? 0) >= 2, band: (dFacts.bands ?? 0) > 0 };
+        const n = Object.values(kinds).filter(Boolean).length;
+        const moving = kinds.held && n >= 3;
+        checks.push({ id: "scroll-motion", label: "The page moves as it is scrolled", ok: moving, detail: moving ? undefined : `${n} kind${n === 1 ? "" : "s"} of scroll motion${kinds.held ? "" : ", none of them held (a pinned scene, a sideways gallery, stacking cards or the brand moment)"}; a Studio page needs at least three, one of them held` });
+      } else {
+        const moving = (dFacts.parallax ?? 0) >= 3 && (dFacts.pins ?? 0) >= 1 && (dFacts.scrubs ?? 0) >= 1;
+        checks.push({ id: "scroll-motion", label: "The page moves as it is scrolled", ok: moving, detail: moving ? undefined : `${dFacts.parallax ?? 0} moving pictures, ${dFacts.pins ?? 0} pinned sequences, ${dFacts.scrubs ?? 0} scrubbed statements; a Studio page needs at least 3, 1 and 1 (see the scroll floor)` });
+      }
     }
     checks.splice(2, 0, { id: "overflow-inner", label: "Other pages fit a phone screen", ok: !wide.length, detail: wide.length ? wide.map((x) => `${x.path} is ${x.px}px too wide`).join(", ") : undefined });
 
@@ -484,7 +508,7 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     // A Studio site is judged against its own art direction, so one that drifts to the generic layout is marked down.
     const look = studio ? conceptById(kit.concept) : undefined;
     const sig = heroById(kit.hero);
-    const direction = look ? `\n\nThis site's art direction is "${look.name}". Its first screen should be: ${sig ? `the "${sig.name}" signature hero: ${sig.check}, in the art direction's type and colours` : look.hero}\nRuled out for it: ${look.never}\nIf the first screen doesn't match that description (for example it is a big headline over a darkened full-bleed photo when the direction says otherwise), say so as a high-severity issue with the fix, and score no higher than 6.` : "";
+    const direction = look ? `\n\nThis site's art direction is "${look.name}". Its first screen should be: ${firstScreenWanted(kit, sig, look)}\nRuled out for it: ${look.never}\nIf the first screen doesn't match that description (for example it is a big headline over a darkened full-bleed photo when the direction says otherwise), say so as a high-severity issue with the fix, and score no higher than 6.` : "";
     const crit = await deps.critique(env, { desktop, phone }, facts + direction, studio);
     review = { at, ...(wide.length ? { wide } : {}), score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues, checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
 

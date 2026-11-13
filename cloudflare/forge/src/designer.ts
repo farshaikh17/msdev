@@ -9,6 +9,7 @@ import { splitList, parseReviews } from "../../../src/forge/copy";
 import { GENERIC, presetFor } from "../../../src/forge/presets";
 import { profileFor, type Profile } from "./profiles";
 import { heroById, studioExtras } from "./heroes";
+import { ideaBlock, ownScreen, type Idea } from "./brief";
 import type { Intake } from "../../../src/forge/schema";
 import type { Env } from "./env";
 import { conceptById, type Draw } from "./concepts";
@@ -327,9 +328,36 @@ export async function planPairs(env: Env, i: Intake): Promise<{ pairs: { before:
  * A Studio home page: what it must contain, and the order and layout of its scenes, which come
  * from the art direction (so two Studio sites don't share a skeleton).
  */
-export function studioHome(pages: PageSpec[], conceptId: string, draw?: Draw, heroId?: string, slug = ""): string {
+/** The first screen a brief described for itself ("own"), as a spec the writer can build. */
+export const ownHero = (idea: Idea) =>
+  `THIS SITE'S OWN FIRST SCREEN, as its idea describes it: ${ownScreen(idea)}\nBuild it with our motion engine's attributes only (no scripts of your own). If it needs a photograph or video, our system supplies it: put exactly <div class="hero-motion" aria-hidden="true"></div> (empty, unstyled) as the first child of the element the picture belongs in, which has position:relative, overflow:hidden and its own size. The headline, one sentence and the primary button fit in the first screen at 1440x900 and at 390x844.`;
+
+/** A Studio home page built on a brief: the idea's story sets the order; the look's scenes are layouts to draw on. */
+function ideaHome(pages: PageSpec[], c: ReturnType<typeof conceptById>, sig: ReturnType<typeof heroById>, heroId: string | undefined, slug: string, idea: Idea): string {
+  const by = (role: PageSpec["role"], path: string) => pages.find((p) => p.role === role) ?? pages.find((p) => p.path === path);
+  const index = by("index", "/services");
+  const items = pages.filter((p) => (pages.some((x) => x.role === "index") ? p.role === "item" : p.path.startsWith("/services/")));
+  const cta = by("cta", "/quote");
+  const visit = by("visit", "/areas");
+  const first = heroId === "own" ? ownHero(idea) : sig ? `${sig.spec}\nThis site's idea supplies its words, colour and lettering.` : c ? `${c.hero}\n(One way this direction opens; reshape it to serve the idea.)` : "A first screen that states the idea at a glance.";
+  return `Compose the home page to tell this site's story, in the order its idea gives (the story screen by screen, in your instructions). Each screen does one job for the idea; drop anything that does not serve it.
+
+First screen: ${first}
+The primary button is "${cta?.name ?? "Get a Quote"}" → ${cta?.path ?? "/quote"}; the phone is a tel: link.
+${c ? `\nLayouts you may use for the scenes (one way the "${c.name}" direction has been used; pick, reshape or beat them, and build each scene with the same care):\n${c.scenes.map((s) => `- ${s}`).join("\n")}\n` : ""}
+What the home page must carry (fit each where the story puts it):
+- What the business offers: every one of ${items.map((p) => `${p.name} → ${p.path}`).join("; ")}, each linking to its page, and a link to ${index?.name ?? "Services"} → ${index?.path ?? "/services"}.
+- Proof: real reviews if given, otherwise clearly-labelled samples (linking to /reviews), or whatever true thing the idea rests on.
+- Where to find it: the real map embed from the facts, linking to ${visit?.name ?? "Service Areas"} → ${visit?.path ?? "/areas"}.
+- The action: a visible form for "${cta?.name ?? "Get a Quote"}" with the privacy note.
+The story, how it works, photographs and questions have their own pages (/about, /gallery, /faq): link to them, and give them a scene here only if the idea's story calls for it. If illustrative before/after pairs are in the facts, show them where the story talks about the work.
+${c ? `\nMotion for this direction: ${c.moves}\nRuled out for this direction (it yields where the idea needs otherwise): ${c.never}` : ""}${slug ? studioExtras(heroId, slug, idea) : ""}`;
+}
+
+export function studioHome(pages: PageSpec[], conceptId: string, draw?: Draw, heroId?: string, slug = "", idea?: Idea): string {
   const c = conceptById(conceptId);
   const sig = heroById(heroId);
+  if (idea) return ideaHome(pages, c, sig, heroId, slug, idea);
   if (!c) return pages[0]?.brief ?? "";
   const order = draw?.order ?? c.scenes.map((_, i) => i);
   const by = (role: PageSpec["role"], path: string) => pages.find((p) => p.role === role) ?? pages.find((p) => p.path === path);
@@ -477,18 +505,75 @@ ${MOTION_API}`;
 
 export const ART_DIRECTION_FALLBACK = `Art direction first. Choose ONE strong concept that suits this business and commit to it on every page: editorial (oversized serif, asymmetric grids), kinetic (giant condensed grotesk, hard colour blocks), cinematic (near-black, full-bleed imagery, grain), or playful (chunky rounded type, bright colour). Pair the display face with a clean text face.`;
 
-const artDirection = (concept?: string, heroId?: string) => {
+const artDirection = (concept?: string, heroId?: string, idea?: Idea) => {
   const c = conceptById(concept);
   const sig = heroById(heroId);
+  if (idea) return ideaDirection(c, sig, heroId, idea);
   return c
     ? `## Art direction for this site (fixed: hold every page to it)\n${c.brief}\n\nThe home page's first screen: ${sig ? `the signature hero "${sig.name}", exactly as its spec in the home page's brief describes (it outranks the direction's own first-screen idea; the direction supplies its material: type, colour, texture, frames). Build its component styles in the kit` : c.hero}\nThis replaces the general rule about a full-bleed hero with a gradient overlay. Our system still supplies the moving picture (unless the signature hero's spec gives the first screen no picture, as the flying object's does: then follow the spec and leave the layer out): put exactly <div class="hero-motion" aria-hidden="true"></div> (empty, unstyled) as the FIRST child of the element the picture belongs in, which must have position:relative and overflow:hidden and its own size or aspect ratio. For a full-screen picture that element is the hero section itself; for a framed picture it is the frame, and then no overlay goes on it.\n\nMotion for this direction: ${c.moves}\nRuled out for this direction: ${c.never}\n\nThis is one of nine distinct directions we use; a neighbouring site is built in a different one with a different first screen, a different order of sections and different layouts for each, so commit fully to this one and avoid the habits of the others. Inner pages carry the same direction: their page heroes, lists and picture frames follow the same logic as the home page, not a generic template.`
     : ART_DIRECTION_FALLBACK;
 };
 
-export const systemFor = (style: Style, concept?: string, heroId?: string) =>
-  style === "studio"
-    ? SYSTEM.replace("Keep motion restrained: no custom cursors, WebGL or heavy effects.", "Motion comes from our Studio motion engine (below): use its attributes generously and tastefully.").replace("## Copy rules", `${STUDIO.replace("{{ART_DIRECTION}}", artDirection(concept, heroId))}\n\n## Copy rules`)
-    : SYSTEM;
+/** The art direction for a site with a brief: the idea first, then the look as materials. */
+function ideaDirection(c: ReturnType<typeof conceptById>, sig: ReturnType<typeof heroById>, heroId: string | undefined, idea: Idea): string {
+  const opening =
+    heroId === "own"
+      ? "the one this site's idea describes (its spec is in the home page's brief). Build its component styles in the kit"
+      : sig
+        ? `the signature hero "${sig.name}", exactly as its spec in the home page's brief describes; the idea and the materials supply its words, colour and lettering. Build its component styles in the kit`
+        : c
+          ? `${c.hero} (one way this direction opens; reshape it to serve the idea)`
+          : "one that states the idea at a glance";
+  const slot = `Our system supplies the moving picture where the first screen has one (some signature heroes have none: then follow the spec and leave the layer out): put exactly <div class="hero-motion" aria-hidden="true"></div> (empty, unstyled) as the FIRST child of the element the picture belongs in, which must have position:relative and overflow:hidden and its own size or aspect ratio.`;
+  return `${ideaBlock(idea)}
+
+${c ? `## Materials for this idea: the "${c.name}" direction\n${c.brief}\n(The font names and colour sentences above are examples of this direction, not this site's choices: the idea's colour and lettering are.)\n\nMotion for this direction: ${c.moves}\nRuled out for this direction (it yields where the idea needs otherwise): ${c.never}` : "## Materials\nNo fixed direction: invent the materials (type, colour, frames, texture) from the idea and hold every page to them."}
+
+The home page's first screen: ${opening}. ${slot}
+
+Inner pages carry the same idea and materials: their page heroes, lists and picture frames follow the same logic as the home page, not a generic template.`;
+}
+
+/** The sentences of the standing instructions that pulled every site to the same place; replaced when a site has an idea. */
+const IDEA_SWAPS: [string, string][] = [
+  ["Choose palettes that suit the real niche; don't default to dark mode, electric blue or yellow unless asked or clearly right.", "Take the palette from this site's idea."],
+  [
+    "- A distinct identity per business: pick a font pairing that fits the trade and tone, never Inter or system fonts alone. Good pairings: Fraunces + Inter; Instrument Serif + Plus Jakarta Sans; Cormorant Garamond + Jost; Big Shoulders Display + Hanken Grotesk; Hedvig Letters Serif + Figtree; Bricolage Grotesque + Hanken Grotesk; Sora + Inter; Michroma + Manrope; Marcellus + Poppins; Playfair Display + Manrope.",
+    "- A distinct identity per business: two Google Fonts chosen to match the lettering this site's idea describes, never Inter or system fonts alone.",
+  ],
+  [
+    "1200px max content width, generous and VARIED vertical rhythm (≈96–128px between sections on desktop, not identical padding everywhere), soft 1px borders, cards rounded 12–16px (images and big panels up to 24px), subtle shadows,",
+    "A content width, vertical rhythm, borders, corners and shadows chosen for this idea and varied from section to section (never identical padding everywhere),",
+  ],
+  ["Tinted neutrals toward the brand hue beat flat grey or default beige. ", ""],
+  ["Write like the owner talking to a neighbour: specific, warm, confident, short sentences.", "Write in this site's voice (in its idea): specific and confident, short sentences."],
+];
+
+/** The movement rule for a site with an idea: pages must move, but not all in the same way. */
+const IDEA_MOVEMENT = `Movement (every Studio home page; a direction's "ruled out" list never excuses it). The page must visibly move as it is scrolled, not just fade in once, but not in the same way as every other site. Use at least three of these kinds, at least one of them a held piece, choosing the ones that serve the idea's story:
+- Held pieces: a pinned scene (data-pin with one data-pin-stage; its beats write in with data-at, one may write word by word with data-write); a sideways gallery (data-horizontal); stacking cards (data-stack); the brand moment, if this page has one.
+- A statement that brightens word by word as it is scrolled (data-scrub-text).
+- Pictures that drift at their own speed (data-parallax on the <img>, inside an overflow:hidden frame): at least two on the page.
+- A band that runs with the scroll (data-marquee).
+On the first screen: the headline splits (data-split), the sentence and the actions rise out of blur (data-reveal="blur"), and any floating piece has data-depth so the layers separate under the pointer.
+`;
+
+export const systemFor = (style: Style, concept?: string, heroId?: string, idea?: Idea) => {
+  if (style !== "studio") return SYSTEM;
+  let studio = STUDIO.replace("{{ART_DIRECTION}}", artDirection(concept, heroId, idea));
+  let base = SYSTEM;
+  if (idea) {
+    for (const [from, to] of IDEA_SWAPS) base = base.replace(from, to);
+    const a = studio.indexOf("The scroll floor (every Studio home page");
+    const b = studio.indexOf("The first screen must look unmistakably");
+    if (a > 0 && b > a) studio = studio.slice(0, a) + IDEA_MOVEMENT + (heroId === "spotlight" ? studio.slice(studio.indexOf("The first screen's picture has a second"), b) : "") + "\n" + studio.slice(b);
+    studio = studio.replace(
+      'The first screen must look unmistakably like THIS direction and unlike our other eight: if it could be described as "big headline on a darkened photo with a button underneath", it is wrong unless the direction says exactly that.',
+      'The first screen must look unmistakably like THIS idea: if it could be described as "big headline on a darkened photo with a button underneath", it is wrong unless the idea says exactly that.',
+    );
+  }
+  return base.replace("Keep motion restrained: no custom cursors, WebGL or heavy effects.", "Motion comes from our Studio motion engine (below): use its attributes generously and tastefully.").replace("## Copy rules", `${studio}\n\n## Copy rules`);
+};
 
 const sitemapText = (pages: PageSpec[]) => pages.map((p) => `${p.path} — ${p.name}`).join("\n");
 
@@ -669,6 +754,8 @@ export interface Kit {
   draw?: string;
   /** Built on another finished site's design (its slug and version) instead of a fresh one. */
   reuse?: { slug: string; version: string };
+  /** The idea the site was built on (Studio, see brief.ts): it outranks the look. */
+  idea?: Idea;
 }
 export interface PageDraft {
   title: string;
@@ -761,17 +848,17 @@ const need = (parts: Record<string, string>, names: string[]) => {
 };
 
 /** Stage 1: the design system (fonts, CSS, header, footer, script) for the given pages. */
-export async function designKit(env: Env, brief: string, pages: PageSpec[], style: Style = "standard", concept?: string, draw?: Draw, heroId?: string): Promise<{ kit: Kit; usage: unknown }> {
+export async function designKit(env: Env, brief: string, pages: PageSpec[], style: Style = "standard", concept?: string, draw?: Draw, heroId?: string, idea?: Idea): Promise<{ kit: Kit; usage: unknown }> {
   // Low effort: the brief already makes the design decisions explicit, and thinking is the costliest part.
   // A Studio site thinks harder about its art direction: that is where the budget goes.
   const studio = style === "studio";
   const prompt = `${kitTask(pages, style)}\n\n## The business\n${brief}`;
-  let { text, usage, cut } = await ask(env, prompt, 64000, env.CLAUDE_MODEL || MODEL, studio ? "medium" : effortOf(env, "low"), systemFor(style, concept, heroId));
+  let { text, usage, cut } = await ask(env, prompt, 64000, env.CLAUDE_MODEL || MODEL, studio ? "medium" : effortOf(env, "low"), systemFor(style, concept, heroId, idea));
   if (cut) {
     // Ran out of room (thinking counts toward the limit): once more, thinking less and writing tighter.
     console.log("kit cut off, retrying tighter");
     const first = Number(usage.cost_usd) || 0;
-    ({ text, usage, cut } = await ask(env, `${prompt}\n\n## Length\nYour whole reply must fit in about 30,000 tokens. Keep the stylesheet lean: no duplicate rules, no unused components, no long comments.`, 64000, env.CLAUDE_MODEL || MODEL, "low", systemFor(style, concept, heroId)));
+    ({ text, usage, cut } = await ask(env, `${prompt}\n\n## Length\nYour whole reply must fit in about 30,000 tokens. Keep the stylesheet lean: no duplicate rules, no unused components, no long comments.`, 64000, env.CLAUDE_MODEL || MODEL, "low", systemFor(style, concept, heroId, idea)));
     usage = { ...usage, cost_usd: (Number(usage.cost_usd) || 0) + first };
     if (cut) throw new Error("The site's design came back incomplete twice. Try again; if it keeps happening, build it as Standard.");
   }
@@ -792,7 +879,7 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[], styl
       components: p.COMPONENTS ?? "",
       brief,
       pages,
-      ...(studio ? { style: "studio" as const, ...(conceptById(concept) ? { concept } : {}), ...(draw ? { draw: draw.print } : {}), ...(heroById(heroId) ? { hero: heroId } : {}) } : {}),
+      ...(studio ? { style: "studio" as const, ...(conceptById(concept) ? { concept } : {}), ...(draw ? { draw: draw.print } : {}), ...(heroById(heroId) || heroId === "own" ? { hero: heroId } : {}), ...(idea ? { idea } : {}) } : {}),
     },
     usage,
   };
@@ -911,7 +998,7 @@ ${page.brief}${current}${notes}${change}${adapt}${first}${only}`;
     studio ? (home ? 56000 : 32000) : home ? 40000 : 24000,
     model,
     studio ? "medium" : home ? effortOf(env, "low") : "medium",
-    systemFor(studio ? "studio" : "standard", kit.concept, kit.hero),
+    systemFor(studio ? "studio" : "standard", kit.concept, kit.hero, kit.idea),
   );
   const p = parseParts(text);
   // A reply that ran on after finishing its <main> (e.g. repeating itself) is still a whole page.

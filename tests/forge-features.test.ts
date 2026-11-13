@@ -23,6 +23,11 @@ vi.mock("../cloudflare/forge/src/designer", async (orig) => {
 });
 vi.mock("../cloudflare/forge/src/images", () => ({ beforeAfterImages: vi.fn(async () => []),
   heroPair: vi.fn(async () => null), previewImages: vi.fn(async () => [{ name: "photo-1.jpg", description: "a shop", bytes: new Uint8Array([1]) }]) }));
+// The brief calls Claude; in these tests it is faked (a test below gives it a real reply to follow through).
+vi.mock("../cloudflare/forge/src/brief", async (orig) => {
+  const real = await orig<typeof import("../cloudflare/forge/src/brief")>();
+  return { ...real, writeBrief: vi.fn(async () => { throw new Error("no brief in tests"); }) };
+});
 vi.mock("../cloudflare/forge/src/scrape", () => ({ readWebsite: vi.fn() }));
 vi.mock("../cloudflare/forge/src/outreach", async (orig) => {
   const real = await orig<typeof import("../cloudflare/forge/src/outreach")>();

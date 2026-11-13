@@ -204,14 +204,18 @@ function hash(s: string): number {
  * the library, the scene switcher (moving video is the strongest first screen we have); otherwise
  * one the account hasn't used in its last two Studio sites, varied by site.
  */
-export function pickHero(intake: { hero?: string }, slug: string, recent: string[] = [], clips = 0): Hero {
+export function pickHero(intake: { hero?: string }, slug: string, recent: string[] = [], clips = 0, exclude: string[] = []): Hero {
   const asked = heroById(intake.hero);
   if (asked) return asked;
-  if (clips >= 2 && !recent.slice(0, 1).includes("switcher")) return heroById("switcher")!;
-  const fresh = HERO_IDS.filter((id) => !recent.slice(0, 2).includes(id) && (id !== "switcher" || clips >= 1));
-  const from = fresh.length ? fresh : HERO_IDS.filter((id) => id !== "switcher" || clips >= 1);
+  if (clips >= 2 && !recent.slice(0, 1).includes("switcher") && !exclude.includes("switcher")) return heroById("switcher")!;
+  const ok = (id: string) => (id !== "switcher" || clips >= 1) && !exclude.includes(id);
+  const fresh = HERO_IDS.filter((id) => !recent.slice(0, 2).includes(id) && ok(id));
+  const from = fresh.length ? fresh : HERO_IDS.filter(ok);
   return heroById(from[hash(slug) % from.length])!;
 }
+
+/** Heroes whose first screen is built around the signature object (not offered when a site's idea has no object). */
+export const OBJECT_HEROES = ["float", "spin", "orbit"];
 
 /** Heroes that already carry the signature object in their first screen (so no separate flight is planned for them). */
 const OBJECT_IN_HERO = ["spin"];
@@ -225,17 +229,26 @@ export const brandMoment = (slug: string): "mask" | "particles" => (hash(`${slug
 /** The flying object's path for this site, so two sites with the same object still fly differently. */
 export const flightPath = (slug: string): "arc" | "loop" | "zig" => (["arc", "loop", "zig"] as const)[hash(`${slug}:path`) % 3]!;
 
+/** What the writer is told about the flying object's perches. */
+const FLIGHT = `FLYING OBJECT: our system flies the business's signature object (OBJECT in the facts, cut out) down this home page as the visitor scrolls. Place TWO empty perches for it to land in: each exactly <div data-perch aria-hidden="true"></div> with an explicit width and aspect-ratio:1, in the normal flow (never position:absolute, never inside a pinned, horizontal-scroll or stacked section), with nothing inside it or on top of it and clear space around it. One in the second or third scene beside a statement or the list of what the business offers (width min(24vw, 300px); 46vw on phones), and one in the final call-to-action scene beside the action (width min(18vw, 220px); 36vw on phones).`;
+
 /** What the home page's writer is told about the flight and the brand moment (Studio only). */
-export function studioExtras(heroId: string | undefined, slug: string): string {
+export function studioExtras(heroId: string | undefined, slug: string, idea?: { object?: string; moment?: string }): string {
   const parts: string[] = [];
-  if (companionFor(heroId))
-    parts.push(
-      `FLYING OBJECT: our system flies the business's signature object (OBJECT in the facts, cut out) down this home page as the visitor scrolls. Place TWO empty perches for it to land in: each exactly <div data-perch aria-hidden="true"></div> with an explicit width and aspect-ratio:1, in the normal flow (never position:absolute, never inside a pinned, horizontal-scroll or stacked section), with nothing inside it or on top of it and clear space around it. One in the second or third scene beside a statement or the list of what the business offers (width min(24vw, 300px); 46vw on phones), and one in the final call-to-action scene beside the action (width min(18vw, 220px); 36vw on phones).`,
-    );
+  // With an idea, the flying object and the brand moment appear only when it asked for them.
+  const yes = (v?: string) => !!v && !/^\s*(none|no|n\/a|-)\b/i.test(v);
+  const object = !idea || yes(idea.object);
+  if (idea && !yes(idea.moment)) {
+    if (companionFor(heroId) && object) parts.push(FLIGHT);
+    return parts.length ? `\n\n${parts.join("\n\n")}` : "";
+  }
+  if (companionFor(heroId) && object)
+    parts.push(FLIGHT);
+  const kind = object ? brandMoment(slug) : "mask";
   parts.push(
-    brandMoment(slug) === "mask"
+    (kind === "mask"
       ? `BRAND MOMENT (its own scene, placed right after the third scene): <section data-mask-zoom data-word="WORD"> where WORD is ONE short word of 4 to 8 letters, in capitals, that sums up the business (e.g. BLOOM, TIRES, FRESH, SMILE). Inside it, first, one <img> of the most striking preview photo other than the hero photo (src from the facts, alt describing it), then one <div data-mask-after> holding an h2 (a short line, at most six words) and one sentence, white, centred. Give the section the page's own background colour and nothing else. Our engine pins it, shows the photo only through the giant word, flies the camera through the word into the full photo and writes the block in over it.`
-      : `BRAND MOMENT (its own scene, placed right after the third scene): <section data-particles data-word="NAME"> where NAME is the business's name or its short form, at most 14 characters. Inside it, only one <div data-particles-after> holding an h2 (a short line, at most six words) and one sentence, centred. Give the section a deep colour from the palette as its background, the lightest tint as its text colour, and a height of 100vh. Our engine pins it: the business's object bursts into thousands of glowing dots that re-form as the name, and then the block writes in under it.`,
+      : `BRAND MOMENT (its own scene, placed right after the third scene): <section data-particles data-word="NAME"> where NAME is the business's name or its short form, at most 14 characters. Inside it, only one <div data-particles-after> holding an h2 (a short line, at most six words) and one sentence, centred. Give the section a deep colour from the palette as its background, the lightest tint as its text colour, and a height of 100vh. Our engine pins it: the business's object bursts into thousands of glowing dots that re-form as the name, and then the block writes in under it.`) + (idea && yes(idea.moment) ? ` What this moment should say, from the idea: ${idea.moment}` : ""),
   );
   return `\n\n${parts.join("\n\n")}`;
 }

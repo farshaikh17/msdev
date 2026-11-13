@@ -163,6 +163,7 @@ ${factsOf(i)}
 
 Rules:
 - Use only these facts, plus what any local would know about the town and region, and about a well-known brand if this is one. Never invent anything specific to this business: no years, no owner or staff names, no history, no awards, no prices, no hours, no claims about its quality. If the facts are thin, the idea must stand on the name, the place and the kind of work, and that is fine.
+- Never promise what the facts don't say: no "24/7", "any hour", "same day", "fast", "cheap", "family-run", "since", "trusted by", or what other people say about it, unless those words (or plainly the same thing) are in the facts. This applies to the headline and the home page too. A promise the owner can't keep loses the sale.
 - Be specific. "Quality you can trust", "family values", "passion", "a feast for the senses" and other lines that would fit any business are worthless.
 - Avoid puns on the name unless they are genuinely good.
 ${nearby.length ? `\n## Already made nearby (do not repeat these ideas or their angle)\n${nearby.map((n) => `- ${n}`).join("\n")}\n` : ""}
@@ -275,4 +276,78 @@ export async function writeBrief(env: Env, i: BriefInput, nearby: string[] = [],
   if (invented.includes(chosen)) chosen = concepts.findIndex((_, n) => !invented.includes(n));
   if (chosen < 0) chosen = 0;
   return { tier: tierOf(i), concepts, chosen, why: clip(p.WHY, 400), invented, cost };
+}
+
+
+/** The chosen concept as stored with the site: what every writer is told, and what the site page shows. */
+export interface Idea extends Concept {
+  /** Why the judge chose it. */
+  why: string;
+}
+
+export const ideaOf = (b: Brief): Idea => ({ ...b.concepts[b.chosen]!, why: b.why });
+
+/** Whether a concept's optional answer is a real yes ("none", "no" and empty mean no). */
+export const wants = (v?: string) => !!v && !/^\s*(none|no|n\/a|-)\b/i.test(v);
+
+/** The look id a concept named ("editorial - because..." -> "editorial"), if it is one of ours. */
+export function lookOf(c: Pick<Concept, "look">, ids: string[]): string | undefined {
+  const m = (c.look ?? "").toLowerCase().match(/^[\s"']*([a-z-]+)/);
+  return m && ids.includes(m[1]!) ? m[1] : undefined;
+}
+
+/** The first screen a concept named: a signature hero's id, "own", or nothing usable. */
+export function firstScreenOf(c: Pick<Concept, "firstScreen">, ids: string[]): string | undefined {
+  const t = (c.firstScreen ?? "").trim().toLowerCase();
+  if (/^own\b/.test(t)) return "own";
+  const m = t.match(/^[\s"']*([a-z-]+)/);
+  return m && ids.includes(m[1]!) ? m[1] : undefined;
+}
+
+/** The description of a concept's own first screen (what follows "own:"). */
+export const ownScreen = (c: Pick<Concept, "firstScreen">) => (c.firstScreen ?? "").replace(/^\s*own\s*[:\-]?\s*/i, "").replace(/\s+[-—–]\s+[^-—–]*$/, "").trim();
+
+/** Heroes whose first screen is built around the signature object. */
+const OBJECT_HEROES = ["float", "spin", "orbit"];
+
+/**
+ * The look and first screen for a site with a brief. The chosen concept's look and first screen win,
+ * unless they would repeat a neighbour: a look in `recentLooks` (the last two sites nearby and the last
+ * two in the account) passes to the next concept's look, and a first screen of its own is allowed for at most one
+ * site in three. What the build form asked for always wins. Undefined means: fall back to the usual pick.
+ */
+export function chooseDesign(
+  b: Brief,
+  o: { askedLook?: string; askedHero?: string; recentLooks: string[]; recentHeroes: string[]; lookIds: string[]; heroIds: string[]; clips: number },
+): { look?: string; hero?: string } {
+  const order = [b.chosen, ...b.concepts.map((_, n) => n).filter((n) => n !== b.chosen)];
+  const chosen = b.concepts[b.chosen]!;
+  let look = o.lookIds.includes(o.askedLook ?? "") ? o.askedLook : undefined;
+  if (!look)
+    for (const n of order) {
+      const id = lookOf(b.concepts[n]!, o.lookIds);
+      if (id && !o.recentLooks.includes(id)) {
+        look = id;
+        break;
+      }
+    }
+  let hero = o.heroIds.includes(o.askedHero ?? "") ? o.askedHero : undefined;
+  if (!hero) {
+    const want = firstScreenOf(chosen, o.heroIds);
+    const hasObject = wants(chosen.object);
+    if (want === "own" && ownScreen(chosen).length > 40 && !o.recentHeroes.slice(0, 2).includes("own")) hero = "own";
+    else if (want && want !== "own" && want !== o.recentHeroes[0] && (want !== "switcher" || o.clips >= 1) && (!OBJECT_HEROES.includes(want) || hasObject)) hero = want;
+  }
+  return { look, hero };
+}
+
+/** The idea as every writer sees it: first in their instructions, above the look. */
+export function ideaBlock(i: Idea): string {
+  const line = (k: string, v?: string) => (v && wants(v) ? `\n${k}: ${v}` : "");
+  return `## This site's idea (decides everything below)
+The true thing it is built on: ${i.truth}
+The idea: ${i.idea}
+It refuses: ${i.refuses}${line("First-screen headline (use it, or one as good and as true)", i.headline)}${line("Voice", i.voice)}${line("Colour", i.palette)}${line("Lettering", i.type)}${i.arc ? `\nThe home page's story, screen by screen:\n${i.arc}` : ""}
+
+Where the idea and the materials below disagree, the idea wins. Its colour and lettering are this site's own: choose the actual fonts and colours to match them, not the examples the materials mention. Dropping or reshaping a listed scene to serve the idea is correct. Every page carries the idea, not just the home page. Never state anything about the business that isn't in its facts, even if the idea seems to invite it.`;
 }

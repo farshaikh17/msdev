@@ -11,6 +11,7 @@ import {
   getKit,
   getPage,
   pairsDue,
+  recentIdeas,
   recentLooks,
   listLibrary,
   saveChrome,
@@ -37,9 +38,10 @@ import type { BuildJob, Env } from "./env";
 import { heroPair, beforeAfterImages, objectImage, previewImages } from "./images";
 import { studioMedia, type StudioMedia } from "./media";
 import { privacyPage, termsPage } from "./legal";
-import { drawFor, pickConcept } from "./concepts";
+import { CONCEPT_IDS, conceptById, drawFor, pickConcept } from "./concepts";
+import { chooseDesign, ideaOf, wants, writeBrief, type Idea } from "./brief";
 import { mergeIntake, reverseGeocode } from "./places";
-import { heroById, pickHero } from "./heroes";
+import { HERO_IDS, heroById, OBJECT_HEROES, pickHero } from "./heroes";
 import { matchClips } from "./hero";
 import { readWebsite } from "./scrape";
 import { buildCost, chargeBuild, getTenant, recordBuildCost, type Tenant } from "./tenants";
@@ -244,14 +246,41 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
         await setTrade(env, slug, plan.trade);
       }
       // A Studio home page takes its look, its deal within the look and its signature hero before any picture is made.
-      const looks = intake.style === "studio" ? await recentLooks(env, demo.tenantId, slug).catch(() => []) : [];
-      const look = intake.style === "studio" ? pickConcept(intake, slug, looks.map((l) => l.concept).filter(Boolean)) : undefined;
+      const studio = intake.style === "studio";
+      const looks = studio ? await recentLooks(env, demo.tenantId, slug).catch(() => []) : [];
+      const clips = studio ? matchClips(await listLibrary(env, demo.tenantId).catch(() => []), intake, plan?.services.join(" ") ?? "").length : 0;
+      // The brief (a fresh Studio design only): who this business is, worked out before anything is designed.
+      // Its idea then chooses the look and the first screen, and heads every writer's instructions.
+      let idea: Idea | undefined;
+      let briefCost = 0;
+      let chosen: { look?: string; hero?: string } = {};
+      if (studio && !intake.reuseFrom && env.ANTHROPIC_API_KEY) {
+        const nearby = await recentIdeas(env, demo.tenantId, slug, intake.city).catch(() => []);
+        const input = { slug, businessName: intake.businessName, trade: intake.industry, town: intake.city, services: intake.services || plan?.services.join(", "), saw: intake.notes, website: site?.text, reviews: intake.reviews };
+        const brief = await writeBrief(env, input, nearby.map((n) => `${n.name}: ${n.idea}`), nearby.map((n) => n.lens)).catch((e) => {
+          if (e instanceof TryLater || e instanceof Fatal) throw e;
+          console.log("brief failed, designing without one", slug, errText(e));
+          return null;
+        });
+        if (brief) {
+          idea = ideaOf(brief);
+          briefCost = brief.cost;
+          const avoid = [...new Set([...nearby.slice(0, 2).map((n) => n.look), ...looks.slice(0, 2).map((l) => l.concept)].filter(Boolean))];
+          chosen = chooseDesign(brief, { askedLook: intake.concept, askedHero: intake.hero, recentLooks: avoid, recentHeroes: looks.map((l) => l.hero).filter(Boolean), lookIds: CONCEPT_IDS, heroIds: HERO_IDS, clips });
+          console.log("brief", slug, JSON.stringify({ lens: idea.lens, idea: idea.idea, look: chosen.look, hero: chosen.hero, cost: brief.cost }));
+        }
+      }
+      const look = studio ? (conceptById(chosen.look) ?? pickConcept(intake, slug, looks.map((l) => l.concept).filter(Boolean))) : undefined;
       const concept = look?.id;
       // The deal within the look: scene order, the biggest moment, mirroring, menu and footer, unlike the account's recent sites.
       const draw = look ? drawFor(look, slug, looks.map((l) => l.draw).filter(Boolean)) : undefined;
-      // The signature hero: video scenes when the trade has library clips, otherwise one the account hasn't used lately.
-      const clips = look ? matchClips(await listLibrary(env, demo.tenantId).catch(() => []), intake, plan?.services.join(" ") ?? "").length : 0;
-      const sig = look ? pickHero(intake, slug, looks.map((l) => l.hero).filter(Boolean), clips) : undefined;
+      // The signature hero: the idea's choice; otherwise video scenes when the trade has library clips, otherwise one
+      // the account hasn't used lately (never one built around an object when the idea has none).
+      const noObject = !!idea && !wants(idea.object);
+      const heroId = look ? (chosen.hero ?? pickHero(intake, slug, looks.map((l) => l.hero).filter(Boolean), clips, noObject ? OBJECT_HEROES : []).id) : undefined;
+      const sig = heroById(heroId);
+      // The object is drawn when the idea asks for one (or the first screen is built around it).
+      const wantObject = !idea || wants(idea.object) || OBJECT_HEROES.includes(heroId ?? "");
       // The magazine-cover hero needs room above its subject for the giant word to pass behind.
       const prompts = [...(plan?.imagePrompts ?? [])];
       if (sig?.media === "breakout" && prompts[0]) prompts[0] = `${prompts[0].replace(/[.\s]+$/, "")}. The main subject is large and close, its head and shoulders near the top of the frame and clearly separated from a plain background.`;
@@ -278,7 +307,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       });
       const pages = sitemapFor(intake, plan?.services);
       // A Studio home page takes its order and layouts from its art direction, not the standard section list.
-      if (concept && pages[0]) pages[0] = { ...pages[0], brief: studioHome(pages, concept, draw, sig?.id, slug) };
+      if (concept && pages[0]) pages[0] = { ...pages[0], brief: studioHome(pages, concept, draw, heroId, slug, idea) };
       // Built on another of the account's finished sites: reuse its design (far cheaper than a new one).
       let base: { slug: string; version: string; kit: Kit } | null = null;
       if (intake.reuseFrom && intake.reuseFrom !== slug) {
@@ -287,23 +316,23 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
         if (src && srcKit && src.liveVersion) base = { slug: src.slug, version: src.liveVersion, kit: srcKit };
       }
       // The hero this site will open with (a reused design keeps the one it was designed around).
-      const heroSig = base ? heroById(base.kit.hero) : sig;
-      const objectNote = intake.style === "studio" && plan?.object ? `\n\nOBJECT (the signature object our system supplies, cut out): ${plan.object}.` : "";
+      const heroSig = base ? heroById(base.kit.hero) : (sig ?? (heroId === "own" ? { id: "own", media: "photo" as const } : undefined));
+      const objectNote = studio && plan?.object && wantObject ? `\n\nOBJECT (the signature object our system supplies, cut out): ${plan.object}.` : "";
       const facts = factsBlock(intake, site, slug, plan, previews, pairs) + profileNote(intake) + (draw ? `\n\nFor this site the menu is ${draw.nav}, and the footer is ${draw.footer}.` : "") + objectNote;
       // A Studio hero's own media (its object and turning frames, a cut-out subject, a moving hero) is made while the design is written.
       const photo1 = images.find((img) => img.name === "photo-1.jpg")?.bytes ?? null;
       const mediaJob: Promise<StudioMedia | null> =
         intake.style === "studio" && heroSig
-          ? studioMedia(env, { save: (n, d, b) => saveImage(env, slug, version, n, d, b), drawObject: (p) => objectImage(env, p) }, version, heroSig, plan, photo1, clips > 0).catch((e) => (console.error("studio media failed", slug, errText(e)), null))
+          ? studioMedia(env, { save: (n, d, b) => saveImage(env, slug, version, n, d, b), drawObject: (p) => objectImage(env, p) }, version, heroSig, wantObject ? plan : plan && { ...plan, object: undefined }, photo1, clips > 0).catch((e) => (console.error("studio media failed", slug, errText(e)), null))
           : Promise.resolve(null);
       const [{ kit, usage }, made] = await Promise.all([
-        base ? adaptKit(env, base.kit, { slug: base.slug, version: base.version }, facts, pages) : designKit(env, facts, pages, intake.style, concept, draw, sig?.id),
+        base ? adaptKit(env, base.kit, { slug: base.slug, version: base.version }, facts, pages) : designKit(env, facts, pages, intake.style, concept, draw, heroId, idea),
         mediaJob,
       ]);
       if (made?.made.length) console.log("studio media", slug, JSON.stringify(made));
       // The planning call and any generated video are counted with the design.
       const u = usage as Record<string, unknown>;
-      await saveKit(env, slug, version, kit, { ...u, cost_usd: (Number(u.cost_usd) || 0) + (plan?.cost ?? 0) + (made?.cost ?? 0) });
+      await saveKit(env, slug, version, kit, { ...u, cost_usd: (Number(u.cost_usd) || 0) + (plan?.cost ?? 0) + briefCost + (made?.cost ?? 0) });
       await savePage(env, slug, version, "/privacy", privacyPage(intake), null);
       await savePage(env, slug, version, "/terms", termsPage(intake), null);
       await touchBuild(env, slug, version, "pages");

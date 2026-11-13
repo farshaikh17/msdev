@@ -442,6 +442,21 @@ export async function countLeads(env: Env, slug: string): Promise<number> {
 // ---- The automatic review ---------------------------------------------------------------------
 
 /** The looks and deals of an account's most recent Studio sites, newest first (so the next one differs). */
+/** The ideas of the account's recent Studio sites in the same town, newest first, so a neighbour's brief can steer clear of them. */
+export async function recentIdeas(env: Env, tenantId: number, notSlug: string, town: string, limit = 6): Promise<{ name: string; idea: string; lens: string; look: string; hero: string }[]> {
+  if (!town.trim()) return [];
+  const { results } = await env.DB.prepare(
+    `SELECT json_extract(d.intake, '$.businessName') name, json_extract(v.kit, '$.idea.idea') idea, json_extract(v.kit, '$.idea.lens') lens,
+            json_extract(v.kit, '$.concept') look, json_extract(v.kit, '$.hero') hero
+       FROM site_versions v JOIN demos d ON d.slug = v.slug
+      WHERE d.tenant_id = ? AND d.slug != ? AND json_extract(v.kit, '$.idea.idea') IS NOT NULL AND lower(json_extract(d.intake, '$.city')) = lower(?)
+      ORDER BY v.created_at DESC LIMIT ?`,
+  )
+    .bind(tenantId, notSlug, town.trim(), limit)
+    .all<{ name: string | null; idea: string | null; lens: string | null; look: string | null; hero: string | null }>();
+  return results.map((r) => ({ name: r.name ?? "", idea: r.idea ?? "", lens: r.lens ?? "", look: r.look ?? "", hero: r.hero ?? "" }));
+}
+
 export async function recentLooks(env: Env, tenantId: number, notSlug: string, limit = 8): Promise<{ concept: string; draw: string; hero: string }[]> {
   const { results } = await env.DB.prepare(
     `SELECT json_extract(v.kit, '$.concept') concept, json_extract(v.kit, '$.draw') draw, json_extract(v.kit, '$.hero') hero FROM site_versions v

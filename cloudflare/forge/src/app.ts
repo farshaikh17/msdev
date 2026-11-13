@@ -281,6 +281,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
         views: views.get(slug),
         pitch: review?.shots?.length ? `${site(slug)}/_pitch` : "",
         qr: qrSvg(site(slug)),
+        idea: liveKit?.idea ?? null,
       });
     }
     if ((action === "/rewrite" || action === "/rebuild") && post) {

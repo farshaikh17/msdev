@@ -150,7 +150,9 @@ function heroFor(kit: Kit, library: LibraryEntry[], intake: Stored["intake"], sl
   const frames = names.filter((n) => /^spin-\d{2}\.webp$/.test(n)).map((n) => base + n);
   const object = names.includes("object.webp") ? base + "object.webp" : undefined;
   // The signature object flies down the page in its own layer (perches with photos instead when no object could be made).
-  const flight: Pick<HeroFill, "float" | "perchPhotos"> = companionFor(kit.hero) || sig?.media === "object" ? (object ? { float: { frames, still: object, path: flightPath(slug) } } : { perchPhotos: photos.slice(0, 3) }) : {};
+  // With an idea, the object flies only when the idea asked for one (or the first screen is built around it).
+  const objectWanted = !kit.idea || !/^\s*(none|no|n\/a|-)\b/i.test(kit.idea.object ?? "none");
+  const flight: Pick<HeroFill, "float" | "perchPhotos"> = (companionFor(kit.hero) && objectWanted) || sig?.media === "object" ? (object ? { float: { frames, still: object, path: flightPath(slug) } } : { perchPhotos: photos.slice(0, 3) }) : {};
   if (sig?.media === "switch") {
     const items = pagesOf(kit).filter((p) => p.role === "item" || p.path.startsWith("/services/")).map((p) => p.name);
     const clips = [...matchClips(library, intake, services), ...(made ? [made] : [])].slice(0, 4);
