@@ -97,6 +97,14 @@ Small slices. Each is one session for a cheaper model, and nothing starts until 
 
 **Status (13 Nov 2026).** Slice 1 passed. Slices 2a, 2b and 3 are built and deployed but **not yet tested on real builds** (the owner chose to build everything first and test after). What is in place: the brief leads the design; the "What you saw" field, the logo and brand colour read from a website, the wordmark and thin-data rules, the "add phone" flag; a Studio build refuses to start without one real fact; the review scrolls the page for real (8 desktop screens, 3 phone), counts blank screens, and shows the critic the whole page; the art director's pass revises the home page once and keeps the original at `/<slug>/_before` for the blind comparison (`FORGE_ART_PASS=off` turns it off). Testing follows the slices' pass rules above, in order.
 
+**Cost work (13 Nov 2026), live.** Measured on real builds: a Studio site was $3.84 on average, then $3.06 (O'Hara Plumbing) after the first cuts. Now:
+- Quality checks no longer rewrite pages automatically (`FORGE_AUTO_FIX=on` brings it back); the Studio art pass stays.
+- Revisions (art pass, change requests, repairs) send only their edits, at low effort; a whole rewrite only if an edit doesn't apply.
+- The shared context (business, design system) is cached on every page call, the home page's included.
+- Studio inner pages and the rest of the home page (after Opus's first screen) are written on Cloudflare Workers AI, DeepSeek V4.1 Flash with thinking off: tested on O'Hara against Sonnet and Opus, as good, about 1 to 2 cents a page, billed to Cloudflare. Any failure, cut reply, wrong shape or invented contact detail falls back to Claude. `FORGE_INNER_MODEL=claude` switches back.
+- Kept on Opus: the design system and the first screen. Tested on DeepSeek, the design system invented a phone number for a business with none, so identity stays with Opus.
+- Estimated now: about $2.20 a Studio site (design system ~$1.16, first screen ~$0.35, art pass ~$0.45, the rest ~$0.25). To be confirmed on the next build.
+
 **Gate A: start using it on real prospects.** Those five pilot-trade builds: no failed measured check; every site flagged correctly for missing phone; you say they are different from each other and good. Total to here: 8 real builds, about $28.
 
 **Later, each only if real use shows that named problem:**

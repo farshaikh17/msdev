@@ -22,7 +22,7 @@ vi.mock("@anthropic-ai/sdk", () => {
   return { default: Anthropic };
 });
 
-import { designSitePage, type Kit } from "../cloudflare/forge/src/designer";
+import { designSitePage, inventedContacts, type Kit } from "../cloudflare/forge/src/designer";
 
 const base = { ANTHROPIC_API_KEY: "test" };
 const env = base as never;
@@ -131,5 +131,24 @@ describe("the rest of a Studio home page on Workers AI", () => {
     await designSitePage({ ...base, AI: ai } as never, studioKit, spec, { notes: ["Shorter"], current: hero });
     expect(calls).toHaveLength(0);
     expect(requests.map((q) => q.model)).toEqual(["claude-opus-5-5", "claude-opus-5-5"]);
+  });
+});
+
+describe("contact details nobody gave", () => {
+  it("finds a phone number or email that isn't in what the model was given", () => {
+    const given = "Business: O'Hara Plumbing\nPhone: (308) 555-0101\nEmail: hello@ohara.test";
+    expect(inventedContacts('<a href="tel:+13085550101">(308) 555-0101</a> hello@ohara.test', given)).toEqual([]);
+    expect(inventedContacts('<a href="tel:+13083814482">(308) 381-4482</a>', given)).toEqual(["tel:+13083814482", "(308) 381-4482"]);
+    expect(inventedContacts("Write to info@ohara-plumbing.com", given)).toEqual(["info@ohara-plumbing.com"]);
+    // Font and package URLs aren't emails; a year or a price isn't a phone.
+    expect(inventedContacts('family=Inter:wght@400;700 gsap@3.12 Since 1984, $120', given)).toEqual([]);
+  });
+
+  it("throws away a Workers AI page that invents one, and Claude writes it", async () => {
+    const studioKit = { ...kit, style: "studio", pages: [...(kit.pages as never[]), { path: "/about", name: "About", kind: "ai", brief: "About." }] } as unknown as Kit;
+    const ai = { run: async () => ({ choices: [{ message: { content: '@@@ MAIN\n<main><a href="tel:+13083814482">Call (308) 381-4482</a></main>' }, finish_reason: "stop" }], usage: { neurons: 900 } }) };
+    replies.push("@@@ MAIN\n<main><h1>From Sonnet</h1></main>");
+    const r = await designSitePage({ ...base, AI: ai } as never, studioKit, { path: "/about", name: "About", kind: "ai", brief: "About." } as never, {});
+    expect(r.page.body).toContain("From Sonnet");
   });
 });

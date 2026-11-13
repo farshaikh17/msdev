@@ -30,6 +30,19 @@ export const STUDIO_PAGE_MODEL = "claude-sonnet-5-5";
 export const CF_INNER_MODEL = "@cf/deepseek-ai/deepseek-v4.1-flash-1017";
 const WORKERS_AI_USD_PER_NEURON = 0.011 / 1000;
 
+/**
+ * Contact details in a reply that aren't in what the model was given: a phone number or an email the
+ * business never gave. Workers AI models have been seen inventing a phone number; such a reply is not used.
+ */
+export function inventedContacts(reply: string, given: string): string[] {
+  const digits = (t: string) => t.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  const known = new Set((given.match(/\+?1?[\s.(-]*\d{3}[\s.)-]*\d{3}[\s.-]*\d{4}/g) ?? []).map(digits));
+  const phones = (reply.match(/(?:tel:\+?1?\d{10}|\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b)/g) ?? []).filter((p) => !known.has(digits(p)));
+  const givenLower = given.toLowerCase();
+  const emails = (reply.match(/\b[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}\b/gi) ?? []).filter((e) => !/^(?:wght|ital|opsz)@/i.test(e) && !/@\d/.test(e) && !givenLower.includes(e.toLowerCase()));
+  return [...new Set([...phones, ...emails])];
+}
+
 /** One call to a Workers AI text model, shaped like ask()'s result (thinking off: it can otherwise spend the whole budget thinking). */
 export async function askWorkersAi(env: Env, model: string, system: string, prompt: string, maxTokens: number): Promise<{ text: string; usage: Record<string, unknown>; cut: boolean }> {
   if (!env.AI) throw new Error("no Workers AI binding");
@@ -888,7 +901,7 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[], styl
   // Low effort: the brief already makes the design decisions explicit, and thinking is the costliest part.
   // A Studio site thinks harder about its art direction: that is where the budget goes.
   const studio = style === "studio";
-  const prompt = `${kitTask(pages, style)}\n\n## The business\n${brief}`;
+  const { prompt } = kitRequest(brief, pages, style, concept, heroId, idea);
   let { text, usage, cut } = await ask(env, prompt, 64000, env.CLAUDE_MODEL || MODEL, studio ? "medium" : effortOf(env, "low"), systemFor(style, concept, heroId, idea));
   if (cut) {
     // Ran out of room (thinking counts toward the limit): once more, thinking less and writing tighter.
@@ -898,13 +911,23 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[], styl
     usage = { ...usage, cost_usd: (Number(usage.cost_usd) || 0) + first };
     if (cut) throw new Error("The site's design came back incomplete twice. Try again; if it keeps happening, build it as Standard.");
   }
+  return { kit: kitFromText(text, brief, pages, style, concept, draw, heroId, idea), usage };
+}
+
+/** What a design kit is written from: the task with the business, and the system prompt. */
+export function kitRequest(brief: string, pages: PageSpec[], style: Style = "standard", concept?: string, heroId?: string, idea?: Idea): { prompt: string; system: string } {
+  return { prompt: `${kitTask(pages, style)}\n\n## The business\n${brief}`, system: systemFor(style, concept, heroId, idea) };
+}
+
+/** A design kit from a model's reply. */
+export function kitFromText(text: string, brief: string, pages: PageSpec[], style: Style = "standard", concept?: string, draw?: Draw, heroId?: string, idea?: Idea): Kit {
+  const studio = style === "studio";
   const p = parseParts(text);
   need(p, ["CSS", "HEADER", "FOOTER"]);
   // The credit must be on every page: if the marker went missing, put it at the end of the footer.
   let footer = p.FOOTER;
   if (!footer.includes(CREDIT_MARKER)) footer = /<\/footer>/i.test(footer) ? footer.replace(/<\/footer>(?![\s\S]*<\/footer>)/i, `<p>${CREDIT_MARKER}</p></footer>`) : `${footer}${CREDIT_MARKER}`;
   return {
-    kit: {
       theme: /dark/i.test(p.THEME ?? "") ? "dark" : "light",
       accent: /^#[0-9a-f]{6}$/i.test(p.ACCENT ?? "") ? p.ACCENT : "",
       fonts: (p.FONTS ?? "").match(/<link\b[^>]*>/gi)?.filter((l) => /fonts\.(googleapis|gstatic)\.com/.test(l)).join("\n") ?? "",
@@ -916,8 +939,6 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[], styl
       brief,
       pages,
       ...(studio ? { style: "studio" as const, ...(conceptById(concept) ? { concept } : {}), ...(draw ? { draw: draw.print } : {}), ...(heroById(heroId) || heroId === "own" ? { hero: heroId } : {}), ...(idea ? { idea } : {}) } : {}),
-    },
-    usage,
   };
 }
 
@@ -1065,7 +1086,9 @@ async function writePage(env: Env, kit: Kit, page: PageSpec, rev: PageRevision, 
       const out = await askWorkersAi(env, r.model, r.system, `${r.shared}\n\n${r.task}`, r.maxTokens);
       // Only a reply that finished, in the shape asked for, is kept; anything else goes to Sonnet.
       const ok = edit ? parseEdits(out.text).length > 0 : !out.cut && /<\/main>/i.test(parseParts(out.text).MAIN ?? "");
-      if (ok) return out;
+      const invented = inventedContacts(out.text, `${r.shared}\n${r.task}`);
+      if (ok && !invented.length) return out;
+      if (invented.length) console.log("workers ai invented contact details; using Claude", page.path, invented.slice(0, 3).join(", "));
       console.log("workers ai reply unusable; using Claude", page.path, out.cut ? "cut" : "shape");
     } catch (e) {
       console.log("workers ai failed; using Claude", page.path, e instanceof Error ? e.message : String(e));
