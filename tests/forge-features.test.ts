@@ -1018,3 +1018,18 @@ describe("their pictures are served", () => {
     expect(IMAGE_PATH.test("/bravo-1234/_img/mwabc123/secret.jpg")).toBe(false);
   });
 });
+
+describe("the day's picture allowance", () => {
+  it("counts pictures made side by side, retries a busy one, and stops at the allowance", async () => {
+    const { previewImages: real, DAILY_IMAGES: cap } = await vi.importActual<typeof import("../cloudflare/forge/src/images")>("../cloudflare/forge/src/images");
+    const key = `ai-images:${new Date().toISOString().slice(0, 10)}`;
+    let n = 0;
+    const ai = { run: async () => (++n === 3 ? Promise.reject(new Error("busy")) : { image: btoa("x") }) };
+    const made = await real({ ...h.env, AI: ai } as unknown as Env, Array.from({ length: 8 }, (_, k) => `photo ${k}`));
+    expect(made).toHaveLength(8); // the busy one was tried again
+    expect(Number((h.db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string }).value)).toBe(8);
+    h.db.prepare("UPDATE settings SET value = ? WHERE key = ?").run(String(cap - 2), key);
+    expect(await real({ ...h.env, AI: ai } as unknown as Env, Array.from({ length: 8 }, (_, k) => `photo ${k}`))).toHaveLength(2);
+    expect(Number((h.db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string }).value)).toBe(cap);
+  });
+});

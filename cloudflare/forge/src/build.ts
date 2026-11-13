@@ -253,7 +253,14 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       if (filled.length) await updateIntake(env, slug, intake);
       // A cheap planning step picks niche-fitting services and describes the preview photos,
       // which Workers AI then generates (free) and the site serves from its own address.
-      const plan: Plan | null = await planSite(env, intake, site).catch((e) => (console.log("plan failed", errText(e)), null));
+      // Tiny and cheap, but everything after it depends on it (the photos, the trade, the services): tried
+      // three times, a few seconds apart, before the site is built without it.
+      let plan: Plan | null = null;
+      for (let t = 0; t < 3 && !plan; t++) {
+        if (t) await new Promise((r) => setTimeout(r, 4000 * t));
+        plan = await planSite(env, intake, site).catch((e) => (console.log("plan failed", t + 1, errText(e)), null));
+      }
+      if (!plan) console.error("plan failed three times: building without photos or planned services", slug);
       // No trade was typed: use the one the planner worked out (so a bar isn't called "Home Services").
       if (!intake.industry && plan?.trade) {
         intake.industry = plan.trade;

@@ -302,6 +302,20 @@ describe("notifications and Mianro's own builds", () => {
   });
 });
 
+describe("the planning step", () => {
+  it("is tried again when it fails, so a passing hiccup doesn't leave the site without photos", async () => {
+    vi.mocked(planSite).mockRejectedValueOnce(new Error("529 overloaded"));
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 5);
+    const slug = slugOf(await build(h, b.cookie, "Bravo Barbers"));
+    await drain(h);
+    expect(vi.mocked(planSite)).toHaveBeenCalledTimes(2);
+    const demo = (await getDemo(h.env, slug))!;
+    expect(demo.buildStatus).toBe("ready");
+    expect(h.db.prepare("SELECT count(*) n FROM site_images WHERE slug = ? AND name LIKE 'photo-%'").get(slug)).toEqual({ n: 2 });
+  }, 20_000);
+});
+
 describe("Studio builds", () => {
   const studio = (cookie: string, name: string) => call(h, "/demos", { cookie, form: { businessName: name, city: "Orlando, FL", style: "studio", saw: "A busy barbershop on the corner with a red-and-white pole." } });
   /** The page as visitors get it (the same assembly the sites Worker does, minus Cloudflare's HTML rewriter). */

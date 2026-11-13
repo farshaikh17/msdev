@@ -4,7 +4,6 @@
  * the hero, services and about sections, never as the business's own projects or before/after.
  * About 78 Workers AI neurons each; the free plan includes 10,000 a day (about 20 sites).
  */
-import { getSetting, setSetting } from "./db";
 import type { Env } from "./env";
 
 export const IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
@@ -26,9 +25,18 @@ const PAIR_SIZE = { w: 512, h: 384 };
 /** Count pictures made today; false when today's allowance is already used up. */
 async function spendImages(env: Env, n: number, weight = 1): Promise<boolean> {
   const key = `ai-images:${new Date().toISOString().slice(0, 10)}`;
-  const used = Number(await getSetting(env, key)) || 0;
-  if (used + n * weight > DAILY_IMAGES) return false;
-  await setSetting(env, key, String(Math.ceil(used + n * weight)));
+  const cost = n * weight;
+  // One statement adds to the count and reads it back, so pictures made side by side are all counted
+  // (reading, then writing, let eight at once count as one). Over the allowance: take it back and refuse.
+  const row = await env.DB.prepare(
+    "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = CAST(CAST(value AS REAL) + ?2 AS TEXT) RETURNING CAST(value AS REAL) AS used",
+  )
+    .bind(key, cost)
+    .first<{ used: number }>();
+  if ((row?.used ?? cost) > DAILY_IMAGES) {
+    await env.DB.prepare("UPDATE settings SET value = CAST(CAST(value AS REAL) - ?2 AS TEXT) WHERE key = ?1").bind(key, cost).run();
+    return false;
+  }
   return true;
 }
 
@@ -56,7 +64,8 @@ export async function previewImages(env: Env, descriptions: string[]): Promise<P
   if (!env.AI || !descriptions.length) return [];
   const wanted = descriptions.slice(0, 8);
   // Past today's allowance the site is designed with fewer (or no) photos rather than risk a bill.
-  const made = await Promise.all(wanted.map(async (d) => ((await spendImages(env, 1)) ? generate(env, d) : null)));
+  // A picture that fails is tried once more (the generator is sometimes busy); the allowance counts each once.
+  const made = await Promise.all(wanted.map(async (d) => ((await spendImages(env, 1)) ? ((await generate(env, d)) ?? (await generate(env, d))) : null)));
   return made.flatMap((bytes, n) => (bytes ? [{ name: `photo-${n + 1}.jpg`, description: descriptions[n], bytes }] : []));
 }
 
