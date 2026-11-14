@@ -258,3 +258,11 @@ describe("the gallery", () => {
     expect(await html(await call(h, "/gallery", { cookie: c.cookie }))).toContain("0 of 0 websites");
   });
 });
+
+describe("the gallery when signed out", () => {
+  it("sends you to sign in", async () => {
+    const r = await call(h, "/gallery");
+    expect(r.status).toBe(303);
+    expect(r.headers.get("location")).toBe("/login");
+  });
+});
