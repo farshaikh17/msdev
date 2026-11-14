@@ -16,6 +16,8 @@ export interface Env {
   FORGE_AUTO_FIX?: string;
   /** The Workers AI model for Studio inner pages (default DeepSeek V4.1 Flash), or "claude" for Sonnet. */
   FORGE_INNER_MODEL?: string;
+  /** Workers AI: a lower daily ceiling than the free 10,000 neurons (Forge never goes past the free amount). */
+  CF_FREE_NEURONS?: string;
   /** Custom domains: the address a customer's CNAME record points at (a host in the Cloudflare for SaaS zone). */
   FORGE_DOMAIN_TARGET?: string;
   /** Custom domains: the Cloudflare for SaaS zone id and an API token (Custom Hostnames: Edit), so Forge registers addresses itself. */

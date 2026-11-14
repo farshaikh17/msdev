@@ -24,7 +24,18 @@ vi.mock("@anthropic-ai/sdk", () => {
 
 import { designSitePage, inventedContacts, type Kit } from "../cloudflare/forge/src/designer";
 
-const base = { ANTHROPIC_API_KEY: "test" };
+/** Today's Workers AI use, as the page writer reads it from the settings table. */
+const used = { text: 0, pics: 0 };
+const spent: number[] = [];
+const DB = {
+  prepare: (sql: string) => ({
+    bind: (...args: unknown[]) => ({
+      first: async () => ({ text: used.text, pics: used.pics }),
+      run: async () => (sql.startsWith("INSERT INTO settings") ? spent.push(Number(args[1])) : 0, { meta: { changes: 1 } }),
+    }),
+  }),
+};
+const base = { ANTHROPIC_API_KEY: "test", DB };
 const env = base as never;
 const kit = { theme: "light", accent: "#a33", fonts: "", css: "", header: "<header></header>", footer: "<footer></footer>", script: "", components: "", brief: "A plumber in Tampa.", pages: [{ path: "/", name: "Home", kind: "ai", brief: "The home page." }] } as unknown as Kit;
 const spec = { path: "/", name: "Home", kind: "ai", brief: "The home page." } as never;
@@ -33,6 +44,9 @@ const current = { title: "Home", description: "d", css: ".x{}", body: "<main><h1
 beforeEach(() => {
   replies.length = 0;
   requests.length = 0;
+  used.text = 0;
+  used.pics = 0;
+  spent.length = 0;
 });
 
 describe("page revisions", () => {
@@ -150,5 +164,33 @@ describe("contact details nobody gave", () => {
     replies.push("@@@ MAIN\n<main><h1>From Sonnet</h1></main>");
     const r = await designSitePage({ ...base, AI: ai } as never, studioKit, { path: "/about", name: "About", kind: "ai", brief: "About." } as never, {});
     expect(r.page.body).toContain("From Sonnet");
+  });
+});
+
+describe("Cloudflare's free daily allowance", () => {
+  const studioKit = { ...kit, style: "studio", pages: [...(kit.pages as never[]), { path: "/about", name: "About", kind: "ai", brief: "About." }] } as unknown as Kit;
+  const about = { path: "/about", name: "About", kind: "ai", brief: "About." } as never;
+  const ai = () => {
+    const calls: string[] = [];
+    return { calls, AI: { run: async (m: string) => (calls.push(m), { choices: [{ message: { content: "@@@ MAIN\n<main><h1>DS</h1></main>" }, finish_reason: "stop" }], usage: { neurons: 900 } }) } };
+  };
+  it("counts what each page used, and writes the page with Claude once the free amount (pictures included) is used", async () => {
+    const w = ai();
+    await designSitePage({ ...base, AI: w.AI } as never, studioKit, about, {});
+    expect(w.calls).toHaveLength(1);
+    expect(spent).toEqual([900]);
+    // 70 pictures (about 5,460 neurons) and 3,500 neurons of pages: no room for another page.
+    used.pics = 70;
+    used.text = 3_500;
+    replies.push("@@@ MAIN\n<main><h1>From Sonnet</h1></main>");
+    const r = await designSitePage({ ...base, AI: w.AI } as never, studioKit, about, {});
+    expect(w.calls).toHaveLength(1);
+    expect(r.page.body).toContain("From Sonnet");
+    // A lower ceiling can be set.
+    used.pics = 0;
+    used.text = 0;
+    replies.push("@@@ MAIN\n<main><h1>From Sonnet</h1></main>");
+    await designSitePage({ ...base, AI: w.AI, CF_FREE_NEURONS: "1000" } as never, studioKit, about, {});
+    expect(w.calls).toHaveLength(1);
   });
 });

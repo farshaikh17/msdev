@@ -33,7 +33,9 @@ async function spendImages(env: Env, n: number, weight = 1): Promise<boolean> {
   )
     .bind(key, cost)
     .first<{ used: number }>();
-  if ((row?.used ?? cost) > DAILY_IMAGES) {
+  // Pages written on Workers AI share the same free 10,000 neurons a day (about 78 per picture): together they never go past it.
+  const text = await env.DB.prepare("SELECT CAST(value AS REAL) AS n FROM settings WHERE key = ?").bind(`ai-neurons:${key.slice(10)}`).first<{ n: number }>();
+  if ((row?.used ?? cost) > DAILY_IMAGES || (row?.used ?? cost) * 78 + (text?.n ?? 0) > 10_000) {
     await env.DB.prepare("UPDATE settings SET value = CAST(CAST(value AS REAL) - ?2 AS TEXT) WHERE key = ?1").bind(key, cost).run();
     return false;
   }

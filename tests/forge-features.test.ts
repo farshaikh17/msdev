@@ -1033,3 +1033,13 @@ describe("the day's picture allowance", () => {
     expect(Number((h.db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string }).value)).toBe(cap);
   });
 });
+
+describe("pictures and pages share Cloudflare's free allowance", () => {
+  it("makes no picture that would take the day past the free 10,000 neurons", async () => {
+    const { previewImages: real } = await vi.importActual<typeof import("../cloudflare/forge/src/images")>("../cloudflare/forge/src/images");
+    const day = new Date().toISOString().slice(0, 10);
+    h.db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '9900')").run(`ai-neurons:${day}`);
+    const ai = { run: async () => ({ image: btoa("x") }) };
+    expect(await real({ ...h.env, AI: ai } as unknown as Env, ["a", "b"])).toHaveLength(1); // 9,900 + 78 fits; a second doesn't
+  });
+});

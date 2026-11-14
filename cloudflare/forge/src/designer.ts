@@ -29,6 +29,30 @@ export const STUDIO_PAGE_MODEL = "claude-sonnet-5-5";
  */
 export const CF_INNER_MODEL = "@cf/deepseek-ai/deepseek-v4.1-flash-1017";
 const WORKERS_AI_USD_PER_NEURON = 0.011 / 1000;
+/**
+ * Workers AI is free up to 10,000 neurons a day on the Workers plan, and past that it is billed. Forge
+ * never goes past it: pictures use about 78 neurons each (counted in images.ts), the rest is left for
+ * pages, and a page call is made only while a whole page (about 1,500 neurons at most) still fits.
+ * Otherwise the page is written by Claude, as before. CF_FREE_NEURONS can set a lower ceiling.
+ */
+const FREE_NEURONS = 10_000;
+const NEURONS_PER_PICTURE = 78;
+const PAGE_HEADROOM = 1_500;
+const today = () => new Date().toISOString().slice(0, 10);
+
+/** Is there free Workers AI room left today for one more page? */
+export async function workersAiRoom(env: Env): Promise<boolean> {
+  const cap = Math.min(FREE_NEURONS, Number(env.CF_FREE_NEURONS) || FREE_NEURONS);
+  const row = await env.DB.prepare("SELECT (SELECT CAST(value AS REAL) FROM settings WHERE key = ?1) AS text, (SELECT CAST(value AS REAL) FROM settings WHERE key = ?2) AS pics")
+    .bind(`ai-neurons:${today()}`, `ai-images:${today()}`)
+    .first<{ text: number | null; pics: number | null }>();
+  return (row?.text ?? 0) + (row?.pics ?? 0) * NEURONS_PER_PICTURE + PAGE_HEADROOM <= cap;
+}
+
+/** Count what a Workers AI page call used today. */
+async function spendNeurons(env: Env, n: number): Promise<void> {
+  await env.DB.prepare("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = CAST(CAST(value AS REAL) + ?2 AS TEXT)").bind(`ai-neurons:${today()}`, Math.ceil(n)).run();
+}
 
 /**
  * Contact details in a reply that aren't in what the model was given: a phone number or an email the
@@ -1081,9 +1105,14 @@ export async function designSitePage(env: Env, kit: Kit, page: PageSpec, rev: Pa
 /** One call that writes a page (whole) or its edits. */
 async function writePage(env: Env, kit: Kit, page: PageSpec, rev: PageRevision, edit: boolean): Promise<{ text: string; usage: Record<string, unknown>; cut: boolean }> {
   const r = pageRequest(env, kit, page, rev, edit);
+  if (r.model.startsWith("@cf/") && !(await workersAiRoom(env).catch(() => false))) {
+    console.log("workers ai free allowance used for today; using Claude", page.path);
+    r.model = r.fallback;
+  }
   if (r.model.startsWith("@cf/")) {
     try {
       const out = await askWorkersAi(env, r.model, r.system, `${r.shared}\n\n${r.task}`, r.maxTokens);
+      await spendNeurons(env, Number(out.usage.neurons) || PAGE_HEADROOM).catch(() => undefined);
       // Only a reply that finished, in the shape asked for, is kept; anything else goes to Sonnet.
       const ok = edit ? parseEdits(out.text).length > 0 : !out.cut && /<\/main>/i.test(parseParts(out.text).MAIN ?? "");
       const invented = inventedContacts(out.text, `${r.shared}\n${r.task}`);
