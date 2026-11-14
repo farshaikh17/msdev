@@ -205,3 +205,56 @@ describe("their own web address", () => {
     expect(h.db.prepare("SELECT dns_ok, ssl, cf_id FROM domains WHERE slug = ?").get(slug)).toEqual({ dns_ok: 1, ssl: "active", cf_id: "ch_1" });
   });
 });
+
+import { nicheOf } from "../cloudflare/forge/src/niche";
+describe("the gallery", () => {
+  it("puts trades into plain niches", () => {
+    expect(nicheOf("Medical Spa")).toBe("Beauty & health");
+    expect(nicheOf("Plumbing")).toBe("Home services");
+    expect(nicheOf("", "Waffle House")).toBe("Food & drink");
+    expect(nicheOf("Escape Room")).toBe("Places & leisure");
+    expect(nicheOf("Auto Repair")).toBe("Auto");
+    expect(nicheOf("Thrift Store")).toBe("Shops");
+    expect(nicheOf("Mystery Trade")).toBe("Other");
+  });
+
+  it("shows every finished site with its niche, look and first screen; filters, compares, and starts a site on a design", async () => {
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 5);
+    const add = async (name: string, trade: string, kit: Record<string, unknown>, score: number) => {
+      const slug = slugOf(await build(h, b.cookie, name));
+      const version = `mw${slug.slice(-6)}`;
+      await saveKit(h.env, slug, version, { theme: "light", accent: "#aa3333", fonts: "", css: "", header: "", footer: "", script: "", components: "", brief: "b", pages: [{ path: "/", name: "Home", kind: "ai", brief: "" }], ...kit } as never, {});
+      h.db.prepare("UPDATE site_versions SET review = ? WHERE slug = ?").run(JSON.stringify({ at: "x", score, shots: ["shot-desktop.jpg", "shot-phone.jpg"] }), slug);
+      h.db.prepare("UPDATE demos SET build_status = 'ready', live_version = ?, content = json_set(content, '$.industry', ?) WHERE slug = ?").run(version, trade, slug);
+      h.db.prepare("INSERT INTO build_costs (tenant_id, slug, version, usd, calls, outcome, created_at) VALUES (?, ?, ?, 2.5, 10, 'ready', 'x')").run(b.id, slug, version);
+      return slug;
+    };
+    const spa = await add("Eco Beauty Medspa", "Medical Spa", { style: "studio", concept: "organic", hero: "own", idea: { idea: "The quiet moment at the mirror." } }, 6);
+    const plumber = await add("O'Hara Plumbing", "Plumbing", {}, 7);
+    const g = await html(await call(h, "/gallery", { cookie: b.cookie }));
+    expect(g).toContain("Beauty &amp; health");
+    expect(g).toContain("Home services");
+    expect(g).toContain("Organic");
+    expect(g).toContain("Its own idea");
+    expect(g).toContain("The quiet moment at the mirror.");
+    expect(g).toContain("Built for $2.50");
+    expect(g).toContain("2 of 2 websites");
+    const studioOnly = await html(await call(h, "/gallery?style=studio", { cookie: b.cookie }));
+    expect(studioOnly).toContain("1 of 2 websites");
+    expect(studioOnly).not.toContain(`/demos/${plumber}"`);
+    expect(await html(await call(h, "/gallery?niche=Home%20services", { cookie: b.cookie }))).toContain(`/demos/${plumber}"`);
+    const best = await html(await call(h, "/gallery?sort=score", { cookie: b.cookie }));
+    expect(best.indexOf(`/demos/${plumber}"`)).toBeLessThan(best.indexOf(`/demos/${spa}"`));
+    expect(await html(await call(h, "/gallery?view=phone", { cookie: b.cookie }))).toContain("shot-phone.jpg");
+    const cmp = await html(await call(h, `/gallery/compare?s=${spa}&s=${plumber}`, { cookie: b.cookie }));
+    expect(cmp.match(/<iframe/g)).toHaveLength(2);
+    // Use this design: the home form opens with that site's design picked.
+    const home = await html(await call(h, `/?reuse=${spa}`, { cookie: b.cookie }));
+    expect(home).toContain("Building on the design of <b>Eco Beauty Medspa</b>");
+    expect(home).toMatch(new RegExp(`name="reuseFrom" value="${spa}" checked`));
+    // Another account sees none of these.
+    const c = await makeAccount(h, admin, "Other Co", "owner@c.test", 5);
+    expect(await html(await call(h, "/gallery", { cookie: c.cookie }))).toContain("0 of 0 websites");
+  });
+});

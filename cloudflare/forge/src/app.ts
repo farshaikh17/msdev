@@ -25,6 +25,7 @@ import {
   leadHistory,
   leadStatusOf,
   setLeadStatus,
+  listGallery,
   listDemos,
   listLeads,
   listOwnVideos,
@@ -83,6 +84,7 @@ import {
 import { demoPage, homePage, invitePage, isOwner, loginPage, page, setupPage } from "./ui";
 import { adminInquiriesPage, adminPage, adminSitePage, adminTenantPage, adminVideosPage } from "./ui-admin";
 import { STUDIO_CREDITS } from "./tenants";
+import { comparePage, galleryPage } from "./ui-gallery";
 import { apiPage, passwordCard, settingsPage, teamPage } from "./ui-settings";
 import { deliver, newWebhookSecret, webhookUrlProblem } from "./webhook";
 import { countNewInquiries, getPlans, getShowcaseSlugs, handleWeb, listInquiries, parsePlans, parseSlugs, payUrlOk, setInquiryStatus, webNotFound } from "./web";
@@ -222,7 +224,16 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
   // ---- Dashboard and demos -------------------------------------------------------------------
   if (path === "/" && req.method === "GET") {
     const [demos, views, usage] = await Promise.all([listDemos(env, s.tenant.id), viewStats(env, { tenantId: s.tenant.id }), tenantUsage(env, s.tenant.id)]);
-    return homePage(s, demos.map((d) => ({ ...d, views: views.get(d.slug) })), site, aiOn, usage, q("error"), q("ok"), q("lead") ?? "");
+    return homePage(s, demos.map((d) => ({ ...d, views: views.get(d.slug) })), site, aiOn, usage, q("error"), q("ok"), q("lead") ?? "", q("reuse") ?? "");
+  }
+  if (path === "/gallery" && req.method === "GET") {
+    const f = { niche: q("niche") ?? "", look: q("look") ?? "", first: q("first") ?? "", style: q("style") ?? "", lead: q("lead") ?? "", sort: q("sort") ?? "new", view: q("view") ?? "desktop" };
+    return galleryPage(s, await listGallery(env, s.tenant.id), f, site);
+  }
+  if (path === "/gallery/compare" && req.method === "GET") {
+    const want = url.searchParams.getAll("s").slice(0, 3);
+    const items = (await listGallery(env, s.tenant.id)).filter((i) => want.includes(i.slug));
+    return comparePage(s, items, site, q("view") === "phone");
   }
 
   // Several at once: one business per line (a name, "name | city", or a Google Maps link).

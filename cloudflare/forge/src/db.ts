@@ -276,6 +276,59 @@ export async function listDemos(env: Env, tenantId: number): Promise<Listed[]> {
   });
 }
 
+/** A finished site as the gallery shows it: what it is, how it was designed, how it did and what it cost. */
+export interface GalleryItem {
+  slug: string;
+  businessName: string;
+  trade: string;
+  city: string;
+  createdAt: string;
+  version: string;
+  style: "standard" | "studio";
+  look: string;
+  firstScreen: string;
+  idea: string;
+  score: number | null;
+  hasShots: boolean;
+  leadStatus: LeadStatus;
+  costUsd: number;
+}
+
+/** The account's finished sites, newest first, for the gallery. */
+export async function listGallery(env: Env, tenantId: number): Promise<GalleryItem[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT d.slug, d.business_name, d.intake, d.content, d.created_at, d.lead_status, d.live_version,
+            json_extract(v.kit, '$.style') AS style, json_extract(v.kit, '$.concept') AS look, json_extract(v.kit, '$.hero') AS first_screen,
+            json_extract(v.kit, '$.idea.idea') AS idea, json_extract(v.review, '$.score') AS score, (v.review LIKE '%shot-desktop.jpg%') AS shots,
+            (SELECT SUM(c.usd) FROM build_costs c WHERE c.slug = d.slug AND (c.version = d.live_version OR c.version LIKE d.live_version || ':%')) AS cost
+       FROM demos d JOIN site_versions v ON v.slug = d.slug AND v.version = d.live_version
+      WHERE d.tenant_id = ? AND d.status = 'active' AND d.live_version IS NOT NULL
+      ORDER BY d.created_at DESC LIMIT 300`,
+  )
+    .bind(tenantId)
+    .all<{ slug: string; business_name: string; intake: string; content: string; created_at: string; lead_status: string | null; live_version: string; style: string | null; look: string | null; first_screen: string | null; idea: string | null; score: number | null; shots: number; cost: number | null }>();
+  return results.map((r) => {
+    const intake = JSON.parse(r.intake) as { city?: string; industry?: string };
+    const content = JSON.parse(r.content) as { industry?: string };
+    return {
+      slug: r.slug,
+      businessName: r.business_name,
+      trade: intake.industry || content.industry || "",
+      city: intake.city ?? "",
+      createdAt: r.created_at,
+      version: r.live_version,
+      style: r.style === "studio" ? "studio" : "standard",
+      look: r.look ?? "",
+      firstScreen: r.first_screen ?? "",
+      idea: r.idea ?? "",
+      score: typeof r.score === "number" ? r.score : null,
+      hasShots: !!r.shots,
+      leadStatus: leadStatusOf(r.lead_status),
+      costUsd: r.cost ?? 0,
+    };
+  });
+}
+
 /** Create a demo for an account, or update one it already has (a slug that belongs to another account is never touched). */
 export async function saveDemo(env: Env, d: Demo, tenantId: number): Promise<void> {
   await env.DB.prepare(

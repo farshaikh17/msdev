@@ -79,9 +79,9 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 .tag{font:600 .72rem var(--body);padding:3px 9px;border-radius:999px;background:var(--steel-soft);color:var(--steel)}
 .tag.bad{background:var(--bad-soft);color:var(--bad)}
 .tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.dim{background:var(--chrome);color:var(--muted)}
-.lead{font:600 .72rem var(--body);padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
-.lead.sent{color:var(--steel);border-color:var(--steel)}.lead.replied{color:var(--ember);border-color:var(--ember)}.lead.won{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}.lead.lost{color:var(--bad);border-color:var(--bad)}
-.leads-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.leads-bar a{text-decoration:none}.leads-bar a.on .lead{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.lstat{font:600 .72rem var(--body);padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.lstat.sent{color:var(--steel);border-color:var(--steel)}.lstat.replied{color:var(--ember);border-color:var(--ember)}.lstat.won{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}.lstat.lost{color:var(--bad);border-color:var(--bad)}
+.leads-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.leads-bar a{text-decoration:none}.leads-bar a.on .lstat{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 .credits{font:600 .78rem var(--body);padding:4px 10px;border-radius:999px;background:var(--steel-soft);color:var(--steel);max-width:100%;overflow-wrap:anywhere}
 .right{margin-left:auto}
 .hero-form{padding:28px;gap:18px;border-color:var(--ember);box-shadow:0 18px 50px -34px var(--ember)}
@@ -111,7 +111,7 @@ const COPY_JS = `if(/[?&](ok|error)=/.test(location.search))history.replaceState
 document.addEventListener("click",async e=>{const b=e.target.closest("[data-copy]");if(!b)return;const t=b.getAttribute("data-copy");try{await navigator.clipboard.writeText(t);b.textContent="Copied";setTimeout(()=>b.textContent="Copy",1500)}catch{prompt("Copy this:",t)}});
 document.addEventListener("submit",e=>{const b=e.target.querySelector("button[data-busy]");if(b){b.disabled=true;b.textContent=b.getAttribute("data-busy")}});`;
 
-export type NavItem = "demos" | "team" | "api" | "settings" | "admin";
+export type NavItem = "demos" | "gallery" | "team" | "api" | "settings" | "admin";
 
 export interface PageOpts {
   /** Which menu item is current. */
@@ -130,7 +130,7 @@ export function page(title: string, body: string, opts: PageOpts = {}): Response
   const link = (id: NavItem, href: string, label: string) => `<a href="${href}" class="${opts.nav === id ? "on" : ""}">${label}</a>`;
   const nav = s
     ? `<header class="top"><div class="top-in"><a class="brand" href="/"><i></i>Forge <span style="font-weight:600;opacity:.6">Websites</span></a><nav class="nav">
-${link("demos", "/", "Websites")}${isOwner(s) ? link("settings", "/settings", "Settings") : ""}${s.user.role === "admin" ? link("admin", "/admin", "Admin") : ""}
+${link("demos", "/", "Websites")}${link("gallery", "/gallery", "Gallery")}${isOwner(s) ? link("settings", "/settings", "Settings") : ""}${s.user.role === "admin" ? link("admin", "/admin", "Admin") : ""}
 <span class="credits" title="${esc(s.user.email)}">${esc(s.tenant.name)} · ${esc(creditsText(s))}</span>
 ${toggle()}<form method="post" action="/logout"><button class="linkbtn">Sign out</button></form></nav></div></header>`
     : `<div class="tcorner">${toggle()}</div>`;
@@ -283,13 +283,13 @@ ${t("chatWidget", "Chat widget (GoHighLevel)", "Empty: the account's widget. Or 
 const stat = (label: string, value: string | number) => `<div class="card" style="gap:2px;padding:16px"><span class="note">${esc(label)}</span><b style="font:800 1.6rem var(--display)">${esc(String(value))}</b></div>`;
 
 /** One website on the home screen: a picture of it, its state in plain words, and the two things people do with it. */
-const leadPill = (st: LeadStatus) => `<span class="lead ${st}" title="Where this lead stands">${LEAD_LABELS[st]}</span>`;
+const leadPill = (st: LeadStatus) => `<span class="lstat ${st}" title="Where this lead stands">${LEAD_LABELS[st]}</span>`;
 
 /** Counts of the account's sites by lead status, as filter links (the one shown is highlighted). */
 function leadsBar(demos: Listed[], on: string): string {
   const count = (st: LeadStatus) => demos.filter((d) => d.leadStatus === st).length;
   if (!demos.some((d) => d.leadStatus !== "new")) return "";
-  const link = (st: string, label: string, n: number) => `<a href="/${st ? `?lead=${st}` : ""}" class="${on === st ? "on" : ""}"><span class="lead ${st}">${label} · ${n}</span></a>`;
+  const link = (st: string, label: string, n: number) => `<a href="/${st ? `?lead=${st}` : ""}" class="${on === st ? "on" : ""}"><span class="lstat ${st}">${label} · ${n}</span></a>`;
   return `<div class="leads-bar"><span class="note">Leads:</span>${link("", "All", demos.length)}${LEAD_STATUSES.map((st) => link(st, LEAD_LABELS[st], count(st))).join("")}</div>`;
 }
 
@@ -382,10 +382,12 @@ function siteCard(d: Listed, url: string): string {
 <div class="row" style="justify-content:space-between"><div class="row"><a class="btn ghost" href="/demos/${esc(d.slug)}">Open</a><button class="btn ghost" data-copy="${esc(url)}">Copy link</button></div>${d.buildStatus === "ready" || d.leadStatus !== "new" ? leadPill(d.leadStatus) : ""}</div></article>`;
 }
 
-export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string, leadFilter = ""): Response {
+export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string, leadFilter = "", reuseFrom = ""): Response {
   const out = !s.tenant.unlimited && s.tenant.credits < 1;
-  const reuse: ReuseChoice[] = demos
-    .filter((d) => d.buildStatus === "ready" && d.shot)
+  // "Use this design" in the gallery: that site's design comes first and is already picked.
+  const ready = demos.filter((d) => d.buildStatus === "ready" && d.shot);
+  const chosen = ready.find((d) => d.slug === reuseFrom);
+  const reuse: ReuseChoice[] = [...(chosen ? [chosen] : []), ...ready.filter((d) => d !== chosen)]
     .slice(0, 12)
     .map((d) => ({ slug: d.slug, name: d.businessName, trade: d.industry, thumb: `${siteUrl(d.slug)}/_img/${d.shot}/shot-desktop.jpg` }));
   const on = (LEAD_STATUSES as readonly string[]).includes(leadFilter) ? leadFilter : "";
@@ -399,9 +401,9 @@ export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) =>
     "Websites",
     `<main class="main">${flash(ok, err)}
 ${out ? `<div class="flash bad" role="alert">You have no builds left. Ask your Forge administrator to add more. The websites you've already built keep working.</div>` : ""}
-<form method="post" action="/demos" class="card hero-form"><div><h1>Build a website for any business</h1>
+<form method="post" action="/demos" class="card hero-form" id="build">${chosen ? `<div class="flash ok" role="status" style="margin:0">Building on the design of <b>${esc(chosen.businessName)}</b>: type the new business below. It skips the design step, so it's faster and cheaper.</div>` : ""}<div><h1>Build a website for any business</h1>
 <p class="lead">Type the business name or paste its Google Maps link. That's all we need.${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template.)"}</p></div>
-${fields(undefined, reuse)}
+${fields(chosen ? { reuseFrom: chosen.slug } : undefined, reuse)}
 <div class="row"><button class="btn ember big" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build website</button><span class="note">Ready in about 10–20 minutes. You can close this page; it keeps building.</span></div></form>
 <section style="display:grid;gap:14px"><h2>Your websites${demos.length ? ` (${demos.length})` : ""}</h2>${leadsBar(demos, on)}${list}</section>
 <details class="card"><summary>Have a list? Build several at once</summary><form method="post" action="/demos/bulk" style="display:grid;gap:14px">
