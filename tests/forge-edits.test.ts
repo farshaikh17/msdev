@@ -194,3 +194,15 @@ describe("Cloudflare's free daily allowance", () => {
     expect(w.calls).toHaveLength(1);
   });
 });
+
+describe("the first screen's revision", () => {
+  it("goes as edits after its browser check, at low effort", async () => {
+    const studioKit = { ...kit, style: "studio" } as unknown as Kit;
+    const hero = { title: "Home", description: "", css: "", body: "<main><section><h1>Big words</h1></section></main>" };
+    replies.push("@@@ EDITS\n<<<<<<< FIND MAIN\n<h1>Big words</h1>\n=======\n<h1>Bigger words</h1>\n>>>>>>> REPLACE");
+    const r = await designSitePage(env, studioKit, spec, { heroOnly: true, notes: ["Headline bigger"], current: hero });
+    expect(r.page.body).toContain("Bigger words");
+    expect((requests[0]!.output_config as { effort: string }).effort).toBe("low");
+    expect(requests[0]!.model).toBe("claude-opus-5-5");
+  });
+});

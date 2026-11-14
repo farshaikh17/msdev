@@ -15,7 +15,7 @@ import { heroById } from "./heroes";
 import { ownScreen } from "./brief";
 import Anthropic from "@anthropic-ai/sdk";
 import { getDemo, getKit, getPage, getReview, getSetting, saveImage, savePage, saveReview, setSetting, type Stored } from "./db";
-import { costOf, designSitePage, MODEL, pagesOf, parseParts, type Kit } from "./designer";
+import { costOf, designSitePage, MODEL, pagesOf, parseParts, STUDIO_PAGE_MODEL, type Kit } from "./designer";
 import type { Env } from "./env";
 import { recordBuildCost } from "./tenants";
 
@@ -331,7 +331,8 @@ export function artNotes(text: string): string[] {
 async function artDirectReal(env: Env, shots: Shots, brief: string): Promise<{ notes: string[]; keep: string; costUsd: number }> {
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 180_000 });
   const res = await client.messages.create({
-    model: env.CLAUDE_MODEL || MODEL,
+    // Sonnet looks and writes the notes (it reads screenshots well, at half Opus's price); the revision itself stays with the designer.
+    model: STUDIO_PAGE_MODEL,
     max_tokens: 5000,
     system: ART_SYSTEM,
     messages: [
@@ -358,7 +359,7 @@ One or two sentences: what works and must not change.`),
   const p = parseParts(text);
   const notes = artNotes(p.NOTES ?? "");
   const weakest = (p.WEAKEST ?? "").trim();
-  return { notes: weakest ? [...notes, `The weakest screens, as the art director saw them: ${weakest.replace(/\s+/g, " ").slice(0, 600)}`] : notes, keep: (p.KEEP ?? "").replace(/\s+/g, " ").trim().slice(0, 400), costUsd: costOf(env.CLAUDE_MODEL || MODEL, res.usage as unknown as Record<string, unknown>) };
+  return { notes: weakest ? [...notes, `The weakest screens, as the art director saw them: ${weakest.replace(/\s+/g, " ").slice(0, 600)}`] : notes, keep: (p.KEEP ?? "").replace(/\s+/g, " ").trim().slice(0, 400), costUsd: costOf(STUDIO_PAGE_MODEL, res.usage as unknown as Record<string, unknown>) };
 }
 
 async function critiqueReal(env: Env, shots: Shots, facts: string, studio = false) {
@@ -748,7 +749,9 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     // A Studio site gets the art director's pass instead: one revision from seeing the whole page.
     // Once per version: a page already revised (its original is kept at /_before) isn't revised again on a later check.
     const revisedBefore = studio && !!(await getPage(env, slug, version, BEFORE_PAGE));
-    if (studio && down.frames.length && env.FORGE_ART_PASS !== "off" && !revisedBefore) {
+    // Not for a page that already scores 8 or more with nothing failed and no blank screen: there is little left to gain.
+    const alreadyGood = crit.score >= 8 && !failed.length && down.blank === 0;
+    if (studio && down.frames.length && env.FORGE_ART_PASS !== "off" && !revisedBefore && !alreadyGood) {
       await artPass(env, deps, { slug, version, kit, demo, shots: shotSet, failed, settle, sleep, url: `${base}${prefix}?r=${version}-art`, prefix }, review);
     }
     const heroFirst = studio && !!(await getPage(env, slug, version, "/_hero"));

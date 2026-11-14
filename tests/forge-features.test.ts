@@ -813,7 +813,7 @@ describe("the art director's pass (Studio)", () => {
     const { slug, version } = await studioLive();
     const original = (await getPage(h.env, slug, version, "/"))!.body;
     let launches = 0;
-    const base = { critique: async () => ({ score: 8, verdict: "v", strengths: [], issues: [], costUsd: 0.01 }), artDirect: async () => ({ notes: ["Screen 2: make the gallery a wide strip"], keep: "", costUsd: 0.04 }), sleep: async () => undefined };
+    const base = { critique: async () => ({ score: 6, verdict: "v", strengths: [], issues: [], costUsd: 0.01 }), artDirect: async () => ({ notes: ["Screen 2: make the gallery a wide strip"], keep: "", costUsd: 0.04 }), sleep: async () => undefined };
     const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { ...base, launch: async () => (++launches === 1 ? scrollingBrowser(moving([`/${slug}/about`])).browser : scrollingBrowser({ ...moving([`/${slug}/about`]), overflow: true }).browser) });
     expect(r.artPass).toMatchObject({ kept: false });
     expect(r.artPass?.why).toContain("sideways");
@@ -827,6 +827,14 @@ describe("the art director's pass (Studio)", () => {
     expect(r2.artPass).toMatchObject({ kept: false });
     expect(r2.artPass?.why).toContain("couldn't be checked");
     expect((await getPage(h.env, other.slug, other.version, "/"))!.body).toBe(other.original);
+  });
+
+  it("is skipped for a page that already scores 8 or more with nothing failed and no blank screen", async () => {
+    const { slug, version } = await studioLive();
+    const artDirect = vi.fn();
+    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, { launch: async () => scrollingBrowser(moving([`/${slug}/about`])).browser, critique: async () => ({ score: 8, verdict: "v", strengths: [], issues: [], costUsd: 0.01 }), artDirect, sleep: async () => undefined });
+    expect(artDirect).not.toHaveBeenCalled();
+    expect(r.artPass).toBeUndefined();
   });
 
   it("can be turned off, and a Standard site never gets it", async () => {
