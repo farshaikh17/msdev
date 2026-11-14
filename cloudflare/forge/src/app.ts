@@ -211,7 +211,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
   if (web) return web;
   if (!s) {
     if (path === "/login") return loginPage(undefined, (await adminCount(env)) === 0);
-    if (/^\/(demos|team|api|settings|admin)(\/|$)/.test(path) || post) return redirect("/login");
+    if (/^\/(demos|gallery|team|api|settings|admin)(\/|$)/.test(path) || post) return redirect("/login");
     return webNotFound(req, false);
   }
   if (post && !sameOrigin(req)) return text("Cross-site form posts are not accepted.", 403);
