@@ -248,6 +248,13 @@ describe("outreach, changes and quick fixes", () => {
     expect(loc(r)).toMatch(/Replaced "About us." in \d+ places/);
     expect((await getPage(h.env, slug, version, "/about"))!.body).toContain("Call Tom &amp; Co.");
     expect(loc(await call(h, `/demos/${slug}/replace`, { cookie: b.cookie, form: { find: "zzz-not-there", replace: "x" } }))).toContain("wasn't found");
+    // The shared header and footer too: a wrong number usually sits there as well.
+    h.db.prepare("UPDATE site_versions SET kit = json_set(kit, '$.header', ?, '$.footer', ?) WHERE slug = ? AND version = ?").run('<header><a href="tel:+13054460178">(305) 446-0178</a></header>', '<footer>(305) 446-0178</footer>', slug, version);
+    await call(h, `/demos/${slug}/replace`, { cookie: b.cookie, form: { find: "(305) 446-0178", replace: "(305) 667-5657" } });
+    await call(h, `/demos/${slug}/replace`, { cookie: b.cookie, form: { find: "+13054460178", replace: "+13056675657" } });
+    const kit = (await getKit(h.env, slug, version))!;
+    expect(kit.header).toBe('<header><a href="tel:+13056675657">(305) 667-5657</a></header>');
+    expect(kit.footer).toBe("<footer>(305) 667-5657</footer>");
   });
 });
 

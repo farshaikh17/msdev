@@ -58,6 +58,8 @@ describe("Forge worker — multi-page sites", () => {
     expect(kind("Crandon", "Beach")).toBe("attraction");
     expect(kind("Shady Oaks RV Park")).toBe("lodging");
     expect(kind("Park Avenue Plumbing")).toBe("contractor");
+    expect(kind("Margaux Early Childhood School", "Preschool")).toBe("attraction");
+    expect(kind("Little Steps", "Daycare")).toBe("attraction");
     expect(kind("Bright Smile", "Family Dentist")).toBe("health");
     expect(kind("Luxe", "Hair Salon")).toBe("beauty");
     expect(kind("Iron Works", "Gym")).toBe("fitness");

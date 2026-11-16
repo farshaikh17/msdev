@@ -762,6 +762,18 @@ export async function markQueueFailed(env: Env, slug: string, error: string): Pr
 
 /** Replace a phrase on every page of the live version (exact text, HTML-escaped to match what the pages hold). Returns how many places changed. */
 export async function replaceText(env: Env, slug: string, version: string, find: string, replacement: string): Promise<number> {
+  // The shared header and footer too (a wrong phone number or name usually sits there as well).
+  const kitRow = await env.DB.prepare("SELECT json_extract(kit, '$.header') AS header, json_extract(kit, '$.footer') AS footer FROM site_versions WHERE slug = ? AND version = ?").bind(slug, version).first<{ header: string | null; footer: string | null }>();
+  let chrome = 0;
+  if (kitRow?.header != null && kitRow.footer != null) {
+    const both = `${kitRow.header}\u0000${kitRow.footer}`;
+    const swapped = both.split(find).join(replacement);
+    chrome = both.split(find).length - 1;
+    if (chrome) {
+      const [header, footer] = swapped.split("\u0000");
+      await saveChrome(env, slug, version, header!, footer!);
+    }
+  }
   const { results } = await env.DB.prepare("SELECT path, title, description, css, body FROM site_pages WHERE slug = ? AND version = ?").bind(slug, version).all<PageDraft & { path: string }>();
   const escHtml = (t: string) => t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
   let count = 0;
@@ -776,7 +788,7 @@ export async function replaceText(env: Env, slug: string, version: string, find:
       .bind(title.join(replacement), description.join(replacement), body.join(escHtml(replacement)), slug, version, p.path)
       .run();
   }
-  return count;
+  return count + chrome;
 }
 
 /**

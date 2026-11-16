@@ -288,4 +288,14 @@ if(R)e.style.paddingRight=(parseFloat(cs.paddingRight)||0)+Math.max(0,18-Math.ma
 function later(){setTimeout(fit,60)}
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(fit,1200)});else setTimeout(fit,1500);
 addEventListener("orientationchange",later)})();
+
+// First-screen buttons with no fill of their own: dark words over a photo can't be read (an "empty" outlined
+// box). Over a picture they are set white, with a white outline.
+(function(){function go(){var hero=document.querySelector("main > section, main > *");if(!hero)return;
+hero.querySelectorAll("a,button").forEach(function(b){var s=getComputedStyle(b),m=(s.backgroundColor||"").match(/[0-9.]+/g);
+if(m&&(m.length<4||+m[3]>0.3))return;var c=(s.color||"").match(/[0-9.]+/g);if(!c)return;var L=(0.2126*c[0]+0.7152*c[1]+0.0722*c[2])/255;if(L>0.45)return;
+var r=b.getBoundingClientRect();if(!r.width)return;var els=document.elementsFromPoint(r.left+r.width/2,r.top+r.height/2),photo=false;
+for(var i=0;i<els.length&&!photo;i++){var e=els[i];if(b.contains(e))continue;if(/^(IMG|VIDEO|CANVAS|PICTURE)$/.test(e.tagName)||getComputedStyle(e).backgroundImage!=="none")photo=true;else{var bg=(getComputedStyle(e).backgroundColor||"").match(/[0-9.]+/g);if(bg&&(bg.length<4||+bg[3]>0.5))break}}
+if(photo){b.style.setProperty("color","#fff","important");b.style.setProperty("border-color","rgba(255,255,255,.75)","important")}})}
+setTimeout(go,300);setTimeout(go,2000)})();
 }catch(x){}};`;
