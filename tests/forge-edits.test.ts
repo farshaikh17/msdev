@@ -137,14 +137,17 @@ describe("the rest of a Studio home page on Workers AI", () => {
     await designSitePage({ ...base, AI: { run: async () => { throw new Error("busy"); } } } as never, studioKit, spec, { hero });
     expect(requests[0]!.model).toBe("claude-opus-5-5");
   });
-  it("leaves the first screen and the art pass to Opus", async () => {
+  it("writes the first screen on Sonnet (the design kit and the art pass stay on Opus), unless told otherwise", async () => {
     const calls: string[] = [];
     const ai = { run: async (m: string) => (calls.push(m), {}) };
     replies.push("@@@ MAIN\n<main><section>Hero</section></main>", "@@@ EDITS\n<<<<<<< FIND MAIN\nFirst screen\n=======\nFirst\n>>>>>>> REPLACE");
     await designSitePage({ ...base, AI: ai } as never, studioKit, spec, { heroOnly: true });
     await designSitePage({ ...base, AI: ai } as never, studioKit, spec, { notes: ["Shorter"], current: hero });
     expect(calls).toHaveLength(0);
-    expect(requests.map((q) => q.model)).toEqual(["claude-opus-5-5", "claude-opus-5-5"]);
+    expect(requests.map((q) => q.model)).toEqual(["claude-sonnet-5-5", "claude-opus-5-5"]);
+    replies.push("@@@ MAIN\n<main><section>Hero</section></main>");
+    await designSitePage({ ...base, AI: ai, FORGE_HERO_MODEL: "claude-opus-5-5" } as never, studioKit, spec, { heroOnly: true });
+    expect(requests.at(-1)!.model).toBe("claude-opus-5-5");
   });
 });
 
@@ -203,7 +206,7 @@ describe("the first screen's revision", () => {
     const r = await designSitePage(env, studioKit, spec, { heroOnly: true, notes: ["Headline bigger"], current: hero });
     expect(r.page.body).toContain("Bigger words");
     expect((requests[0]!.output_config as { effort: string }).effort).toBe("low");
-    expect(requests[0]!.model).toBe("claude-opus-5-5");
+    expect(requests[0]!.model).toBe("claude-sonnet-5-5");
   });
 });
 

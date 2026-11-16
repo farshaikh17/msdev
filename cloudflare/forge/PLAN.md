@@ -145,6 +145,10 @@ Estimates; to be confirmed by logging cost per stage (added in Slice 2). Today a
   are used in the month. Photos past the free allowance (about $0.001 each) come out of the same cap; the
   nightly photo bank never does.
 
+- **First screen on Sonnet (from 16 Nov).** The design kit stays on Opus; the first screen (and its
+  browser-checked redo) is written by Sonnet at half the price. Set `FORGE_HERO_MODEL` to put it back.
+  Baseline to beat: Madruga Bakery, $1.43 all in, review 6/10.
+
 ## Gate B: before reselling
 
 Ten sites across ten trades and five towns with "Let Forge choose", including three businesses with real logos and three with nothing online:

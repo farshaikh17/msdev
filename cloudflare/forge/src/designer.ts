@@ -1223,6 +1223,9 @@ ${page.brief}${current}${notes}${change}${adapt}${first}${only}${edit ? `\n\n## 
   let model = rev.cheap ? STUDIO_PAGE_MODEL : home && !kit.reuse ? env.CLAUDE_MODEL || MODEL : home ? STUDIO_PAGE_MODEL : studio ? (env.AI && cfInner ? cfInner : STUDIO_PAGE_MODEL) : env.CLAUDE_PAGE_MODEL || PAGE_MODEL;
   // A Studio home page whose first screen Opus already built and a browser approved: the rest of the page
   // goes on Workers AI too (tested: as good as Opus's for about 2 cents), with Opus as the fallback.
+  // A Studio first screen (built alone, then checked in a browser) is written by Sonnet, at half Opus's price;
+  // the design kit it follows stays on Opus. FORGE_HERO_MODEL can put it back (e.g. "claude-opus-5-5").
+  if (studio && home && rev.heroOnly && !rev.cheap && !kit.reuse) model = env.FORGE_HERO_MODEL || STUDIO_PAGE_MODEL;
   let fallback = STUDIO_PAGE_MODEL;
   if (studio && home && rev.hero && !rev.cheap && !kit.reuse && env.AI && cfInner) {
     fallback = model;
