@@ -115,7 +115,7 @@ export function assemble(kit: Kit, page: PageDraft, slug: string, credit: string
 ${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${HEADER_CSS}\n${HERO_CSS}\n${CREDIT_CSS}\n${QA_CSS}${studio ? MOTION_CSS : ""}</style></head><body>
 ${kit.header}
 ${samplesNotPlaceholders(/<main\b[^>]*\sid\s*=/i.test(page.body) ? page.body : page.body.replace(/<main\b/i, '<main id="main"'))}
-${kit.footer.split(CREDIT_MARKER).join(credit)}
+${kit.footer.split(CREDIT_MARKER).join(credit).replace(/(©|&copy;)(\s*)20\d\d(?!\s*[-–])/g, `$1$2${new Date().getUTCFullYear()}`)}
 <script>${kit.script}</script><script>${QA_JS}</script>${studio ? motionScripts() : ""}</body></html>`;
   // The QA standards that need no judgement: +1 on phone links, legal links always in the footer.
   const legal = (path: string) => !pagesOf(kit).some((p) => p.path === path) || new RegExp(`href\\s*=\\s*["']${path}["']`, "i").test(kit.footer);

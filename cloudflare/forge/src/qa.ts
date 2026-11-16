@@ -298,4 +298,15 @@ var r=b.getBoundingClientRect();if(!r.width)return;var els=document.elementsFrom
 for(var i=0;i<els.length&&!photo;i++){var e=els[i];if(b.contains(e))continue;if(/^(IMG|VIDEO|CANVAS|PICTURE)$/.test(e.tagName)||getComputedStyle(e).backgroundImage!=="none")photo=true;else{var bg=(getComputedStyle(e).backgroundColor||"").match(/[0-9.]+/g);if(bg&&(bg.length<4||+bg[3]>0.5))break}}
 if(photo){b.style.setProperty("color","#fff","important");b.style.setProperty("border-color","rgba(255,255,255,.75)","important")}})}
 setTimeout(go,300);setTimeout(go,2000)})();
+
+// A call link with no number in it ("tel:+1") goes nowhere: hidden. Phones: text squeezed into a sliver of a
+// grid row (a title wrapped one letter a line) gets its row stacked in one column instead.
+(function(){document.querySelectorAll('a[href^="tel:"]').forEach(function(a){if((a.getAttribute("href")||"").replace(/[^0-9]/g,"").length<10)a.style.display="none"});
+function stack(){if(innerWidth>=700)return;
+document.querySelectorAll("main h1,main h2,main h3,main h4,main p,main span,main a,main li,main strong").forEach(function(e){
+var t=(e.textContent||"").trim();if(t.length<4||e.children.length>2)return;var r=e.getBoundingClientRect();if(!r.width||r.width>=48||r.height<40)return;
+for(var n=e.parentElement,k=0;n&&k<3&&n.tagName!=="MAIN";n=n.parentElement,k++){var cs=getComputedStyle(n);
+if(cs.display.indexOf("grid")>=0){n.style.gridTemplateColumns="minmax(0,1fr)";n.style.gridTemplateAreas="none";[].forEach.call(n.children,function(c){c.style.gridColumn="1 / -1";c.style.gridRow="auto";c.style.gridArea="auto"});return}
+if(cs.display.indexOf("flex")>=0&&cs.flexDirection.indexOf("row")===0){n.style.flexWrap="wrap";[].forEach.call(n.children,function(c){c.style.minWidth="0"});e.style.flexBasis="100%";return}}})}
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(stack,900)});else setTimeout(stack,1200)})();
 }catch(x){}};`;

@@ -39,4 +39,12 @@ describe("the pointer", () => {
     // The particles brand moment is shown still on phones.
     expect(MOTION_CSS).toContain(".m-parts-off::before{content:attr(data-word)");
   });
+  it("keeps the credit on one line, the copyright year current, and stacks squeezed grid rows on phones", () => {
+    const html = assemble({ ...(kit("swiss") as object), footer: "<footer><p>© 2025 Gables Inn.</p><!--mianro-credit--></footer>" } as never, page, "s");
+    expect(html).toContain(`© ${new Date().getUTCFullYear()} Gables Inn.`);
+    expect(html).toContain(".mianro-heart{display:inline!important");
+    expect(QA_JS).toContain('n.style.gridTemplateColumns="minmax(0,1fr)"');
+    expect(QA_JS).toContain('a[href^="tel:"]');
+    expect(() => new Function(QA_JS)).not.toThrow();
+  });
 });

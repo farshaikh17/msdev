@@ -244,7 +244,8 @@ describe("Forge worker — multi-page sites", () => {
     const html = assemble(kit, { title: "t", description: "d", css: "", body: "<main></main>" }, "acme-1a2b");
     // Only "Mianro Systems" is the link; "Made with ♥ by" is plain text, with a bigger red heart.
     expect(html).toContain('<span class="mianro-credit">Made with <span class="mianro-heart" role="img" aria-label="love">♥</span> by <a href="https://www.mianrosystems.com/" target="_blank" rel="noopener">Mianro Systems</a></span>');
-    expect(html).toContain(".mianro-heart{color:#e11d48!important;font-size:1.4em");
+    expect(html).toContain("color:#e11d48!important;font-size:1.4em");
+    expect(html).toContain(".mianro-heart{display:inline!important");
     expect(html).toContain("header a,header button"); // header stays on one line
     expect(html).not.toContain(CREDIT_MARKER);
   });

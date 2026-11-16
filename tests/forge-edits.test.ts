@@ -158,6 +158,8 @@ describe("contact details nobody gave", () => {
     const out = scrubContacts(reply, given);
     expect(out).not.toMatch(/446|hello@/);
     expect(out).toContain('<a href="/">Margaux</a>');
+    // A call link left with no number in it goes too.
+    expect(scrubContacts('<a href="tel:+1" class="b">Call the desk</a><a href="tel:+13059990000">Call</a>', given)).toBe("");
     const real = '<a href="tel:+13056675657">(305) 667-5657</a>';
     expect(scrubContacts(real, "Phone: (305) 667-5657")).toBe(real);
   });

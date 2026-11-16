@@ -104,6 +104,8 @@ export function scrubContacts(reply: string, given: string): string {
     (kind.toLowerCase() === "tel" ? badPhones.has(digits(v)) : badMails.has(v.toLowerCase().split("?")[0]!)) ? "" : m,
   );
   for (const b of bad) out = out.split(b).join("");
+  // A link whose number was taken out ("tel:+1", "tel:") goes too.
+  out = out.replace(/<a\b[^>]*href\s*=\s*["']tel:([^"']*)["'][^>]*>[\s\S]*?<\/a>/gi, (m, v: string) => (v.replace(/\D/g, "").length < 10 ? "" : m));
   out = out.replace(/\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/g, (m) => (badPhones.has(digits(m)) ? "" : m));
   return out;
 }
@@ -168,7 +170,7 @@ export interface PageSpec {
 /** The footer credit the SOP requires on every page, exactly. Kit footers carry the marker; assemble() swaps this in. */
 export const CREDIT_MARKER = "<!--mianro-credit-->";
 export const CREDIT = `<span class="mianro-credit">Made with <span class="mianro-heart" role="img" aria-label="love">♥</span> by <a href="https://www.mianrosystems.com/" target="_blank" rel="noopener">Mianro Systems</a></span>`;
-export const CREDIT_CSS = `.mianro-credit{white-space:nowrap;font-weight:400}.mianro-credit a{color:inherit;font-weight:600;text-decoration:underline;text-underline-offset:3px}.mianro-credit a:hover{opacity:.8}.mianro-heart{color:#e11d48!important;font-size:1.4em;line-height:0;vertical-align:-0.12em;margin:0 .1em}`;
+export const CREDIT_CSS = `.mianro-credit{display:inline!important;white-space:nowrap!important;font-weight:400}.mianro-credit a{color:inherit;font-weight:600;text-decoration:underline;text-underline-offset:3px}.mianro-credit a:hover{opacity:.8}.mianro-heart{display:inline!important;position:static!important;float:none!important;color:#e11d48!important;font-size:1.4em;line-height:0;vertical-align:-0.12em;margin:0 .1em!important;padding:0!important;width:auto!important}`;
 
 const slugify = (s: string) =>
   s
