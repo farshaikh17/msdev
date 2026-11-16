@@ -22,7 +22,7 @@ vi.mock("@anthropic-ai/sdk", () => {
   return { default: Anthropic };
 });
 
-import { designKit, designSitePage, inventedContacts, planSite, type Kit } from "../cloudflare/forge/src/designer";
+import { designKit, designSitePage, inventedContacts, planSite, scrubContacts, type Kit } from "../cloudflare/forge/src/designer";
 
 /** Today's Workers AI use, as the page writer reads it from the settings table. */
 const used = { text: 0, pics: 0 };
@@ -152,6 +152,15 @@ describe("the rest of a Studio home page on Workers AI", () => {
 });
 
 describe("contact details nobody gave", () => {
+  it("are taken out of a reply whole (links and bare text), and real ones are kept", () => {
+    const given = "Business: Margaux Early Childhood School\nCity: Coral Gables, FL";
+    const reply = '<header><a href="/">Margaux</a><a class="call" href="tel:+13054460178">(305) 446-0178</a></header><p>Call 305.446.0178 or write to hello@margaux.test.</p><a href="mailto:hello@margaux.test">Email us</a>';
+    const out = scrubContacts(reply, given);
+    expect(out).not.toMatch(/446|hello@/);
+    expect(out).toContain('<a href="/">Margaux</a>');
+    const real = '<a href="tel:+13056675657">(305) 667-5657</a>';
+    expect(scrubContacts(real, "Phone: (305) 667-5657")).toBe(real);
+  });
   it("finds a phone number or email that isn't in what the model was given", () => {
     const given = "Business: O'Hara Plumbing\nPhone: (308) 555-0101\nEmail: hello@ohara.test";
     expect(inventedContacts('<a href="tel:+13085550101">(308) 555-0101</a> hello@ohara.test', given)).toEqual([]);

@@ -89,6 +89,25 @@ export function inventedContacts(reply: string, given: string): string[] {
   return [...new Set([...phones, ...emails])];
 }
 
+/**
+ * The reply with every phone number and email that isn't in what the model was given taken out: links to
+ * them (tel:/mailto:) go whole, and the bare text goes. Used on every Workers AI reply: those models have
+ * put a made-up number in a header, and every page then copied it.
+ */
+export function scrubContacts(reply: string, given: string): string {
+  const bad = inventedContacts(reply, given);
+  if (!bad.length) return reply;
+  const digits = (t: string) => t.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  const badPhones = new Set(bad.filter((b) => !b.includes("@")).map(digits));
+  const badMails = new Set(bad.filter((b) => b.includes("@")).map((b) => b.toLowerCase()));
+  let out = reply.replace(/<a\b[^>]*href\s*=\s*["'](tel|mailto):([^"']*)["'][^>]*>[\s\S]*?<\/a>/gi, (m, kind: string, v: string) =>
+    (kind.toLowerCase() === "tel" ? badPhones.has(digits(v)) : badMails.has(v.toLowerCase().split("?")[0]!)) ? "" : m,
+  );
+  for (const b of bad) out = out.split(b).join("");
+  out = out.replace(/\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/g, (m) => (badPhones.has(digits(m)) ? "" : m));
+  return out;
+}
+
 /** One call to a Workers AI text model, shaped like ask()'s result (thinking off: it can otherwise spend the whole budget thinking). */
 export async function askWorkersAi(env: Env, model: string, system: string, prompt: string, maxTokens: number): Promise<{ text: string; usage: Record<string, unknown>; cut: boolean }> {
   if (!env.AI) throw new Error("no Workers AI binding");
@@ -900,7 +919,10 @@ async function askLean(env: Env, content: Content, maxTokens: number, system: st
   const prompt = typeof content === "string" ? content : content.map((p) => p.text).join("\n\n");
   const out = await askWorkersAi(env, env.FORGE_INNER_MODEL?.startsWith("@cf/") ? env.FORGE_INNER_MODEL : CF_INNER_MODEL, system, prompt, maxTokens);
   await spendNeurons(env, Number(out.usage.neurons) || PAGE_HEADROOM, room).catch(() => undefined);
-  return out;
+  // Never a phone number or email nobody gave (a made-up number in the header ends up on every page).
+  const clean = scrubContacts(out.text, `${system}\n${prompt}`);
+  if (clean !== out.text) console.log("lean: removed contact details nobody gave");
+  return { ...out, text: clean };
 }
 
 export async function ask(
