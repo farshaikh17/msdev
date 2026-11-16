@@ -140,9 +140,9 @@ Estimates; to be confirmed by logging cost per stage (added in Slice 2). Today a
   score shown: a strong design reused costs one credit and skips the expensive design step.
 - **Download the site.** Every finished site downloads as a zip of plain files (pages, photos, a README)
   that any host can serve; forms keep sending leads to Forge.
-- **Paid Workers AI pages: built, switched off.** Setting `CF_PAID_AI_USD_MONTH` (e.g. "5") lets pages past
+- **Paid Workers AI pages: on, capped at $5 a month** (`CF_PAID_AI_USD_MONTH` in wrangler.jsonc; set "0" to switch off). It lets pages past
   the free room go to Workers AI (about $0.005 a page instead of $0.05+ on Claude) until that many dollars
-  are used in the month. Unset, nothing is ever billed by Cloudflare. Your decision.
+  are used in the month.
 
 ## Gate B: before reselling
 
