@@ -47,18 +47,33 @@ const PAGE_HEADROOM = 1_500;
 const PHOTO_RESERVE = 4_000;
 const today = () => new Date().toISOString().slice(0, 10);
 
-/** Is there free Workers AI room left today for one more page? */
-export async function workersAiRoom(env: Env): Promise<boolean> {
+/**
+ * Optional, off unless CF_PAID_AI_USD_MONTH is set above 0: once the day's free room for pages is used,
+ * further pages may still go to Workers AI (about $0.005 each, against $0.05+ on Claude) until that many
+ * dollars of neurons have been used this month. Those neurons are counted apart from the free ones, so the
+ * photo reserve is never touched, and Cloudflare's bill can never exceed the cap.
+ */
+const paidCapNeurons = (env: Env) => Math.max(0, Number(env.CF_PAID_AI_USD_MONTH) || 0) / WORKERS_AI_USD_PER_NEURON;
+const month = () => new Date().toISOString().slice(0, 7);
+
+/** Is there Workers AI room for one more page: in today's free allowance, in this month's paid cap, or not at all? */
+export async function workersAiRoom(env: Env): Promise<"free" | "paid" | false> {
   const cap = Math.min(FREE_NEURONS, Number(env.CF_FREE_NEURONS) || FREE_NEURONS);
-  const row = await env.DB.prepare("SELECT (SELECT CAST(value AS REAL) FROM settings WHERE key = ?1) AS text, (SELECT CAST(value AS REAL) FROM settings WHERE key = ?2) AS pics")
-    .bind(`ai-neurons:${today()}`, `ai-images:${today()}`)
-    .first<{ text: number | null; pics: number | null }>();
-  return (row?.text ?? 0) + (row?.pics ?? 0) * NEURONS_PER_PICTURE + PAGE_HEADROOM + PHOTO_RESERVE <= cap;
+  const row = await env.DB.prepare(
+    "SELECT (SELECT CAST(value AS REAL) FROM settings WHERE key = ?1) AS text, (SELECT CAST(value AS REAL) FROM settings WHERE key = ?2) AS pics, (SELECT CAST(value AS REAL) FROM settings WHERE key = ?3) AS paid",
+  )
+    .bind(`ai-neurons:${today()}`, `ai-images:${today()}`, `ai-paid-neurons:${month()}`)
+    .first<{ text: number | null; pics: number | null; paid: number | null }>();
+  if ((row?.text ?? 0) + (row?.pics ?? 0) * NEURONS_PER_PICTURE + PAGE_HEADROOM + PHOTO_RESERVE <= cap) return "free";
+  const paidCap = paidCapNeurons(env);
+  if (paidCap > 0 && (row?.paid ?? 0) + PAGE_HEADROOM <= paidCap) return "paid";
+  return false;
 }
 
-/** Count what a Workers AI page call used today. */
-async function spendNeurons(env: Env, n: number): Promise<void> {
-  await env.DB.prepare("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = CAST(CAST(value AS REAL) + ?2 AS TEXT)").bind(`ai-neurons:${today()}`, Math.ceil(n)).run();
+/** Count what a Workers AI page call used: against today's free allowance, or this month's paid cap. */
+async function spendNeurons(env: Env, n: number, bucket: "free" | "paid" = "free"): Promise<void> {
+  const key = bucket === "paid" ? `ai-paid-neurons:${month()}` : `ai-neurons:${today()}`;
+  await env.DB.prepare("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = CAST(CAST(value AS REAL) + ?2 AS TEXT)").bind(key, Math.ceil(n)).run();
 }
 
 /**
@@ -1122,14 +1137,15 @@ export async function designSitePage(env: Env, kit: Kit, page: PageSpec, rev: Pa
 /** One call that writes a page (whole) or its edits. */
 async function writePage(env: Env, kit: Kit, page: PageSpec, rev: PageRevision, edit: boolean): Promise<{ text: string; usage: Record<string, unknown>; cut: boolean }> {
   const r = pageRequest(env, kit, page, rev, edit);
-  if (r.model.startsWith("@cf/") && !(await workersAiRoom(env).catch(() => false))) {
+  const room = r.model.startsWith("@cf/") ? await workersAiRoom(env).catch(() => false as const) : false;
+  if (r.model.startsWith("@cf/") && !room) {
     console.log("workers ai free allowance used for today; using Claude", page.path);
     r.model = r.fallback;
   }
   if (r.model.startsWith("@cf/")) {
     try {
       const out = await askWorkersAi(env, r.model, r.system, `${r.shared}\n\n${r.task}`, r.maxTokens);
-      await spendNeurons(env, Number(out.usage.neurons) || PAGE_HEADROOM).catch(() => undefined);
+      await spendNeurons(env, Number(out.usage.neurons) || PAGE_HEADROOM, room || "free").catch(() => undefined);
       // Only a reply that finished, in the shape asked for, is kept; anything else goes to Sonnet.
       const ok = edit ? parseEdits(out.text).length > 0 : !out.cut && /<\/main>/i.test(parseParts(out.text).MAIN ?? "");
       const invented = inventedContacts(out.text, `${r.shared}\n${r.task}`);

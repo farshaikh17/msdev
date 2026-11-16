@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 /**
  * The build pipeline end to end, with Claude, the photo generator and the website reader replaced by
  * stand-ins: the real queue consumer, real jobs, real database. This is what runs when someone
@@ -7,6 +11,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../cloudflare/forge/src/index";
 import { PHOTO_HEROES } from "../cloudflare/forge/src/heroes";
+import { exportSite } from "../cloudflare/forge/src/export";
 import { imagesRoom } from "../cloudflare/forge/src/images";
 import { adaptKit, designKit, designSitePage, planSite, systemFor, Fatal, TryLater } from "../cloudflare/forge/src/designer";
 import { writeBrief } from "../cloudflare/forge/src/brief";
@@ -364,6 +369,43 @@ describe("Studio builds", () => {
     return assemble(kit, page, slug);
   };
 
+  it("downloads as plain files: every page and photo in a zip that any host can serve, with links made root-relative", async () => {
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 5);
+    const slug = slugOf(await studio(b.cookie, "Zip Barbers"));
+    await drain(h);
+    // The page as the sites Worker sends it (links and pictures under /<slug>, the form posting to /<slug>/_lead).
+    const render = async (_req: Request, env: Env, _ctx: unknown, sl: string, sub: string) => {
+      const demo = (await getDemo(env, sl))!;
+      const kit = (await getKit(env, sl, demo.liveVersion!))!;
+      const page = await getPage(env, sl, demo.liveVersion!, sub || "/");
+      if (!page) return new Response("no", { status: 404 });
+      const html = assemble(kit, page, sl).replace(/href="\/(?!\/)/g, `href="/${sl}/`) + `<img src="${env.SITES_ORIGIN}/${sl}/_img/${demo.liveVersion}/photo-1.jpg" alt="x"><script>fetch("/${sl}/_lead",{method:"POST"})</script>`;
+      return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+    };
+    const z = (await exportSite(h.env, { waitUntil: () => undefined }, slug, render))!;
+    const bytes = Buffer.from(z.bytes);
+    const dir = mkdtempSync(join(tmpdir(), "zip-"));
+    writeFileSync(join(dir, "s.zip"), bytes);
+    // A real unzip tool reads it, and every CRC checks out.
+    const listing = execFileSync("python3", ["-I", "-c", "import sys,zipfile;z=zipfile.ZipFile(sys.argv[1]);assert z.testzip() is None;print('\\n'.join(z.namelist()))", join(dir, "s.zip")]).toString().split("\n").filter(Boolean);
+    expect(listing).toContain("index.html");
+    expect(listing).toContain("about/index.html");
+    expect(listing).toContain("privacy/index.html");
+    expect(listing).toContain("images/photo-1.jpg");
+    expect(listing).toContain("README.txt");
+    const home = execFileSync("python3", ["-I", "-c", "import sys,zipfile;print(zipfile.ZipFile(sys.argv[1]).read('index.html').decode())", join(dir, "s.zip")]).toString();
+    // Nothing points at Forge's own addresses any more, except the form (so leads still arrive).
+    expect(home.split(`${h.env.SITES_ORIGIN}/${slug}/_lead`).join("")).not.toContain(`/${slug}`);
+    expect(home).toContain('href="/privacy"');
+    expect(home).toContain('href="/"');
+    expect(home).toContain("/images/photo-1.jpg");
+    expect(home).toContain(`fetch("${h.env.SITES_ORIGIN}/${slug}/_lead"`);
+    // Another account can't download it.
+    const other = await makeAccount(h, admin, "Other", "o@o.test", 5);
+    expect((await call(h, `/demos/${slug}/download`, { cookie: other.cookie })).headers.get("content-type")).not.toBe("application/zip");
+  });
+
   it("takes three credits, designs with the Studio brief and puts the motion engine on every page", async () => {
     const admin = await setupAdmin(h);
     const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 5);
@@ -464,6 +506,13 @@ describe("Studio builds", () => {
     expect(home).toContain("Landscaping website");
     expect(home).toContain(`/_img/${demo.liveVersion}/shot-desktop.jpg`);
     expect(home).toContain(`value="${slug}"`);
+    expect(home).toContain("scored 8/10");
+    // A better-scored design is offered first, even when it is older.
+    const slug2 = slugOf(await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Blue Ridge Lawns", industry: "Landscaping", city: "Orlando, FL" } }));
+    await drain(h);
+    await saveReview(h.env, slug2, (await getDemo(h.env, slug2))!.liveVersion!, { at: new Date().toISOString(), score: 6, shots: ["shot-desktop.jpg"] });
+    const again = await html(await call(h, "/", { cookie: b.cookie }));
+    expect(again.indexOf(`value="${slug}"`)).toBeLessThan(again.indexOf(`value="${slug2}"`));
   });
 
   it("won't reuse another account's design", async () => {

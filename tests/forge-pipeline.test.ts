@@ -16,6 +16,7 @@ const textOf = (r: Req) => {
 const PAGE = (name: string) => `@@@ TITLE\n${name}\n@@@ DESCRIPTION\nAbout ${name}.\n@@@ CSS\n.p{}\n@@@ MAIN\n<main><h1>${name}</h1><p>Plumbing in Grand Island.</p><form><input name="name"></form></main>`;
 function reply(r: Req): string {
   const t = textOf(r);
+  if (t.includes("descriptions of photographs")) return "@@@ PHOTOS\n" + Array.from({ length: 12 }, (_, k) => `${k + 1}. A plumber fitting a copper pipe under a kitchen sink, scene ${k + 1}`).join("\n");
   if (t.includes("@@@ PICK")) return "@@@ PICK\nA\n@@@ WHY\nOnly this business.\n@@@ INVENTED\nnone";
   if (t.includes("@@@ TRUTH")) return '@@@ TRUTH\nIt is a plumber in Grand Island.\n@@@ EVIDENCE\n"Grand Island, NE"\n@@@ IDEA\nThe town as a map of water.\n@@@ REFUSES\nNo stock smiles.\n@@@ HEADLINE\nGrand Island runs on water.\n@@@ LOOK\norganic - calm\n@@@ FIRSTSCREEN\nown: The river bend fills the screen, the headline low on the left. - because water is the story\n@@@ OBJECT\nnone\n@@@ MOMENT\nnone';
   if (t.includes("@@@ TRADE")) return "@@@ TRADE\nPlumbing\n@@@ SERVICES\nRepairs\nInstallations\nDrain Cleaning\n@@@ PHOTOS\n" + Array.from({ length: 8 }, (_, k) => `A plumber at work, scene ${k + 1}`).join("\n") + "\n@@@ PAIRS\nNONE\n@@@ OBJECT\na brass tap\n@@@ MOVE\nslow push-in\n@@@ REVEAL\nthe pipes behind the wall";
@@ -146,4 +147,68 @@ describe("a Studio build, rehearsed end to end at no cost", () => {
     // Photos stop at the same line: 9,000 + 12 × 78 = 9,936.
     expect(workersAi.filter((w) => w.input.multipart).length).toBeLessThanOrEqual(12);
   });
+
+  it("with a monthly cap set, pages past the free room go to Workers AI until the cap, counted apart from the free allowance", async () => {
+    // A cap of $0.02 a month is about 1,818 neurons: room for the first page (480) but, with 1,500 kept as headroom, not a second.
+    const env = { ...h.env, AI, FORGE_ART_PASS: "off", CF_PAID_AI_USD_MONTH: "0.02" } as unknown as Env;
+    h.env = env;
+    const day = new Date().toISOString().slice(0, 10);
+    h.db.prepare("INSERT INTO settings (key, value) VALUES (?, '9000')").run(`ai-neurons:${day}`);
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 9);
+    const slug = slugOf(await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Beta Plumbing", city: "Grand Island, NE", saw: "A red van", style: "studio" } }));
+    await drain(env);
+    expect((await getDemo(h.env, slug))!.buildStatus).toBe("ready");
+    const pages = workersAi.filter((w) => !w.input.multipart);
+    expect(pages.length).toBeGreaterThanOrEqual(1);
+    const used = (k: string) => Number((h.db.prepare("SELECT value FROM settings WHERE key = ?").get(k) as { value: string } | undefined)?.value ?? 0);
+    expect(used(`ai-paid-neurons:${day.slice(0, 7)}`)).toBe(480 * pages.length);
+    expect(used(`ai-paid-neurons:${day.slice(0, 7)}`)).toBeLessThanOrEqual((0.02 / 0.011) * 1000);
+    // The free count (which the photos go by) didn't move.
+    expect(used(`ai-neurons:${day}`)).toBe(9000);
+  });
 });
+
+import { fillPhotoBank, takeFromBank, bankCount } from "../cloudflare/forge/src/bank";
+
+describe("the photo bank", () => {
+  it("is filled only in the last hour of the UTC day, from what's left of the free allowance, for the trades being built", async () => {
+    const env = { ...h.env, AI } as unknown as Env;
+    h.env = env;
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 20);
+    await call(h, "/demos", { cookie: b.cookie, form: { businessName: "O'Hara Plumbing", city: "Grand Island, NE", industry: "Plumbing" } });
+    expect(await fillPhotoBank(env, new Date("2026-11-16T12:23:00Z"))).toBe(0);
+    const day = new Date().toISOString().slice(0, 10);
+    // 80 of the 90 pictures a day are already used: only 10 more fit.
+    h.db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '80')").run(`ai-images:${day}`);
+    const made = await fillPhotoBank(env, new Date(`${day}T23:23:00Z`));
+    expect(made).toBe(10);
+    expect(await bankCount(env, "Plumbing")).toBe(10);
+    expect(Number((h.db.prepare("SELECT value FROM settings WHERE key = ?").get(`ai-images:${day}`) as { value: string }).value)).toBe(90);
+    // The descriptions were written once, by the cheapest model, and kept.
+    expect(claude.filter((q) => textOf(q).includes("descriptions of photographs")).map((q) => q.model)).toEqual(["claude-haiku-5-5"]);
+    // Taken least-used first.
+    const first = await takeFromBank(env, "plumbing", 4);
+    const second = await takeFromBank(env, "plumbing", 4);
+    expect(new Set([...first, ...second].map((p) => p.description)).size).toBe(8);
+  });
+
+  it("gives a build its photos when the day's allowance is used up", async () => {
+    const env = { ...h.env, AI, FORGE_ART_PASS: "off" } as unknown as Env;
+    h.env = env;
+    const day = new Date().toISOString().slice(0, 10);
+    for (let k = 0; k < 8; k++) h.db.prepare("INSERT INTO photo_bank (trade, description, data, created_at) VALUES ('plumbing', ?, ?, ?)").run(`Banked plumbing photo ${k + 1}`, Buffer.from([1, 2, 3]), day);
+    h.db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '90')").run(`ai-images:${day}`);
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 20);
+    const slug = slugOf(await call(h, "/demos", { cookie: b.cookie, form: { businessName: "O'Hara Plumbing", city: "Grand Island, NE", industry: "Plumbing", style: "studio", saw: "A van with a red tap on it" } }));
+    await drain(env);
+    expect(workersAi.filter((w) => w.input.multipart)).toHaveLength(0);
+    const photos = h.db.prepare("SELECT name, description FROM site_images WHERE slug = ? AND name LIKE 'photo-%' ORDER BY name").all(slug) as { name: string; description: string }[];
+    expect(photos.length).toBe(8);
+    expect(photos.every((p) => p.description.startsWith("Banked plumbing photo"))).toBe(true);
+    expect((await getDemo(h.env, slug))!.buildStatus).toBe("ready");
+  });
+});
+

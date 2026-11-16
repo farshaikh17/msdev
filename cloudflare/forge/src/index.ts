@@ -16,6 +16,7 @@
  *   Public:    GET /<slug>[/<page>]    the demo website, with the account's chat widget
  *              POST /<slug>/_lead      the site's form submissions (shown on the demo in the app)
  */
+import { fillPhotoBank } from "./bank";
 import { handleApp } from "./app";
 import { build, fillPairs, startQueued } from "./build";
 import { pruneThrottle, pruneVisitors, queuedTenants, reviewsDue } from "./db";
@@ -113,6 +114,8 @@ const worker = {
     // Queued (bulk) builds whose account has a free slot: a safety net for the start-on-finish path.
     for (const id of await queuedTenants(env).catch(() => [] as number[])) await startQueued(env, id).catch((e) => console.error("queued build", errText(e)));
     await syncFolder(env).catch((e) => console.error("video sync failed", errText(e)));
+    // The last hour of the UTC day: what is left of the free picture allowance goes into the photo bank.
+    await fillPhotoBank(env).catch((e) => console.error("photo bank", errText(e)));
   },
 };
 

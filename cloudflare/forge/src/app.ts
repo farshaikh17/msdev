@@ -4,6 +4,7 @@
  * Public pages and the API are routed first; everything else needs a session, and everything a
  * session touches is scoped to its own account.
  */
+import { exportSite } from "./export";
 import { imagesRoom } from "./images";
 import { handleApi } from "./api";
 import { checkLogin, checkOwnPassword, checkTeamPassword, currentSession, passwordProblem, sameOrigin, sessionCookie, signOutCookie, type Session } from "./auth";
@@ -289,12 +290,18 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     }
   }
 
-  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/fix|\/replace|\/review|\/pairs|\/lead|\/extend|\/handover|\/domain|\/domain-check)?$/);
+  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/fix|\/replace|\/review|\/pairs|\/lead|\/extend|\/handover|\/domain|\/domain-check|\/download)?$/);
   if (m) {
     const [, slug, action] = m;
     // Always scoped to this account: another account's demo is simply "not found".
     const demo = await getDemo(env, slug, { tenantId: s.tenant.id });
     if (!demo) return redirect(withMsg("/", "error", "That demo doesn't exist or was archived."));
+    // The site as plain files, to host anywhere.
+    if (action === "/download" && req.method === "GET") {
+      const z = await exportSite(env, ctx, slug);
+      if (!z) return redirect(withMsg(`/demos/${slug}`, "error", "This site has no finished pages to download yet."));
+      return new Response(new Uint8Array(z.bytes), { headers: { "content-type": "application/zip", "content-disposition": `attachment; filename="${z.name}"`, "cache-control": "no-store" } });
+    }
     if (!action && req.method === "GET") {
       // Empty before/after boxes on the live site: start making the pictures now, without a button.
       if (aiOn && (await fillPairs(env, slug).catch(() => 0))) return redirect(withMsg(`/demos/${slug}`, "ok", "This site had empty before/after photo spots, so we're making the pictures now. Usually 3–6 minutes."));

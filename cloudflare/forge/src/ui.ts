@@ -219,6 +219,9 @@ export interface ReuseChoice {
   trade: string;
   /** A picture of the site, when there is one. */
   thumb?: string;
+  /** The review's score out of 10. */
+  score?: number;
+  studio?: boolean;
 }
 
 export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = []): string {
@@ -248,7 +251,7 @@ export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = []): string {
           pick(
             r.slug,
             v?.reuseFrom === r.slug,
-            `<span class="design-pic">${r.thumb ? `<img loading="lazy" src="${esc(r.thumb)}" alt="">` : esc((r.trade || r.name).slice(0, 1).toUpperCase())}</span><b>${esc(r.trade ? `${r.trade} website` : "Website")}</b><small>The look of ${esc(r.name)} · 1 credit, faster</small>`,
+            `<span class="design-pic">${r.thumb ? `<img loading="lazy" src="${esc(r.thumb)}" alt="">` : esc((r.trade || r.name).slice(0, 1).toUpperCase())}</span><b>${esc(r.trade ? `${r.trade} website` : "Website")}</b><small>The look of ${esc(r.name)}${r.studio ? " (Studio)" : ""}${r.score ? ` · scored ${r.score}/10` : ""} · 1 credit, faster</small>`,
           ),
         )
         .join("")}</div>
@@ -394,9 +397,11 @@ export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) =>
   // "Use this design" in the gallery: that site's design comes first and is already picked.
   const ready = demos.filter((d) => d.buildStatus === "ready" && d.shot);
   const chosen = ready.find((d) => d.slug === reuseFrom);
-  const reuse: ReuseChoice[] = [...(chosen ? [chosen] : []), ...ready.filter((d) => d !== chosen)]
+  // Your best designs first: Studio before Standard, then by the review's score (a strong design costs a third as much to reuse).
+  const best = [...ready].sort((a, b) => Number(b.style === "studio") - Number(a.style === "studio") || (b.score ?? 0) - (a.score ?? 0));
+  const reuse: ReuseChoice[] = [...(chosen ? [chosen] : []), ...best.filter((d) => d !== chosen)]
     .slice(0, 12)
-    .map((d) => ({ slug: d.slug, name: d.businessName, trade: d.industry, thumb: `${siteUrl(d.slug)}/_img/${d.shot}/shot-desktop.jpg` }));
+    .map((d) => ({ slug: d.slug, name: d.businessName, trade: d.industry, thumb: `${siteUrl(d.slug)}/_img/${d.shot}/shot-desktop.jpg`, score: d.score, studio: d.style === "studio" }));
   const on = (LEAD_STATUSES as readonly string[]).includes(leadFilter) ? leadFilter : "";
   const shown = on ? demos.filter((d) => d.leadStatus === on) : demos;
   const list = shown.length
@@ -623,6 +628,7 @@ ${!busy && d.liveVersion && (d.leadStatus === "replied" || d.leadStatus === "won
 ${busy ? "" : expiryNote(d)}
 ${!busy && d.liveVersion && extra.domainTarget && (d.leadStatus === "won" || extra.domain) ? domainCard(d, extra.domain ?? null, extra.domainTarget ?? "", !!extra.domainAuto) : ""}
 <details class="card"><summary>More tools</summary><div style="display:grid;gap:16px;margin-top:12px">
+${d.liveVersion ? `<section class="card"><h2>Download the site</h2><p class="note">Every page and photo as plain files in one zip, ready for any web host (Netlify, Cloudflare Pages, cPanel…). Forms keep sending messages here.</p><a class="btn ghost" href="/demos/${esc(d.slug)}/download" download>Download (.zip)</a></section>` : ""}
 ${outreachCard(d, links, extra.qr ?? "", true)}
 ${viewsCard(extra.views)}
 <section class="card"><h2>Messages from the site's forms (${leads.length}${leads.length === 50 ? "+" : ""})</h2>${

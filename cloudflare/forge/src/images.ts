@@ -23,7 +23,7 @@ export const DAILY_IMAGES = 90;
 const PAIR_SIZE = { w: 512, h: 384 };
 
 /** Count pictures made today; false when today's allowance is already used up. */
-async function spendImages(env: Env, n: number, weight = 1): Promise<boolean> {
+export async function spendImages(env: Env, n: number, weight = 1): Promise<boolean> {
   const key = `ai-images:${new Date().toISOString().slice(0, 10)}`;
   const cost = n * weight;
   // One statement adds to the count and reads it back, so pictures made side by side are all counted
@@ -53,7 +53,7 @@ export async function imagesRoom(env: Env, n: number): Promise<boolean> {
   return pics <= DAILY_IMAGES && pics * 78 + (row?.text ?? 0) <= 10_000;
 }
 
-async function generate(env: Env, description: string, opts: { reference?: Uint8Array; small?: boolean; square?: boolean; raw?: boolean } = {}): Promise<Uint8Array | null> {
+export async function generate(env: Env, description: string, opts: { reference?: Uint8Array; small?: boolean; square?: boolean; raw?: boolean } = {}): Promise<Uint8Array | null> {
   try {
     const form = new FormData();
     form.append("prompt", opts.reference || opts.raw ? description : `${description}. ${STYLE}`);

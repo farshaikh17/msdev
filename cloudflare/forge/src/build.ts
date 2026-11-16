@@ -4,6 +4,7 @@
  * the look; then one "page" job per page writes the pages side by side. The site goes live only
  * when every page is written.
  */
+import { bankCount, takeFromBank } from "./bank";
 import { HERO_DRAFT } from "./serve";
 import {
   buildingCount,
@@ -311,7 +312,9 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       // No preview photos (the plan failed): a first screen built on the first photo would open on an empty screen,
       // so it is passed over unless the form asked for it.
       // Also when today's free picture allowance can't cover them (the site would get none).
-      const noPhotos = !plan?.imagePrompts.length || !(await imagesRoom(env, Math.min(8, plan.imagePrompts.length)).catch(() => true));
+      // (The photo bank covers a day whose allowance is used up, when it holds enough for this trade.)
+      const tradeName = intake.industry || plan?.trade || "";
+      const noPhotos = !plan?.imagePrompts.length || (!(await imagesRoom(env, Math.min(8, plan.imagePrompts.length)).catch(() => true)) && (await bankCount(env, tradeName).catch(() => 0)) < 4);
       if (noPhotos && chosen.hero && PHOTO_HEROES.includes(chosen.hero) && chosen.hero !== intake.hero) chosen.hero = undefined;
       // With no photos the idea's own first screen (drawn in type, no picture needed) is the best stand-in.
       if (noPhotos && !chosen.hero && idea && firstScreenOf(idea, HERO_IDS) === "own" && ownScreen(idea).length > 40) chosen.hero = "own";
@@ -325,9 +328,19 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       const prompts = [...(plan?.imagePrompts ?? [])];
       if (sig?.media === "breakout" && prompts[0]) prompts[0] = `${prompts[0].replace(/[.\s]+$/, "")}. The main subject is large and close, its head and shoulders near the top of the frame and clearly separated from a plain background.`;
       else if (sig?.media === "front" && prompts[0]) prompts[0] = `${prompts[0].replace(/[.\s]+$/, "")}. Shot from a little further back: the main subject stands in the lower two-thirds of the frame, slightly off-centre, with plain open background above and around their head and shoulders.`;
-      const [images, pairImages] = await Promise.all([previewImages(env, prompts), beforeAfterImages(env, plan?.pairs ?? []).catch(() => [])]);
+      const [fresh, pairImages] = await Promise.all([previewImages(env, prompts), beforeAfterImages(env, plan?.pairs ?? []).catch(() => [])]);
+      // Photos the day's allowance refused come from the photo bank for this trade (numbered after the ones made).
+      let images = fresh;
+      const missing = Math.min(8, prompts.length) - fresh.length;
+      if (missing > 0) {
+        const banked = await takeFromBank(env, intake.industry || plan?.trade || "", missing).catch(() => []);
+        if (banked.length) {
+          images = [...fresh, ...banked.map((b) => ({ name: "", description: b.description, bytes: b.bytes }))].map((img, n) => ({ ...img, name: `photo-${n + 1}.jpg` }));
+          console.log("photo bank", slug, banked.length, "photos used");
+        }
+      }
       // (The framing note is for the image generator, not the photo's description.)
-      if (images[0]?.name === "photo-1.jpg" && plan?.imagePrompts[0]) images[0] = { ...images[0], description: plan.imagePrompts[0] };
+      if (fresh[0]?.name === "photo-1.jpg" && plan?.imagePrompts[0]) images[0] = { ...images[0], description: plan.imagePrompts[0] };
       // A Studio first screen gets a matched second picture that shows through a spotlight; it replaces the first photo with its aligned twin.
       if (intake.style === "studio" && plan?.reveal && images[0] && sig?.media === "pair") {
         const pair = await heroPair(env, plan.imagePrompts[0] ?? "", plan.reveal).catch(() => null);

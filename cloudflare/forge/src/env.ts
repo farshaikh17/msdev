@@ -18,6 +18,8 @@ export interface Env {
   FORGE_INNER_MODEL?: string;
   /** Workers AI: a lower daily ceiling than the free 10,000 neurons (Forge never goes past the free amount). */
   CF_FREE_NEURONS?: string;
+  /** Dollars a month Workers AI may spend on pages past the free allowance (unset or 0: never; Claude writes them). */
+  CF_PAID_AI_USD_MONTH?: string;
   /** Custom domains: the address a customer's CNAME record points at (a host in the Cloudflare for SaaS zone). */
   FORGE_DOMAIN_TARGET?: string;
   /** Custom domains: the Cloudflare for SaaS zone id and an API token (Custom Hostnames: Edit), so Forge registers addresses itself. */

@@ -129,6 +129,21 @@ Small slices. Each is one session for a cheaper model, and nothing starts until 
 
 Estimates; to be confirmed by logging cost per stage (added in Slice 2). Today a Studio site is $2.30 to $3.44. With the brief (+$0.11) and the revision pass (+$0.30 to $0.80, replacing a rewrite that cost $0.50 to $0.80 on some sites): **about $3.40 typical, $3.00 to $4.20**. Ceiling for now: $4.50. Savings are deferred until quality is proven, then tested one at a time. The image allowance (about 90 a day) should fail loudly instead of silently building sites with fewer photos.
 
+## Depending less on Claude and Cloudflare
+
+- **Photo bank (free).** In the last hour of each UTC day, whatever is left of Cloudflare's free picture
+  allowance makes photos for the trades being built (12 each, described once by Haiku for under a cent).
+  A build whose own photos are refused takes them from the bank, so a site never ships without photos.
+- **Photos first.** Pages on Workers AI leave 4,000 neurons a day untouched for photos; past that, Claude
+  writes them. The build form warns when the day's photos are used up.
+- **Best designs first.** "Start from a design" lists Studio designs first, then by review score, with the
+  score shown: a strong design reused costs one credit and skips the expensive design step.
+- **Download the site.** Every finished site downloads as a zip of plain files (pages, photos, a README)
+  that any host can serve; forms keep sending leads to Forge.
+- **Paid Workers AI pages: built, switched off.** Setting `CF_PAID_AI_USD_MONTH` (e.g. "5") lets pages past
+  the free room go to Workers AI (about $0.005 a page instead of $0.05+ on Claude) until that many dollars
+  are used in the month. Unset, nothing is ever billed by Cloudflare. Your decision.
+
 ## Gate B: before reselling
 
 Ten sites across ten trades and five towns with "Let Forge choose", including three businesses with real logos and three with nothing online:
