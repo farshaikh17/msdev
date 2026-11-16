@@ -52,6 +52,12 @@ describe("Forge worker — multi-page sites", () => {
     expect(kind("Smith & Sons")).toBe("contractor");
     expect(kind("Blue Lagoon Spa Repair")).toBe("contractor");
     expect(kind("Olvin's Landscaping Co.")).toBe("contractor");
+    // Parks and other places people visit get "Plan Your Visit", not "Get a Quote".
+    expect(kind("Álex Rodríguez Park", "Public Park")).toBe("attraction");
+    expect(kind("Riverside", "City Park")).toBe("attraction");
+    expect(kind("Crandon", "Beach")).toBe("attraction");
+    expect(kind("Shady Oaks RV Park")).toBe("lodging");
+    expect(kind("Park Avenue Plumbing")).toBe("contractor");
     expect(kind("Bright Smile", "Family Dentist")).toBe("health");
     expect(kind("Luxe", "Hair Salon")).toBe("beauty");
     expect(kind("Iron Works", "Gym")).toBe("fitness");

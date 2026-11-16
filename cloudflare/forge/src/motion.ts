@@ -93,6 +93,7 @@ html.m-on.m-moved .m-cursor,html.m-on.m-moved .m-ring{opacity:1}
 [data-follow]{pointer-events:none;display:none}html.m-on.m-fine [data-follow]{display:block}
 .m-float{position:fixed;left:0;top:0;z-index:30;pointer-events:none;opacity:0;transform-origin:0 0;will-change:transform,opacity;filter:drop-shadow(0 30px 34px rgba(0,0,0,.32)) drop-shadow(0 6px 10px rgba(0,0,0,.16))}
 .m-float canvas{width:100%;height:100%;display:block}
+html.m-floating main h1{position:relative;z-index:31}
 [data-perch]{pointer-events:none}[data-perch] .m-perch-still{width:100%;height:100%;object-fit:contain;display:block}
 .hero-motion:has(.m-spin){z-index:1}
 .hero-motion .m-spin{position:absolute;inset:7% 10%;filter:drop-shadow(0 44px 50px rgba(0,0,0,.45));will-change:transform}
@@ -266,6 +267,9 @@ all(".m-spin").forEach(function(box){
   var perches=all("[data-perch]"),still=layer.getAttribute("data-still")||"";
   if(!perches.length||!still){layer.remove();return}
   if(reduce){var im=d.createElement("img");im.src=still;im.alt="";im.className="m-perch-still";perches[0].appendChild(im);layer.remove();return}
+  // Phones: a flying object crosses the words of a narrow, stacked page. It rests, still, in each of its places instead.
+  if(!fine&&innerWidth<900){perches.forEach(function(p){var im=d.createElement("img");im.src=still;im.alt="";im.className="m-perch-still";p.appendChild(im)});layer.remove();return}
+  root.classList.add("m-floating");
   var urls=(layer.getAttribute("data-frames")||"").split("|").filter(Boolean),set=frameSet(urls.length>1?urls:[still]),cv=layer.querySelector("canvas"),path=layer.getAttribute("data-path")||"arc";
   var px=0,tilt=0,cx=null,cy=0,cs=0,born=null,last=-1,t0=performance.now(),max=0;
   if(fine)W.addEventListener("pointermove",function(e){px=e.clientX/innerWidth-.5},{passive:true});
