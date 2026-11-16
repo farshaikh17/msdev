@@ -208,8 +208,11 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
   if (job.stage === "review") {
     if (demo && demo.liveVersion === job.version) {
       // Our own QA standards first (no browser needed), so the screenshots are of the repaired site.
-      await qaPass(env, job.slug, job.version).catch((e) => console.error("qa pass failed", job.slug, errText(e)));
-      await reviewSite(env, job.slug, job.version);
+      if (attempts <= 1) await qaPass(env, job.slug, job.version).catch((e) => console.error("qa pass failed", job.slug, errText(e)));
+      const r = await reviewSite(env, job.slug, job.version);
+      // Every browser was busy (Cloudflare caps how many run at once): try again in a few minutes rather than
+      // leave the site unreviewed. The review is what catches a weak first screen and fixes it.
+      if (/no browser available|too many|rate limit|429|503/i.test(r.skipped ?? "") && attempts < 4) return 120 * attempts;
     }
     return "done";
   }

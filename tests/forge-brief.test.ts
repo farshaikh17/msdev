@@ -87,6 +87,17 @@ const idea = (o: Partial<Idea> = {}): Idea => ({
 const brief = (concepts: Partial<Idea>[], chosen = 0): Brief => ({ tier: "none", concepts: concepts.map((c) => idea(c)), chosen, why: "", invented: [], cost: 0 });
 
 describe("the brief leads the design", () => {
+  it("asks every concept for a Studio-grade site: a striking first screen, an object and a moment, and the judge prefers craft", () => {
+    const t = conceptTask({ slug: "s", businessName: "The Plumbers", trade: "Plumbing", town: "Miami, FL" }, lensesFor({ slug: "s", businessName: "The Plumbers", trade: "Plumbing", town: "Miami, FL" }, [])[0]!, []);
+    expect(t).toContain('Never describe a page where "nothing moves"');
+    expect(t).toContain("the most striking of these that serves the idea");
+    expect(t).not.toContain("Default to none");
+    expect(t).toContain("Always give one.");
+    const j = judgeTask({ slug: "s", businessName: "The Plumbers", trade: "Plumbing", town: "Miami, FL" }, [idea(), idea({ firstScreen: "dive - in" })], [0, 1]);
+    expect(j).toContain("plain, quiet, static page loses");
+    expect(j).toContain("First screen: dive - in");
+  });
+
   it("reads a concept's choices", () => {
     expect(wants("none")).toBe(false);
     expect(wants("None - nothing to follow")).toBe(false);
@@ -112,6 +123,11 @@ describe("the brief leads the design", () => {
     expect(chooseDesign(brief([{ firstScreen: "orbit - circles" }]), o).hero).toBeUndefined();
     expect(chooseDesign(brief([{ firstScreen: "orbit - circles", object: "a glossy wheel" }]), o).hero).toBe("orbit");
     expect(chooseDesign(brief([{ firstScreen: "switcher - scenes" }]), o).hero).toBeUndefined();
+    // The chosen idea's first screen can't be used: the runner-up's is, not a random one.
+    expect(chooseDesign(brief([{}, { firstScreen: "breakout - the subject" }]), { ...o, recentHeroes: ["own"] }).hero).toBe("breakout");
+    // An own first screen where nothing moves is not a Studio first screen.
+    expect(chooseDesign(brief([{ firstScreen: "own: A white screen holds the name in huge type with a ruled line beneath it. Nothing moves except an underline. - plain" }]), o).hero).toBeUndefined();
+    expect(chooseDesign(brief([{ firstScreen: "own: Mostly white paper with the name enormous in black on the left and the town in small type beneath. - plain" }, { firstScreen: "dive - into the work" }]), o).hero).toBe("dive");
     // What the form asked for wins.
     expect(chooseDesign(brief([{}]), { ...o, askedLook: "kinetic", askedHero: "dive", recentLooks: ["kinetic"] })).toEqual({ look: "kinetic", hero: "dive" });
     // The usual pick can be told to leave out the heroes built around an object.

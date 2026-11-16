@@ -166,6 +166,7 @@ Rules:
 - Never promise what the facts don't say: no "24/7", "any hour", "same day", "fast", "cheap", "family-run", "since", "trusted by", or what other people say about it, unless those words (or plainly the same thing) are in the facts. This applies to the headline and the home page too. A promise the owner can't keep loses the sale.
 - Be specific. "Quality you can trust", "family values", "passion", "a feast for the senses" and other lines that would fit any business are worthless.
 - Avoid puns on the name unless they are genuinely good.
+- This is our Studio tier: the site has to make the owner say "wow" the moment it opens, like an award-winning site, with real craft and motion. A plain or quiet voice is fine; a plain, static page is not. Never describe a page where "nothing moves", a screen that is "mostly empty", or a site that "gets out of the way". Restraint is in the words, never in the craft.
 ${nearby.length ? `\n## Already made nearby (do not repeat these ideas or their angle)\n${nearby.map((n) => `- ${n}`).join("\n")}\n` : ""}
 ## Reply with exactly these parts
 @@@ TRUTH
@@ -190,12 +191,12 @@ The character of the lettering, in words, with the reason.
 The closest of these, or "none", then a dash and one line why:
 ${looksList()}
 @@@ FIRSTSCREEN
-The first screen: one of these by id, or "own:" followed by three sentences describing it. Then a dash and one line why:
+The first screen: the most striking of these that serves the idea, by id. Only if none of them can carry the idea, "own:" followed by three sentences describing a first screen at least as striking (with real movement or interaction). Then a dash and one line why:
 ${heroesList()}
 @@@ OBJECT
-An object worth following down the page (it would be cut out and fly as the visitor scrolls), or "none". Default to none unless the business has one object people genuinely love.
+An object from this kind of work that would look beautiful cut out and travelling down the page as the visitor scrolls (a brass valve, a pair of shears, a coffee cup, a stethoscope), described in a few words. "none" only if no honest object fits at all.
 @@@ MOMENT
-One moment worth stopping the scroll for, or "none". Default to none unless it serves the idea.`;
+One moment worth stopping the scroll for, that serves the idea (a statement that assembles as you scroll, a picture that opens up, a pinned sequence). Always give one.`;
 }
 
 const clip = (s: string | undefined, n = 400) => (s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -233,11 +234,11 @@ ${factsOf(i)}
 ${order
   .map((k, n) => {
     const c = concepts[k]!;
-    return `### ${letter(n)}\nTrue thing: ${c.truth}\nEvidence: ${c.evidence}\nIdea: ${c.idea}\nRefuses: ${c.refuses}${c.headline ? `\nHeadline: ${c.headline}` : ""}${c.arc ? `\nHome page: ${c.arc.replace(/\n+/g, " / ")}` : ""}`;
+    return `### ${letter(n)}\nTrue thing: ${c.truth}\nEvidence: ${c.evidence}\nIdea: ${c.idea}\nRefuses: ${c.refuses}${c.headline ? `\nHeadline: ${c.headline}` : ""}${c.arc ? `\nHome page: ${c.arc.replace(/\n+/g, " / ")}` : ""}${c.firstScreen ? `\nFirst screen: ${c.firstScreen}` : ""}${c.moment ? `\nMoment: ${c.moment}` : ""}`;
   })
   .join("\n\n")}
 
-Which could only be this business, and which would its owner proudly show a friend? A concept that states anything about this business that is not in the facts (a year, a name, a history, a claim) is out.
+Which could only be this business, and which would make the most striking website: the one its owner would proudly show a friend? A concept whose site would be a plain, quiet, static page loses to one with real design and movement. A concept that states anything about this business that is not in the facts (a year, a name, a history, a claim) is out.
 
 ## Reply with exactly these parts
 @@@ PICK
@@ -310,6 +311,9 @@ export const ownScreen = (c: Pick<Concept, "firstScreen">) => (c.firstScreen ?? 
 /** Heroes whose first screen is built around the signature object. */
 const OBJECT_HEROES = ["float", "spin", "orbit"];
 
+/** An own first screen that describes a still page: not a Studio first screen, so a signature one is used instead. */
+const STATIC_SCREEN = /\bnothing (else )?moves\b|\bno (motion|movement|animation)\b|\bstatic\b|\bmostly (white|empty|blank)\b/i;
+
 /**
  * The look and first screen for a site with a brief. The chosen concept's look and first screen win,
  * unless they would repeat a neighbour: a look in `recentLooks` (the last two sites nearby and the last
@@ -332,12 +336,16 @@ export function chooseDesign(
       }
     }
   let hero = o.heroIds.includes(o.askedHero ?? "") ? o.askedHero : undefined;
-  if (!hero) {
-    const want = firstScreenOf(chosen, o.heroIds);
-    const hasObject = wants(chosen.object);
-    if (want === "own" && ownScreen(chosen).length > 40 && !o.recentHeroes.slice(0, 2).includes("own")) hero = "own";
-    else if (want && want !== "own" && want !== o.recentHeroes[0] && (want !== "switcher" || o.clips >= 1) && (!OBJECT_HEROES.includes(want) || hasObject)) hero = want;
-  }
+  // The chosen concept's first screen, else the next concept's (the idea's runner-up is still better than a random pick).
+  if (!hero)
+    for (const n of order) {
+      const c = b.concepts[n]!;
+      const want = firstScreenOf(c, o.heroIds);
+      const hasObject = wants(chosen.object) || wants(c.object);
+      if (want === "own" && ownScreen(c).length > 40 && !STATIC_SCREEN.test(ownScreen(c)) && !o.recentHeroes.slice(0, 2).includes("own")) hero = "own";
+      else if (want && want !== "own" && want !== o.recentHeroes[0] && (want !== "switcher" || o.clips >= 1) && (!OBJECT_HEROES.includes(want) || hasObject)) hero = want;
+      if (hero) break;
+    }
   return { look, hero };
 }
 

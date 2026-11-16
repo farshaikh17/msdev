@@ -42,7 +42,7 @@ export const MOTION_CSS = `
 .m-cursor{position:fixed;left:0;top:0;width:10px;height:10px;border-radius:50%;background:#fff;mix-blend-mode:difference;pointer-events:none;z-index:2147483600;transform:translate(-50%,-50%);display:grid;place-items:center;font:600 11px/1 system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#000;opacity:0;transition:opacity .3s}
 .m-cursor span{opacity:0;transition:opacity .2s;white-space:nowrap}.m-cursor.label span{opacity:1}
 .m-ring{position:fixed;left:0;top:0;width:38px;height:38px;border:1px solid rgba(255,255,255,.7);border-radius:50%;mix-blend-mode:difference;pointer-events:none;z-index:2147483599;transform:translate(-50%,-50%);opacity:0;transition:opacity .3s}
-html.m-on .m-cursor,html.m-on .m-ring{opacity:1}
+html.m-on.m-moved .m-cursor,html.m-on.m-moved .m-ring{opacity:1}
 @media (hover:none),(pointer:coarse){.m-cursor,.m-ring{display:none}}
 .m-curtain{position:fixed;inset:0;z-index:2147483500;background:var(--m-accent,#111);transform:translateY(100%);pointer-events:none}
 .m-pre{position:fixed;inset:0;z-index:2147483550;background:var(--m-ink,#0b0b0d);color:var(--m-paper,#f5f3ee);display:flex;align-items:flex-end;justify-content:space-between;padding:clamp(20px,4vw,48px);font:500 clamp(14px,1.4vw,18px)/1.2 system-ui,sans-serif;letter-spacing:.02em}
@@ -506,7 +506,7 @@ if(fine){
   var dot=d.createElement("div");dot.className="m-cursor";dot.innerHTML="<span></span>";var ring=d.createElement("div");ring.className="m-ring";
   d.body.appendChild(ring);d.body.appendChild(dot);
   var dx=G.quickTo(dot,"x",{duration:.12}),dy=G.quickTo(dot,"y",{duration:.12}),rx=G.quickTo(ring,"x",{duration:.5,ease:"power3"}),ry=G.quickTo(ring,"y",{duration:.5,ease:"power3"});
-  W.addEventListener("pointermove",function(e){dx(e.clientX);dy(e.clientY);rx(e.clientX);ry(e.clientY)});
+  W.addEventListener("pointermove",function(e){root.classList.add("m-moved");dx(e.clientX);dy(e.clientY);rx(e.clientX);ry(e.clientY)});
   d.addEventListener("pointerover",function(e){
     var t=e.target.closest&&e.target.closest("[data-cursor-text],a,button,summary,label,input,textarea,select");
     if(!t){G.to(dot,{width:10,height:10,duration:.3});G.to(ring,{scale:1,opacity:1,duration:.3});dot.classList.remove("label");return}

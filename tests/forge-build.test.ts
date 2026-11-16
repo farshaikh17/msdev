@@ -345,7 +345,7 @@ describe("Studio builds", () => {
   });
 
   it("lets the idea keep its own first screen when the recent sites that used one are in other towns and trades", async () => {
-    const own = { lens: "place", truth: "A hospital in Kota.", evidence: '"Kota"', idea: "Saving life is the work.", refuses: "No stock smiles.", headline: "Saving life is the work.", look: "swiss - clarity", firstScreen: "own: A white screen holds the headline in very large type, with a single red call button fixed at the bottom. Nothing moves but a slow fade. - plain and urgent", object: "none", moment: "none" };
+    const own = { lens: "place", truth: "A hospital in Kota.", evidence: '"Kota"', idea: "Saving life is the work.", refuses: "No stock smiles.", headline: "Saving life is the work.", look: "swiss - clarity", firstScreen: "own: A white screen holds the headline in very large type, with a single red call button fixed at the bottom. The words assemble line by line as the button pulses once. - plain and urgent", object: "none", moment: "none" };
     const admin = await setupAdmin(h);
     const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 20);
     vi.mocked(designKit).mockImplementation(async (env, brief, pages, style, concept, _d, hero) => {
