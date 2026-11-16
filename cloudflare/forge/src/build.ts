@@ -38,6 +38,7 @@ import { adaptKit, thinServices, fixChrome, designKit, designSitePage, factsBloc
 import type { BuildJob, Env } from "./env";
 import { heroPair, beforeAfterImages, objectImage, previewImages } from "./images";
 import { studioMedia, type StudioMedia } from "./media";
+import { nicheOf } from "./niche";
 import { privacyPage, termsPage } from "./legal";
 import { CONCEPT_IDS, conceptById, drawFor, pickConcept } from "./concepts";
 import { chooseDesign, ideaOf, wants, writeBrief, type Idea } from "./brief";
@@ -286,8 +287,14 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
         if (brief) {
           idea = ideaOf(brief);
           briefCost = brief.cost;
-          const avoid = [...new Set([...nearby.slice(0, 2).map((n) => n.look), ...looks.slice(0, 2).map((l) => l.concept)].filter(Boolean))];
-          chosen = chooseDesign(brief, { askedLook: intake.concept, askedHero: intake.hero, recentLooks: avoid, recentHeroes: looks.map((l) => l.hero).filter(Boolean), lookIds: CONCEPT_IDS, heroIds: HERO_IDS, clips });
+          // Variety matters only between sites someone could compare: the same town, or the same kind of
+          // business. A med spa in Miami doesn't overrule a hospital in Kota (it used to: the idea's own
+          // choice was swapped for whatever the account hadn't used lately).
+          const town = (c: string) => c.split(",")[0]!.trim().toLowerCase();
+          const niche = nicheOf(intake.industry || plan?.trade || "", intake.businessName);
+          const neighbours = looks.filter((l) => (intake.city && town(l.city) === town(intake.city)) || nicheOf(l.trade, l.name) === niche);
+          const avoid = [...new Set([...nearby.slice(0, 2).map((n) => n.look), ...neighbours.slice(0, 2).map((l) => l.concept)].filter(Boolean))];
+          chosen = chooseDesign(brief, { askedLook: intake.concept, askedHero: intake.hero, recentLooks: avoid, recentHeroes: neighbours.map((l) => l.hero).filter(Boolean), lookIds: CONCEPT_IDS, heroIds: HERO_IDS, clips });
           console.log("brief", slug, JSON.stringify({ lens: idea.lens, idea: idea.idea, look: chosen.look, hero: chosen.hero, cost: brief.cost }));
         }
       }

@@ -629,15 +629,16 @@ export async function recentIdeas(env: Env, tenantId: number, notSlug: string, t
   return results.map((r) => ({ name: r.name ?? "", idea: r.idea ?? "", lens: r.lens ?? "", look: r.look ?? "", hero: r.hero ?? "" }));
 }
 
-export async function recentLooks(env: Env, tenantId: number, notSlug: string, limit = 8): Promise<{ concept: string; draw: string; hero: string }[]> {
+export async function recentLooks(env: Env, tenantId: number, notSlug: string, limit = 8): Promise<{ concept: string; draw: string; hero: string; city: string; trade: string; name: string }[]> {
   const { results } = await env.DB.prepare(
-    `SELECT json_extract(v.kit, '$.concept') concept, json_extract(v.kit, '$.draw') draw, json_extract(v.kit, '$.hero') hero FROM site_versions v
+    `SELECT json_extract(v.kit, '$.concept') concept, json_extract(v.kit, '$.draw') draw, json_extract(v.kit, '$.hero') hero,
+            json_extract(d.intake, '$.city') city, coalesce(nullif(json_extract(d.intake, '$.industry'), ''), json_extract(d.content, '$.industry')) trade, d.business_name name FROM site_versions v
        JOIN demos d ON d.slug = v.slug WHERE d.tenant_id = ? AND d.slug != ? AND json_extract(v.kit, '$.style') = 'studio'
       ORDER BY v.created_at DESC LIMIT ?`,
   )
     .bind(tenantId, notSlug, limit)
-    .all<{ concept: string | null; draw: string | null; hero: string | null }>();
-  return results.map((r) => ({ concept: r.concept ?? "", draw: r.draw ?? "", hero: r.hero ?? "" }));
+    .all<{ concept: string | null; draw: string | null; hero: string | null; city: string | null; trade: string | null; name: string }>();
+  return results.map((r) => ({ concept: r.concept ?? "", draw: r.draw ?? "", hero: r.hero ?? "", city: r.city ?? "", trade: r.trade ?? "", name: r.name }));
 }
 
 /** Replace a version's shared header and footer (a QA repair). */

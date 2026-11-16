@@ -344,6 +344,33 @@ describe("Studio builds", () => {
     }
   });
 
+  it("lets the idea keep its own first screen when the recent sites that used one are in other towns and trades", async () => {
+    const own = { lens: "place", truth: "A hospital in Kota.", evidence: '"Kota"', idea: "Saving life is the work.", refuses: "No stock smiles.", headline: "Saving life is the work.", look: "swiss - clarity", firstScreen: "own: A white screen holds the headline in very large type, with a single red call button fixed at the bottom. Nothing moves but a slow fade. - plain and urgent", object: "none", moment: "none" };
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 20);
+    vi.mocked(designKit).mockImplementation(async (env, brief, pages, style, concept, _d, hero) => {
+      const r = goodKit(env, brief, pages, style);
+      return { ...r, kit: { ...r.kit, concept, hero } as never };
+    });
+    // Two earlier Studio sites with their own first screens: a med spa in Miami and a builder in Austin.
+    for (const [name, city, trade] of [["Glow Med Spa", "Miami, FL", "Med Spa"], ["Tall Builders", "Austin, TX", "Construction"]] as const) {
+      vi.mocked(writeBrief).mockResolvedValueOnce({ tier: "none", concepts: [{ ...own, idea: `${name} idea` }], chosen: 0, why: "", invented: [], cost: 0.05 });
+      await call(h, "/demos", { cookie: b.cookie, form: { businessName: name, city, industry: trade, style: "studio", saw: "A sign out front" } });
+      await drain(h);
+    }
+    expect(vi.mocked(designKit).mock.calls.map((c) => c[6])).toEqual(["own", "own"]);
+    // A hospital in Kota: none of them is a neighbour, so its idea keeps its own first screen.
+    vi.mocked(writeBrief).mockResolvedValueOnce({ tier: "none", concepts: [own], chosen: 0, why: "", invented: [], cost: 0.05 });
+    await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Dhakar Hospital", city: "Kota, IN-RJ", industry: "Hospital", style: "studio", saw: "Saving Life" } });
+    await drain(h);
+    expect(vi.mocked(designKit).mock.calls.at(-1)![6]).toBe("own");
+    // A second med spa in Miami is a neighbour of the first: there the look it used is passed over.
+    vi.mocked(writeBrief).mockResolvedValueOnce({ tier: "none", concepts: [{ ...own, idea: "Another spa" }], chosen: 0, why: "", invented: [], cost: 0.05 });
+    await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Second Med Spa", city: "Miami, FL", industry: "Med Spa", style: "studio", saw: "A pink door" } });
+    await drain(h);
+    expect(vi.mocked(designKit).mock.calls.at(-1)![4]).not.toBe("swiss");
+  });
+
   it("writes the brief first: its idea picks the look and the first screen, leads the design and is kept with the site", async () => {
     const concept = { lens: "name", truth: "A barber shop named for its street.", evidence: '"Studio Barbers"', idea: "The chair as the town's front porch.", refuses: "No stock fades.", headline: "Pull up a chair.", look: "americana - sign-painter craft", firstScreen: "breakout - the barber leans out of the frame", object: "none", moment: "none" };
     vi.mocked(writeBrief).mockResolvedValueOnce({ tier: "none", concepts: [concept], chosen: 0, why: "Only this shop", invented: [], cost: 0.05 });

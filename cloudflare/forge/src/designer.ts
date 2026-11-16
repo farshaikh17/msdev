@@ -337,7 +337,7 @@ export async function planSite(env: Env, i: Intake, site: SiteFacts | null): Pro
   ]
     .filter(Boolean)
     .join("\n");
-  const { text, usage } = await ask(
+  const { text, usage, cut } = await ask(
     env,
     `You're planning a website for a local business. Reply with exactly these parts and nothing else.
 
@@ -356,7 +356,9 @@ One line (10–25 words): how the FIRST photo comes to life in a 6-second video:
 One line (15–30 words): the FIRST photo above, from exactly the same viewpoint, "seen through" to something a visitor would enjoy uncovering with a spotlight: what is underneath, how it is made, or what it becomes. Keep the same scene and subject and transform all of it boldly, e.g. the same engine bay as a glowing blue x-ray cutaway showing the parts inside; the same room at night, lit warm; the same plated dish as its raw ingredients laid out; the same garden in full summer bloom; the same wall finished in a deep rich colour.
 
 ${facts}`,
-    2000,
+    // Room for the whole reply: thinking counts toward this, and a reply cut short used to be taken as a
+    // plan with no trade, services or photos (sites came out with no pictures and a dentist's services).
+    8000,
     env.CLAUDE_PAGE_MODEL || PAGE_MODEL,
     "low",
     PLAN_SYSTEM,
@@ -367,6 +369,9 @@ ${facts}`,
       .split("\n")
       .map((l) => l.replace(/^[-*\d.)\s]+/, "").trim())
       .filter((l) => l && l.length <= 400);
+  // A plan without its trade, services or photo list isn't a plan: fail, so the caller tries again.
+  const photoLines = lines(p.PHOTOS);
+  if (cut || !lines(p.TRADE)[0] || !lines(p.SERVICES).length || photoLines.length < 4) throw new Error(`the plan came back incomplete${cut ? " (cut short)" : ""}: ${[!lines(p.TRADE)[0] && "no trade", !lines(p.SERVICES).length && "no services", photoLines.length < 4 && `${photoLines.length} photos`].filter(Boolean).join(", ")}`);
   const pairs = lines(p.PAIRS)
     .map((l) => l.match(/^BEFORE:\s*(.+?)\s*\|\|\s*AFTER:\s*(.+)$/i))
     .flatMap((m) => (m ? [{ before: m[1]!.slice(0, 300), after: m[2]!.slice(0, 300) }] : []))

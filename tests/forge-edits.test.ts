@@ -22,7 +22,7 @@ vi.mock("@anthropic-ai/sdk", () => {
   return { default: Anthropic };
 });
 
-import { designKit, designSitePage, inventedContacts, type Kit } from "../cloudflare/forge/src/designer";
+import { designKit, designSitePage, inventedContacts, planSite, type Kit } from "../cloudflare/forge/src/designer";
 
 /** Today's Workers AI use, as the page writer reads it from the settings table. */
 const used = { text: 0, pics: 0 };
@@ -213,5 +213,20 @@ describe("the design system", () => {
     const r = await designKit(env, "A plumber.", [], "studio", "organic", undefined, "own");
     expect((requests[0]!.output_config as { effort: string }).effort).toBe("low");
     expect((r.usage as { effort: string }).effort).toBe("low");
+  });
+});
+
+describe("the plan", () => {
+  const intake = { businessName: "Dhakar Hospital", city: "Kota, IN-RJ", industry: "", services: "", notes: "", style: "studio" } as never;
+  it("is refused when it comes back without its trade, services or photo list, so the build tries again", async () => {
+    replies.push("@@@ TRADE\nHospital\n@@@ SERVICES\nOutpatient Care");
+    await expect(planSite(env, intake, null)).rejects.toThrow("the plan came back incomplete");
+    expect((requests[0]! as unknown as { max_tokens: number }).max_tokens).toBe(8000);
+  });
+  it("is kept when it is whole", async () => {
+    replies.push("@@@ TRADE\nHospital\n@@@ SERVICES\nOutpatient Care\nSurgery\n@@@ PHOTOS\n" + Array.from({ length: 8 }, (_, k) => `A ward, scene ${k + 1}`).join("\n"));
+    const p = await planSite(env, intake, null);
+    expect(p.trade).toBe("Hospital");
+    expect(p.imagePrompts).toHaveLength(8);
   });
 });
