@@ -142,7 +142,8 @@ Estimates; to be confirmed by logging cost per stage (added in Slice 2). Today a
   that any host can serve; forms keep sending leads to Forge.
 - **Paid Workers AI pages: on, capped at $5 a month** (`CF_PAID_AI_USD_MONTH` in wrangler.jsonc; set "0" to switch off). It lets pages past
   the free room go to Workers AI (about $0.005 a page instead of $0.05+ on Claude) until that many dollars
-  are used in the month.
+  are used in the month. Photos past the free allowance (about $0.001 each) come out of the same cap; the
+  nightly photo bank never does.
 
 ## Gate B: before reselling
 

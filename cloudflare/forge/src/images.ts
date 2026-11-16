@@ -23,7 +23,29 @@ export const DAILY_IMAGES = 90;
 const PAIR_SIZE = { w: 512, h: 384 };
 
 /** Count pictures made today; false when today's allowance is already used up. */
-export async function spendImages(env: Env, n: number, weight = 1): Promise<boolean> {
+/** Neurons per picture, and the month's paid Workers AI cap in neurons (CF_PAID_AI_USD_MONTH; 0 when unset). */
+const NEURONS_PER_PICTURE = 78;
+const paidCap = (env: Env) => (Math.max(0, Number(env.CF_PAID_AI_USD_MONTH) || 0) / 0.011) * 1000;
+const paidKey = () => `ai-paid-neurons:${new Date().toISOString().slice(0, 7)}`;
+
+/**
+ * Past the free allowance, pictures may come out of the month's paid cap (about $0.001 each), counted
+ * there with the pages, so the month never goes past it. Off when no cap is set. False: no room.
+ */
+async function spendPaid(env: Env, neurons: number): Promise<boolean> {
+  const cap = paidCap(env);
+  if (cap <= 0) return false;
+  const row = await env.DB.prepare(
+    "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = CAST(CAST(value AS REAL) + ?2 AS TEXT) RETURNING CAST(value AS REAL) AS used",
+  )
+    .bind(paidKey(), neurons)
+    .first<{ used: number }>();
+  if ((row?.used ?? neurons) <= cap) return true;
+  await env.DB.prepare("UPDATE settings SET value = CAST(CAST(value AS REAL) - ?2 AS TEXT) WHERE key = ?1").bind(paidKey(), neurons).run();
+  return false;
+}
+
+export async function spendImages(env: Env, n: number, weight = 1, paid = true): Promise<boolean> {
   const key = `ai-images:${new Date().toISOString().slice(0, 10)}`;
   const cost = n * weight;
   // One statement adds to the count and reads it back, so pictures made side by side are all counted
@@ -37,7 +59,7 @@ export async function spendImages(env: Env, n: number, weight = 1): Promise<bool
   const text = await env.DB.prepare("SELECT CAST(value AS REAL) AS n FROM settings WHERE key = ?").bind(`ai-neurons:${key.slice(10)}`).first<{ n: number }>();
   if ((row?.used ?? cost) > DAILY_IMAGES || (row?.used ?? cost) * 78 + (text?.n ?? 0) > 10_000) {
     await env.DB.prepare("UPDATE settings SET value = CAST(CAST(value AS REAL) - ?2 AS TEXT) WHERE key = ?1").bind(key, cost).run();
-    return false;
+    return paid ? spendPaid(env, cost * NEURONS_PER_PICTURE) : false;
   }
   return true;
 }
@@ -50,7 +72,12 @@ export async function imagesRoom(env: Env, n: number): Promise<boolean> {
     .bind(`ai-images:${day}`, `ai-neurons:${day}`)
     .first<{ pics: number | null; text: number | null }>();
   const pics = (row?.pics ?? 0) + n;
-  return pics <= DAILY_IMAGES && pics * 78 + (row?.text ?? 0) <= 10_000;
+  if (pics <= DAILY_IMAGES && pics * 78 + (row?.text ?? 0) <= 10_000) return true;
+  // Or the month's paid cap still covers them.
+  const cap = paidCap(env);
+  if (cap <= 0) return false;
+  const paid = await env.DB.prepare("SELECT CAST(value AS REAL) AS n FROM settings WHERE key = ?").bind(paidKey()).first<{ n: number }>();
+  return (paid?.n ?? 0) + n * NEURONS_PER_PICTURE <= cap;
 }
 
 export async function generate(env: Env, description: string, opts: { reference?: Uint8Array; small?: boolean; square?: boolean; raw?: boolean } = {}): Promise<Uint8Array | null> {

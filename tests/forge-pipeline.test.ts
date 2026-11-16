@@ -171,6 +171,32 @@ describe("a Studio build, rehearsed end to end at no cost", () => {
 
 import { fillPhotoBank, takeFromBank, bankCount } from "../cloudflare/forge/src/bank";
 
+describe("photos past the free allowance", () => {
+  it("come out of the month's paid cap when one is set (counted there), and never from it for the photo bank", async () => {
+    const env = { ...h.env, AI, FORGE_ART_PASS: "off", CF_PAID_AI_USD_MONTH: "5" } as unknown as Env;
+    h.env = env;
+    const day = new Date().toISOString().slice(0, 10);
+    h.db.prepare("INSERT INTO settings (key, value) VALUES (?, '9522')").run(`ai-neurons:${day}`);
+    h.db.prepare("INSERT INTO settings (key, value) VALUES (?, '8')").run(`ai-images:${day}`);
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 9);
+    // The build form doesn't warn: the cap covers today's photos.
+    expect(await (await call(h, "/", { cookie: b.cookie })).text()).not.toContain("gets <b>no photos</b>");
+    const slug = slugOf(await call(h, "/demos", { cookie: b.cookie, form: { businessName: "MELI Frozen Yogurt", city: "Coral Gables, FL", industry: "Frozen Yogurt", saw: "A bright corner shop with a toppings bar", style: "studio" } }));
+    await drain(env);
+    expect((await getDemo(h.env, slug))!.buildStatus).toBe("ready");
+    const photos = h.db.prepare("SELECT count(*) n FROM site_images WHERE slug = ? AND name LIKE 'photo-%'").get(slug) as { n: number };
+    expect(photos.n).toBe(8);
+    const used = (k: string) => Number((h.db.prepare("SELECT value FROM settings WHERE key = ?").get(k) as { value: string } | undefined)?.value ?? 0);
+    // The free count stayed where it was; the photos (and the pages) went on the month's paid count, well under $5.
+    expect(used(`ai-images:${day}`)).toBe(8);
+    expect(used(`ai-paid-neurons:${day.slice(0, 7)}`)).toBeGreaterThanOrEqual(8 * 78);
+    expect(used(`ai-paid-neurons:${day.slice(0, 7)}`) * (0.011 / 1000)).toBeLessThan(5);
+    // The nightly bank takes only free allowance, so tonight it makes nothing.
+    expect(await fillPhotoBank(env, new Date(`${day}T23:23:00Z`))).toBe(0);
+  });
+});
+
 describe("the photo bank", () => {
   it("is filled only in the last hour of the UTC day, from what's left of the free allowance, for the trades being built", async () => {
     const env = { ...h.env, AI } as unknown as Env;

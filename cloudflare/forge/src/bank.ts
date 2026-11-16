@@ -92,7 +92,8 @@ export async function fillPhotoBank(env: Env, now = new Date(), max = NIGHTLY_MA
     const have = new Set(results.map((r) => r.description));
     for (const p of prompts.filter((d) => !have.has(d))) {
       if (made >= max) break;
-      if (!(await spendImages(env, 1))) return made;
+      // Free allowance only: the bank never spends the paid cap.
+      if (!(await spendImages(env, 1, 1, false))) return made;
       const bytes = (await generate(env, p)) ?? (await generate(env, p));
       if (!bytes) continue;
       await env.DB.prepare("INSERT INTO photo_bank (trade, description, data, created_at) VALUES (?, ?, ?, ?)").bind(trade, p, bytes, now.toISOString()).run();
