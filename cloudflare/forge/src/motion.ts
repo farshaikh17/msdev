@@ -270,6 +270,8 @@ all(".m-spin").forEach(function(box){
   // Phones: a flying object crosses the words of a narrow, stacked page. It rests, still, in each of its places instead.
   if(!fine&&innerWidth<900){perches.forEach(function(p){var im=d.createElement("img");im.src=still;im.alt="";im.className="m-perch-still";p.appendChild(im)});layer.remove();return}
   root.classList.add("m-floating");
+  var h1=d.querySelector("main h1");
+  function h1rects(){var r=d.createRange();r.selectNodeContents(h1);var out=[];var rs=r.getClientRects();for(var q=0;q<rs.length;q++){var x=rs[q];if(x.width>4&&x.bottom>-200&&x.top<innerHeight+200)out.push(x)}return out}
   var urls=(layer.getAttribute("data-frames")||"").split("|").filter(Boolean),set=frameSet(urls.length>1?urls:[still]),cv=layer.querySelector("canvas"),path=layer.getAttribute("data-path")||"arc";
   var px=0,tilt=0,cx=null,cy=0,cs=0,born=null,last=-1,t0=performance.now(),max=0;
   if(fine)W.addEventListener("pointermove",function(e){px=e.clientX/innerWidth-.5},{passive:true});
@@ -290,6 +292,8 @@ all(".m-spin").forEach(function(box){
       else if(path==="zig")tx+=Math.sin(e*Math.PI*3)*amp*.8*dir;
       else tx+=lift*amp*dir;
       tx=Math.max(ts*.45,Math.min(innerWidth-ts*.45,tx));
+      // Never over the main headline's words: past the end of the line it would cover, or smaller to fit beside it.
+      if(h1){var lines=h1rects(),half=ts/2;for(var li=0;li<lines.length;li++){var lr=lines[li];if(tx+half>lr.left&&tx-half<lr.right&&ty+half>lr.top&&ty-half<lr.bottom){var room=innerWidth-lr.right-24;if(room>=ts){tx=lr.right+12+half}else if(room>ts*.45){ts=room;half=ts/2;tx=lr.right+12+half}else{ty=lr.bottom+half+12}}}}
       var time=(now-t0)/1000;ty+=Math.sin(time*1.3)*Math.min(12,ts*.025)*(1-lift);
       if(cx===null){cx=tx;cy=ty;cs=ts}
       cx+=(tx-cx)*.18;cy+=(ty-cy)*.18;cs+=(ts-cs)*.18;

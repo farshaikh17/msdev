@@ -22,6 +22,8 @@ export interface Env {
   CF_PAID_AI_USD_MONTH?: string;
   /** The model that writes a Studio site's first screen (default: Sonnet). */
   FORGE_HERO_MODEL?: string;
+  /** "on": every text call goes to Workers AI, not Claude (no Claude spend). "off": never, even when Claude is out of credit. */
+  FORGE_LEAN?: string;
   /** Custom domains: the address a customer's CNAME record points at (a host in the Cloudflare for SaaS zone). */
   FORGE_DOMAIN_TARGET?: string;
   /** Custom domains: the Cloudflare for SaaS zone id and an API token (Custom Hostnames: Edit), so Forge registers addresses itself. */

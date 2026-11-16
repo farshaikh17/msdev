@@ -55,8 +55,8 @@ const AI = {
     workersAi.push({ model, input });
     if (input.multipart) return { image: btoa("\xff\xd8\xff\xe0photo") };
     const msg = (input.messages as { content: string }[])[1]!.content;
-    const name = msg.match(/## (?:Write|Change|Improve) this page: ([^(\n]+)/)?.[1]?.trim() ?? "Page";
-    return { choices: [{ message: { content: PAGE(name) }, finish_reason: "stop" }], usage: { prompt_tokens: 20000, completion_tokens: 5000, neurons: 480 } };
+    // The same stand-in replies as Claude's (a page, or the brief, plan or design kit in lean mode).
+    return { choices: [{ message: { content: reply({ model, messages: [{ content: msg }] }) }, finish_reason: "stop" }], usage: { prompt_tokens: 20000, completion_tokens: 5000, neurons: 480 } };
   },
 };
 
@@ -170,6 +170,32 @@ describe("a Studio build, rehearsed end to end at no cost", () => {
 });
 
 import { fillPhotoBank, takeFromBank, bankCount } from "../cloudflare/forge/src/bank";
+import { leanMode } from "../cloudflare/forge/src/designer";
+
+describe("lean mode (no Claude)", () => {
+  it("builds a whole Studio site with no Claude call at all, every writer on Workers AI, and says the review wasn't critiqued", async () => {
+    const env = { ...h.env, AI, FORGE_ART_PASS: "off", FORGE_LEAN: "on", CF_PAID_AI_USD_MONTH: "5" } as unknown as Env;
+    h.env = env;
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 9);
+    const slug = slugOf(await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Beta Plumbing", city: "Grand Island, NE", industry: "Plumbing", saw: "A red van", style: "studio" } }));
+    await drain(env);
+    expect((await getDemo(h.env, slug))!.buildStatus).toBe("ready");
+    expect(claude).toHaveLength(0);
+    // The brief, the plan, the design kit and the pages all went to Workers AI.
+    const texts = workersAi.filter((w) => !w.input.multipart).map((w) => JSON.stringify(w.input.messages));
+    expect(texts.some((t) => t.includes("@@@ TRADE"))).toBe(true);
+    expect(texts.some((t) => t.includes("the whole site's stylesheet"))).toBe(true);
+  });
+
+  it("switches on by itself for the rest of the month once Claude is out of credit", async () => {
+    const env = { ...h.env, AI } as unknown as Env;
+    expect(await leanMode(env)).toBe(false);
+    h.db.prepare("INSERT INTO settings (key, value) VALUES (?, 'x')").run(`claude-out:${new Date().toISOString().slice(0, 7)}`);
+    expect(await leanMode(env)).toBe(true);
+    expect(await leanMode({ ...env, FORGE_LEAN: "off" } as Env)).toBe(false);
+  });
+});
 
 describe("photos past the free allowance", () => {
   it("come out of the month's paid cap when one is set (counted there), and never from it for the photo bank", async () => {

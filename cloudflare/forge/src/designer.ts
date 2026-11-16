@@ -877,6 +877,32 @@ type Content = string | { type: "text"; text: string; cache_control?: { type: "e
 type Effort = "low" | "medium" | "high";
 
 /** `cut`: the reply hit max_tokens before it finished. */
+/**
+ * Lean mode: every text call goes to Workers AI (out of the free allowance and the month's paid cap)
+ * instead of Claude. On when FORGE_LEAN is "on"; and, unless FORGE_LEAN is "off", for the rest of the
+ * month once Claude says the account is out of credit, so builds keep working instead of failing.
+ */
+export async function leanMode(env: Env): Promise<boolean> {
+  if (env.FORGE_LEAN === "on") return true;
+  if (env.FORGE_LEAN === "off" || !env.DB) return false;
+  try {
+    const r = await env.DB.prepare("SELECT 1 AS y FROM settings WHERE key = ?").bind(`claude-out:${month()}`).first<{ y: number }>();
+    return r?.y === 1;
+  } catch {
+    return false;
+  }
+}
+
+/** One text call on Workers AI, counted against the allowance; waits (TryLater) when there is no room. */
+async function askLean(env: Env, content: Content, maxTokens: number, system: string): Promise<{ text: string; usage: Record<string, unknown>; cut: boolean }> {
+  const room = await workersAiRoom(env).catch(() => false as const);
+  if (!room) throw new TryLater("Claude is switched off and today's Workers AI allowance is used up.");
+  const prompt = typeof content === "string" ? content : content.map((p) => p.text).join("\n\n");
+  const out = await askWorkersAi(env, env.FORGE_INNER_MODEL?.startsWith("@cf/") ? env.FORGE_INNER_MODEL : CF_INNER_MODEL, system, prompt, maxTokens);
+  await spendNeurons(env, Number(out.usage.neurons) || PAGE_HEADROOM, room).catch(() => undefined);
+  return out;
+}
+
 export async function ask(
   env: Env,
   content: Content,
@@ -885,6 +911,7 @@ export async function ask(
   effort: Effort,
   system = SYSTEM,
 ): Promise<{ text: string; usage: Record<string, unknown>; cut: boolean }> {
+  if (env.AI && (await leanMode(env))) return askLean(env, content, maxTokens, system);
   if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY isn't set in Cloudflare.");
   // Streamed: a page takes minutes to write, and a silent connection that long gets cut (HTTP 524).
   // No automatic retry, so one failure never bills twice.
@@ -929,8 +956,15 @@ export async function ask(
       (!parts.length && e instanceof Anthropic.APIConnectionError)
     )
       throw new TryLater("Claude is busy right now.");
-    if (e instanceof Anthropic.BadRequestError && /credit|billing/i.test(e.message))
+    if (e instanceof Anthropic.BadRequestError && /credit|billing/i.test(e.message)) {
+      // Out of credit: switch to Workers AI for the rest of the month (unless lean mode is forced off) and carry on.
+      if (env.AI && env.FORGE_LEAN !== "off" && !parts.length) {
+        await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").bind(`claude-out:${month()}`, new Date().toISOString()).run().catch(() => undefined);
+        console.log("claude out of credit: lean mode for the rest of the month");
+        return askLean(env, content, maxTokens, system);
+      }
       throw new Fatal("The Claude API account is out of credit. Top it up at console.anthropic.com.");
+    }
     if (e instanceof Anthropic.APIError) throw new Error(`Claude returned an error (${e.status ?? "network"}). Try again.`);
     throw e;
   }

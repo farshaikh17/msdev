@@ -149,6 +149,13 @@ Estimates; to be confirmed by logging cost per stage (added in Slice 2). Today a
   browser-checked redo) is written by Sonnet at half the price. Set `FORGE_HERO_MODEL` to put it back.
   Baseline to beat: Madruga Bakery, $1.43 all in, review 6/10.
 
+- **Lean mode (on from 16 Nov: $2 of Claude credit left this month).** `FORGE_LEAN: "on"` in wrangler.jsonc
+  sends every text call (brief, plan, design kit, first screen, pages, QA repairs) to Workers AI, out of the
+  free allowance and the $5 monthly cap. No Claude spend; the review still screenshots and measures, but
+  doesn't critique (that needs Claude's eyes). Set it to "off" (or remove it) once Claude is topped up.
+  Without the setting, Forge switches to lean mode by itself for the rest of the month when Claude says
+  it is out of credit, instead of failing builds.
+
 ## Gate B: before reselling
 
 Ten sites across ten trades and five towns with "Let Forge choose", including three businesses with real logos and three with nothing online:

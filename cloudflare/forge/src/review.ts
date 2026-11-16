@@ -10,6 +10,7 @@
  * BROWSER_BUDGET_SECONDS (half of what the Workers Paid plan includes), so this can never cost
  * extra. Past the cap, sites still go live; they just aren't reviewed.
  */
+import { leanMode } from "./designer";
 import { conceptById } from "./concepts";
 import { heroById } from "./heroes";
 import { ownScreen } from "./brief";
@@ -188,7 +189,7 @@ export interface HeroLook {
  */
 export async function reviewHero(env: Env, slug: string, version: string, kit: Kit, deps: ReviewDeps = realDeps): Promise<HeroLook | null> {
   const base = env.SITES_ORIGIN ? env.SITES_ORIGIN.replace(/\/+$/, "") : "";
-  if (!env.BROWSER || !env.ANTHROPIC_API_KEY || !base) return null;
+  if (!env.BROWSER || !env.ANTHROPIC_API_KEY || !base || (await leanMode(env))) return null;
   if ((await browserUsed(env)).seconds >= BROWSER_BUDGET_SECONDS) return null;
   const started = Date.now();
   const sleep = deps.sleep ?? realSleep;
@@ -373,6 +374,8 @@ One or two sentences: what works and must not change.`),
 }
 
 async function critiqueReal(env: Env, shots: Shots, facts: string, studio = false) {
+  // Lean mode: no Claude, so no critique of the pictures (the measured checks and screenshots still happen).
+  if (await leanMode(env)) return { score: 0, verdict: "", strengths: [] as string[], issues: [] as Issue[], costUsd: 0, lean: true };
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 120_000 });
   const content = [...shotContent(shots), { type: "text" as const, text: `Facts measured in the browser (treat as true):\n${facts}` }];
   const messages: { role: "user" | "assistant"; content: string | typeof content }[] = [{ role: "user", content }];
@@ -758,7 +761,7 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     const direction = look ? `\n\nThis site's art direction is "${look.name}". Its first screen should be: ${firstScreenWanted(kit, sig, look)}\nRuled out for it: ${look.never}\nIf the first screen doesn't match that description (for example it is a big headline over a darkened full-bleed photo when the direction says otherwise), say so as a high-severity issue with the fix, and score no higher than 6.` : "";
     const shotSet: Shots = { desktop, phone, ...(down.frames.length ? { frames: down.frames } : {}), ...(phoneDown.frames.length ? { phoneFrames: phoneDown.frames } : {}) };
     const crit = await deps.critique(env, shotSet, facts + direction, studio);
-    review = { at, ...(down.frames.length ? { blank: down.blank } : {}), ...(wide.length ? { wide } : {}), score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues, checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
+    review = { at, ...(down.frames.length ? { blank: down.blank } : {}), ...(wide.length ? { wide } : {}), ...("lean" in crit && crit.lean ? { verdict: "Not critiqued: Claude is switched off (lean mode). The measured checks below still ran." } : { score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues }), checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
 
     // Fix: write the home page again with the notes, when it isn't good enough.
     // (A tight phone layout is fixed for free when the page is served, so it never buys a rewrite on its own.)
