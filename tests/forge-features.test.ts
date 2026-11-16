@@ -633,6 +633,15 @@ describe("looking at a Studio first screen before the page is written", () => {
     expect(told).toContain("letterbox");
   });
 
+  it("polish notes alone don't buy a second round; a high-severity issue does", async () => {
+    const { slug, demo } = await liveDemo();
+    const kit = await kitOf(slug, demo.liveVersion!);
+    const polish: ReviewDeps = { launch: async () => fakeBrowser(goodFacts([])).browser, sleep: async () => undefined, critique: vi.fn(async () => ({ score: 7, verdict: "v", strengths: [], issues: [{ what: "Headline could be bigger", fix: "Bigger", severity: "medium" as const }], costUsd: 0.03 })) };
+    expect((await reviewHero({ ...h.env, BROWSER: {} } as Env, slug, demo.liveVersion!, kit, polish))!.notes).toEqual([]);
+    const serious = await reviewHero({ ...h.env, BROWSER: {} } as Env, slug, demo.liveVersion!, kit, deps(goodFacts([]), 7));
+    expect(serious!.notes.join(" ")).toContain("Use the letterboxed title card");
+  });
+
   it("measured tells and a low score come back as notes for one more go", async () => {
     const { slug, demo } = await liveDemo();
     const look = await reviewHero({ ...h.env, BROWSER: {} } as Env, slug, demo.liveVersion!, await kitOf(slug, demo.liveVersion!), deps({ ...goodFacts([]), eyebrows: 1, accentWord: true, h1Words: 14 }, 5));
@@ -1049,5 +1058,18 @@ describe("pictures and pages share Cloudflare's free allowance", () => {
     h.db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '9900')").run(`ai-neurons:${day}`);
     const ai = { run: async () => ({ image: btoa("x") }) };
     expect(await real({ ...h.env, AI: ai } as unknown as Env, ["a", "b"])).toHaveLength(1); // 9,900 + 78 fits; a second doesn't
+  });
+});
+
+describe("the quality check's Fix button", () => {
+  it("has the fix made by Sonnet (cheap), as one change", async () => {
+    const { b, slug, demo } = await liveDemo();
+    h.db.prepare("UPDATE site_versions SET review = ? WHERE slug = ? AND version = ?").run(JSON.stringify({ at: "x", score: 5, issues: [{ what: "Low contrast", fix: "Lighter text", severity: "high" }] }), slug, demo.liveVersion);
+    await call(h, `/demos/${slug}/fix`, { cookie: b.cookie, form: { n: "all" } });
+    expect(h.queued.at(-1)!.body).toMatchObject({ stage: "change", path: "/", cheap: true });
+    await drain(h);
+    const rev = vi.mocked(designSitePage).mock.calls.at(-1)![3]!;
+    expect(rev).toMatchObject({ cheap: true });
+    expect(rev.instruction).toContain("Low contrast");
   });
 });

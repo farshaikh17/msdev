@@ -22,7 +22,7 @@ vi.mock("@anthropic-ai/sdk", () => {
   return { default: Anthropic };
 });
 
-import { designSitePage, inventedContacts, type Kit } from "../cloudflare/forge/src/designer";
+import { designKit, designSitePage, inventedContacts, type Kit } from "../cloudflare/forge/src/designer";
 
 /** Today's Workers AI use, as the page writer reads it from the settings table. */
 const used = { text: 0, pics: 0 };
@@ -204,5 +204,14 @@ describe("the first screen's revision", () => {
     expect(r.page.body).toContain("Bigger words");
     expect((requests[0]!.output_config as { effort: string }).effort).toBe("low");
     expect(requests[0]!.model).toBe("claude-opus-5-5");
+  });
+});
+
+describe("the design system", () => {
+  it("is written at low effort for Studio too, and says so in its usage", async () => {
+    replies.push("@@@ THEME\nlight\n@@@ ACCENT\n#aa3333\n@@@ CSS\n.a{}\n@@@ HEADER\n<header></header>\n@@@ FOOTER\n<footer></footer>");
+    const r = await designKit(env, "A plumber.", [], "studio", "organic", undefined, "own");
+    expect((requests[0]!.output_config as { effort: string }).effort).toBe("low");
+    expect((r.usage as { effort: string }).effort).toBe("low");
   });
 });

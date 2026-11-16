@@ -457,7 +457,8 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
       if (!picked.length) return back("error", "There's nothing from the quality check to fix. Run the check again first.");
       const instruction = picked.length === 1 ? `${picked[0]!.what}. ${picked[0]!.fix}` : `Fix each of these problems found in a review of the rendered page:\n${picked.map((i) => `- ${i.what}: ${i.fix}`).join("\n")}`;
       await setChangeNote(env, slug, { path: "/", instruction: picked.length === 1 ? picked[0]!.what : `Fix all ${picked.length} things the quality check found`, status: "working", error: "", at: new Date().toISOString() });
-      await env.BUILDS.send({ slug, version: demo.liveVersion, stage: "change", path: "/", instruction: instruction.slice(0, 4000) });
+      // A repair from the quality check's notes: Sonnet makes it, as edits (about a third of Opus's cost).
+      await env.BUILDS.send({ slug, version: demo.liveVersion, stage: "change", path: "/", instruction: instruction.slice(0, 4000), cheap: true });
       return back("ok", "Fixing it now. The home page updates itself in a couple of minutes.");
     }
     if (action === "/change" && post) {

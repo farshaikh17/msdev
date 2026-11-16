@@ -926,7 +926,11 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[], styl
   // A Studio site thinks harder about its art direction: that is where the budget goes.
   const studio = style === "studio";
   const { prompt } = kitRequest(brief, pages, style, concept, heroId, idea);
-  let { text, usage, cut } = await ask(env, prompt, 64000, env.CLAUDE_MODEL || MODEL, studio ? "medium" : effortOf(env, "low"), systemFor(style, concept, heroId, idea));
+  // Low effort for Studio too (was medium): the brief already makes the design decisions, and thinking
+  // was about half this call's cost. CLAUDE_EFFORT=medium brings the old setting back.
+  const effort = effortOf(env, "low");
+  let { text, usage, cut } = await ask(env, prompt, 64000, env.CLAUDE_MODEL || MODEL, effort, systemFor(style, concept, heroId, idea));
+  usage = { ...usage, effort };
   if (cut) {
     // Ran out of room (thinking counts toward the limit): once more, thinking less and writing tighter.
     console.log("kit cut off, retrying tighter");

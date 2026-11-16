@@ -71,7 +71,7 @@ export type BuildJob =
   /** Add illustrative before/after photos to a live site (the gallery and home page are rewritten around them). */
   | { slug: string; version: string; stage: "pairs" }
   /** A change request on one page of the live site. */
-  | { slug: string; version: string; stage: "change"; path: string; instruction: string }
+  | { slug: string; version: string; stage: "change"; path: string; instruction: string; cheap?: boolean }
   /** "They replied": put their logo and details into the site and apply their one round of edits. */
   | { slug: string; version: string; stage: "handover" };
 /** Copy one clip from the team's Google Drive folder into the video library. */

@@ -37,6 +37,8 @@ function firstScreenWanted(kit: Kit, sig: ReturnType<typeof heroById>, look: { h
 }
 
 export const HERO_GOOD = 8;
+/** Below this, the first screen gets its second round even without a high-severity issue. */
+export const HERO_REDO_BELOW = 6;
 
 export interface Check {
   id: string;
@@ -219,7 +221,10 @@ export async function reviewHero(env: Env, slug: string, version: string, kit: K
     const direction = look ? `\n\nThis is ONLY the first screen of the home page; the rest isn't written yet, so don't mark it down for missing sections, reviews or a form. Its art direction is "${look.name}". The first screen should be: ${firstScreenWanted(kit, sig, look)}\nRuled out for it: ${look.never}\nIf it doesn't match that description (for example it is a big headline over a darkened full-bleed photo when the direction says otherwise), say so as a high-severity issue with the fix, and score no higher than 6.` : "\n\nThis is ONLY the first screen of the home page; the rest isn't written yet.";
     const crit = await deps.critique(env, { desktop, phone }, `${measured.length ? measured.map((m) => `- FAILED: ${m}`).join("\n") : "- The measured checks passed."}${direction}`, true);
     const notes = [...measured, ...crit.issues.filter((i) => i.severity !== "low").map((i) => `${i.what} → ${i.fix}`)];
-    return { score: crit.score, notes: crit.score >= HERO_GOOD && !measured.length ? [] : notes, costUsd: crit.costUsd };
+    // A second round only for something really wrong: a measured failure, a high-severity issue, or a low
+    // score. Polish notes alone don't pay for another Opus pass (it used to run on almost every site).
+    const wrong = measured.length > 0 || crit.issues.some((i) => i.severity === "high") || crit.score < HERO_REDO_BELOW;
+    return { score: crit.score, notes: crit.score >= HERO_GOOD && !measured.length ? [] : wrong ? notes : [], costUsd: crit.costUsd };
   } catch (e) {
     if (browser) await browser.close().catch(() => undefined);
     await addBrowserSeconds(env, (Date.now() - started) / 1000).catch(() => undefined);

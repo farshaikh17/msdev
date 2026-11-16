@@ -217,7 +217,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
     return "done";
   }
   if (job.stage === "change") {
-    if (demo && demo.liveVersion === job.version) await applyChange(env, job.slug, job.version, job.path, job.instruction, attempts);
+    if (demo && demo.liveVersion === job.version) await applyChange(env, job.slug, job.version, job.path, job.instruction, attempts, !!job.cheap);
     return "done";
   }
   if (job.stage === "handover") {
@@ -431,14 +431,14 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
 }
 
 /** A change request on one page of the live site: the page is written again with the instruction, on the cheaper model. */
-async function applyChange(env: Env, slug: string, version: string, path: string, instruction: string, attempts: number): Promise<void> {
+async function applyChange(env: Env, slug: string, version: string, path: string, instruction: string, attempts: number, cheap = false): Promise<void> {
   const note = (status: "working" | "done" | "failed", error = "") => setChangeNote(env, slug, { path, instruction, status, error, at: new Date().toISOString() });
   try {
     const kit = await getKit(env, slug, version);
     const spec = kit ? pagesOf(kit).find((p) => p.path === path) : null;
     const current = await getPage(env, slug, version, path);
     if (!kit || !spec || !current) return void (await note("failed", "That page isn't part of the live site."));
-    const { page, usage } = await designSitePage(env, kit, spec, { instruction, current });
+    const { page, usage } = await designSitePage(env, kit, spec, { instruction, current, ...(cheap ? { cheap: true } : {}) });
     await savePage(env, slug, version, path, page, usage);
     const demo = await getDemo(env, slug);
     const u = usage as { cost_usd?: number };
