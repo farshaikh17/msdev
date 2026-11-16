@@ -255,6 +255,40 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
   await step("activating brings it back", async () => {
     await ap.click("button:has-text('Activate account')"); const p = await (await ctx()).newPage(); const r = await p.goto(`${BASE}/s/${slug}?z=${Date.now()}`); ok(r.status() === 200, "site " + r.status());
   });
+  await step("every app page, desktop and phone: loads, no console errors, no sideways scroll, one heading (screenshots)", async () => {
+    // A site with a very long name (an address typed as the name): it must not stretch its card.
+    await op.goto(BASE + "/"); await op.fill("input[name=businessName]", "Akansha Deep Heights, Kunadi, Electricity Board Area, Kota, Rajasthan 324008"); await op.fill("input[name=city]", "Kota, IN-RJ");
+    await op.click("button:has-text('Build website')"); await op.waitForURL(/\/demos\//);
+    const tenant = (await ap.content()).match(/\/admin\/tenants\/(\d+)/g) || [];
+    const pages = [
+      [op, "/"], [op, "/?lead=sent"], [op, "/gallery"], [op, `/demos/${slug}`], [op, "/team"], [op, "/api"], [op, "/settings"],
+      [ap, "/admin"], [ap, "/admin/inquiries"], [ap, "/admin/site"], [ap, "/admin/videos"], ...tenant.slice(0, 1).map((t) => [ap, t]),
+    ];
+    const bad = [];
+    for (const [w, h] of [[1280, 900], [390, 844]]) {
+      for (const [pg, path] of pages) {
+        const c = await browser.newContext({ viewport: { width: w, height: h }, storageState: await pg.context().storageState() });
+        const p = await c.newPage(); const errs = [];
+        p.on("console", (m) => { if (m.type() === "error" && !/fonts\.g|net::|_img\//.test(m.text())) errs.push(m.text()); });
+        p.on("pageerror", (e) => errs.push(e.message));
+        const r = await p.goto(BASE + path, { waitUntil: "load" });
+        const f = await p.evaluate(() => ({
+          over: document.documentElement.scrollWidth > innerWidth + 1,
+          h1: document.querySelectorAll("h1").length,
+          // A card whose content spills outside its own box.
+          spill: [...document.querySelectorAll(".site-card, .card, .g-card")].filter((el) => el.scrollWidth > el.clientWidth + 2).length,
+        }));
+        if (r.status() !== 200) bad.push(`${path}@${w} status ${r.status()}`);
+        if (f.over) bad.push(`${path}@${w} scrolls sideways`);
+        if (f.spill) bad.push(`${path}@${w} ${f.spill} card(s) spill`);
+        if (f.h1 !== 1) bad.push(`${path}@${w} ${f.h1} h1`);
+        if (errs.length) bad.push(`${path}@${w} console: ${errs[0]}`);
+        await p.screenshot({ path: `${SHOTS}/tour-${w}-${path.replace(/[^a-z0-9]+/gi, "_") || "home"}.png`, fullPage: true });
+        await c.close();
+      }
+    }
+    ok(!bad.length, bad.join("; "));
+  });
   await step("wrong passwords lock sign-in after 5 tries", async () => {
     const p = await (await ctx()).newPage(); let last = 0;
     for (let i = 0; i < 7; i++) { await p.goto(BASE + "/login"); await p.fill("input[name=email]", "nobody@x.test"); await p.fill("input[name=password]", "wrong-pass-" + i); const [resp] = await Promise.all([p.waitForResponse((r) => r.url().endsWith("/login") && r.request().method() === "POST"), p.click("button[type=submit]")]); last = resp.status(); }

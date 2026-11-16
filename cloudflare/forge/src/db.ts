@@ -170,6 +170,8 @@ export interface Listed {
   createdAt: string;
   /** The live version, when it has a desktop screenshot to show as a picture. */
   shot?: string;
+  /** The version visitors see. */
+  liveVersion?: string;
   /** No phone number was given: the site shouldn't be sent to anyone yet. */
   noPhone?: boolean;
   /** Where it stands as a sales lead. */
@@ -264,7 +266,7 @@ export async function getDemo(env: Env, slug: string, opts: { tenantId?: number;
 
 export async function listDemos(env: Env, tenantId: number): Promise<Listed[]> {
   const { results } = await env.DB.prepare(
-    "SELECT slug, business_name, intake, content, created_at, updated_at, build_status, lead_status, expires_at, (SELECT v.version FROM site_versions v WHERE v.slug = demos.slug AND v.version = demos.live_version AND v.review LIKE '%shot-desktop.jpg%') AS shot FROM demos WHERE tenant_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 200",
+    "SELECT slug, business_name, intake, content, created_at, updated_at, build_status, lead_status, expires_at, live_version, (SELECT v.version FROM site_versions v WHERE v.slug = demos.slug AND v.version = demos.live_version AND v.review LIKE '%shot-desktop.jpg%') AS shot FROM demos WHERE tenant_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 200",
   )
     .bind(tenantId)
     .all<Row & { shot: string | null }>();
@@ -272,7 +274,7 @@ export async function listDemos(env: Env, tenantId: number): Promise<Listed[]> {
     const intake = JSON.parse(r.intake) as { city?: string; phone?: string };
     const content = JSON.parse(r.content) as { industry?: string };
     const stale = r.build_status === "building" && Date.now() - Date.parse(r.updated_at ?? r.created_at) > STALE_MS;
-    return { buildStatus: stale ? "failed" : r.build_status, slug: r.slug, businessName: r.business_name, industry: content.industry ?? "", city: intake.city ?? "", createdAt: r.created_at, leadStatus: leadStatusOf(r.lead_status), expiresAt: r.expires_at ?? null, ...(r.shot ? { shot: r.shot } : {}), ...(intake.phone ? {} : { noPhone: true }) };
+    return { buildStatus: stale ? "failed" : r.build_status, slug: r.slug, businessName: r.business_name, industry: content.industry ?? "", city: intake.city ?? "", createdAt: r.created_at, leadStatus: leadStatusOf(r.lead_status), expiresAt: r.expires_at ?? null, ...(r.shot ? { shot: r.shot } : {}), ...(r.live_version ? { liveVersion: r.live_version } : {}), ...(intake.phone ? {} : { noPhone: true }) };
   });
 }
 

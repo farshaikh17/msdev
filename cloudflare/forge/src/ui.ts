@@ -77,6 +77,7 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 .spin{width:22px;height:22px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--steel);animation:sp 1s linear infinite;flex:none}
 @keyframes sp{to{transform:rotate(360deg)}}
 .tag{font:600 .72rem var(--body);padding:3px 9px;border-radius:999px;background:var(--steel-soft);color:var(--steel)}
+.site-card .tag{white-space:nowrap;flex-shrink:0}
 .tag.bad{background:var(--bad-soft);color:var(--bad)}
 .tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.dim{background:var(--chrome);color:var(--muted)}
 .lstat{font:600 .72rem var(--body);padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
@@ -88,10 +89,10 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 .big-field{font-size:.95rem}.big-field input{font-size:1.15rem;padding:15px 16px}
 .btn.big{font-size:1.05rem;padding:14px 26px}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
-.site-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px;min-width:0}
-.thumb{display:block;aspect-ratio:16/10;border-radius:9px;overflow:hidden;background:var(--chrome);border:1px solid var(--line);text-decoration:none}
+.site-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0}
+.thumb{display:block;position:relative;aspect-ratio:16/10;border-radius:9px;overflow:hidden;background:var(--chrome);border:1px solid var(--line);text-decoration:none}
 .thumb img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
-.thumb span{display:grid;place-items:center;height:100%;font:800 2.6rem var(--display);color:var(--muted)}
+.thumb img+span{position:absolute;inset:0;z-index:-1}.thumb span{display:grid;place-items:center;height:100%;font:800 2.6rem var(--display);color:var(--muted)}
 .site-name{font-weight:700;color:var(--ink);text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .step h2{display:flex;align-items:center;gap:10px}
 .stepn{width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--surface);display:inline-grid;place-items:center;font:700 .95rem var(--body);flex:none}
@@ -376,7 +377,13 @@ function siteCard(d: Listed, url: string): string {
           : d.noPhone
             ? `<span class="tag dim" title="Add their phone number before sending it">Ready · add phone</span>`
             : `<span class="tag ok">Ready</span>`;
-  const thumb = d.shot ? `<img loading="lazy" src="${esc(url)}/_img/${esc(d.shot)}/shot-desktop.jpg" alt="">` : `<span>${esc(d.businessName.slice(0, 1).toUpperCase())}</span>`;
+  // The review's screenshot; until there is one, the site's first preview photo (the letter if that fails too).
+  const letter = `<span>${esc(d.businessName.slice(0, 1).toUpperCase())}</span>`;
+  const thumb = d.shot
+    ? `<img loading="lazy" src="${esc(url)}/_img/${esc(d.shot)}/shot-desktop.jpg" alt="">`
+    : d.liveVersion && d.buildStatus === "ready"
+      ? `<img loading="lazy" src="${esc(url)}/_img/${esc(d.liveVersion)}/photo-1.jpg" alt="" onerror="this.remove()">${letter}`
+      : letter;
   return `<article class="site-card"><a class="thumb" href="/demos/${esc(d.slug)}" aria-label="${esc(d.businessName)}">${thumb}</a>
 <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><div style="min-width:0"><a class="site-name" href="/demos/${esc(d.slug)}">${esc(d.businessName)}</a><div class="note">${esc([d.city, d.createdAt.slice(0, 10)].filter(Boolean).join(" · "))}</div></div>${state}</div>
 <div class="row" style="justify-content:space-between"><div class="row"><a class="btn ghost" href="/demos/${esc(d.slug)}">Open</a><button class="btn ghost" data-copy="${esc(url)}">Copy link</button></div>${d.buildStatus === "ready" || d.leadStatus !== "new" ? leadPill(d.leadStatus) : ""}</div></article>`;
