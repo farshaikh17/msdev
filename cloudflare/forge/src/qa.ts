@@ -193,7 +193,9 @@ export function qaFixHtml(html: string, footer: { hasPrivacy: boolean; hasTerms:
   return out;
 }
 
-export const QA_CSS = `.fg-legal{text-align:center;font-size:.85rem;opacity:.85;margin:14px 0 0}.fg-legal a{color:inherit;text-decoration:underline;text-underline-offset:3px}
+export const QA_CSS = `header.fg-solid{background:color-mix(in srgb,var(--bg,#fff) 94%,transparent)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-color:transparent!important;box-shadow:0 1px 0 rgba(0,0,0,.08)!important;transition:background-color .3s}
+header.fg-solid [data-fg-ink],header.fg-solid [data-fg-ink] svg{color:var(--ink,#111)!important}header.fg-solid [data-fg-ink][class*="icon" i],header.fg-solid [data-fg-ink][class*="toggle" i]{border-color:color-mix(in srgb,var(--ink,#111) 25%,transparent)!important}
+.fg-legal{text-align:center;font-size:.85rem;opacity:.85;margin:14px 0 0}.fg-legal a{color:inherit;text-decoration:underline;text-underline-offset:3px}
 main img[data-fg-zoom]{cursor:zoom-in}
 [data-fg-filled]{position:relative;overflow:hidden;padding:0!important}[data-fg-filled]>img{display:block;width:100%;height:100%;min-height:200px;object-fit:cover}
 [data-fg-filled]>span{position:absolute;left:10px;bottom:10px;font:600 11px/1 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:5px 8px;border-radius:4px}
@@ -247,4 +249,43 @@ if(!pool.length){box.style.display="none";box.setAttribute("data-fg-filled","");
 var img=document.createElement("img");img.src=pool[k++%pool.length];img.alt="Sample photo";img.loading="lazy";img.setAttribute("data-fg-zoom","");
 var tag=document.createElement("span");tag.textContent="Sample photo";
 box.innerHTML="";box.setAttribute("data-fg-filled","");box.appendChild(img);box.appendChild(tag)});
+
+// A see-through header whose text can't be read against what is behind it (light text over a light
+// section, often in the other theme) gets a solid background and the page's ink colour until it can.
+(function(){var hd=document.querySelector("body>header,header");if(!hd)return;
+function rgb(v){var m=(v||"").match(/[0-9.]+/g);return m&&m.length>=3?m.map(Number):null}
+function lum(c){var a=[c[0],c[1],c[2]].map(function(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)});return 0.2126*a[0]+0.7152*a[1]+0.0722*a[2]}
+function behind(){var r=hd.getBoundingClientRect();var y=Math.min(innerHeight-1,Math.max(0,r.bottom+6));var els=document.elementsFromPoint(innerWidth/2,y);
+for(var i=0;i<els.length;i++){if(hd.contains(els[i]))continue;for(var n=els[i];n&&n!==document.documentElement;n=n.parentElement){var st=getComputedStyle(n);
+if(/^(IMG|VIDEO|CANVAS|PICTURE|svg)$/i.test(n.tagName)||st.backgroundImage!=="none")return null;var c=rgb(st.backgroundColor);if(c&&(c.length<4||c[3]>0.5))return c}}
+return rgb(getComputedStyle(document.body).backgroundColor)}
+function check(){if(hd.classList.contains("fg-solid")){hd.classList.remove("fg-solid")}
+var own=rgb(getComputedStyle(hd).backgroundColor);if(own&&own.length>=4&&own[3]>0.5)return;if(own&&own.length===3)return;
+// On a phone a see-through header over the page's words is a jumble whatever the colours: past the first screen it is always solid.
+if(innerWidth<900&&scrollY>innerHeight*0.6){solid();return}
+var link=hd.querySelector("nav a,a");if(!link)return;var fg=rgb(getComputedStyle(link).color);var bg=behind();if(!fg||!bg)return;
+var a=lum(fg),b=lum(bg);if((Math.max(a,b)+0.05)/(Math.min(a,b)+0.05)<2.5)solid()}
+function solid(){
+hd.querySelectorAll("a,button,summary,span,[class*=brand i],[class*=logo i]").forEach(function(el){if(el.closest(".dd-panel,[class*=panel i],[class*=dropdown i],[class*=menu-overlay i]"))return;for(var n=el;n&&n!==hd;n=n.parentElement){var c=rgb(getComputedStyle(n).backgroundColor);if(c&&!(c.length>=4&&c[3]<0.3))return}el.setAttribute("data-fg-ink","")});
+hd.classList.add("fg-solid")}
+var t=0;function soon(){if(t)return;t=requestAnimationFrame(function(){t=0;check()})}
+addEventListener("scroll",soon,{passive:true});addEventListener("resize",soon);
+new MutationObserver(soon).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme","class"]});
+setTimeout(check,400);setTimeout(check,2500)})();
+
+// Phones: text that touches or runs past the screen's edge gets room at the sides, and a heading wider
+// than the screen is set smaller until it fits (never below 60% of its size). Free, on every site.
+(function(){function fit(){if(innerWidth>=700)return;var W=innerWidth;
+document.querySelectorAll("main h1,main h2,main h3,main h4,main p,main li,main blockquote,main label,main dd").forEach(function(e){
+if(e.closest("[data-horizontal-track],[data-marquee],[aria-hidden=true],[class*=marquee i],[class*=ticker i]"))return;var r=e.getBoundingClientRect();if(!r.width||!(e.textContent||"").trim())return;
+var cs=getComputedStyle(e);if(cs.position==="absolute"||cs.position==="fixed")return;
+if(/^H[1-4]$/.test(e.tagName)){var fs=parseFloat(cs.fontSize),min=fs*0.6,n=0;while((e.scrollWidth>e.clientWidth+2||e.getBoundingClientRect().right>W+1)&&fs>min&&n++<12){fs*=0.92;e.style.fontSize=fs+"px"}
+if(e.scrollWidth>e.clientWidth+2)e.style.overflowWrap="anywhere";r=e.getBoundingClientRect()}
+var L=r.left<8,R=r.right>W-8;if(!L&&!R)return;if(r.width>=W-4&&!R)return;
+e.style.boxSizing="border-box";e.style.maxWidth="100%";
+if(L)e.style.paddingLeft=(parseFloat(cs.paddingLeft)||0)+Math.max(0,18-Math.max(0,r.left))+"px";
+if(R)e.style.paddingRight=(parseFloat(cs.paddingRight)||0)+Math.max(0,18-Math.max(0,W-r.right))+"px"})}
+function later(){setTimeout(fit,60)}
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(fit,1200)});else setTimeout(fit,1500);
+addEventListener("orientationchange",later)})();
 }catch(x){}};`;

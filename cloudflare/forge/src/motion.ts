@@ -110,6 +110,11 @@ html.m-on.m-moved .m-cursor,html.m-on.m-moved .m-ring{opacity:1}
 .m-mask [data-mask-after]{position:absolute;left:0;right:0;bottom:12vh;z-index:2;text-align:center;padding:0 20px;color:#fff;text-shadow:0 2px 24px rgba(0,0,0,.45)}
 .m-parts{position:relative;height:100vh;overflow:hidden}.m-parts canvas.m-parts-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
 .m-parts [data-particles-after]{position:absolute;left:0;right:0;bottom:10vh;z-index:2;text-align:center;padding:0 20px}
+/* Phones: the brand moment is shown still (the name set large, then what follows it), not as scrolling dots. */
+.m-parts-off{height:auto!important;min-height:0!important;padding:14vh clamp(18px,5vw,32px)!important;text-align:center}.m-parts-off::before{content:attr(data-word);display:block;font-weight:800;font-size:clamp(44px,15vw,110px);line-height:1;letter-spacing:-.02em;margin-bottom:28px;overflow-wrap:anywhere}
+.m-parts-off [data-particles-after]{opacity:1!important;transform:none!important;position:static!important}
+/* Phones: the scroll story is read as ordinary stacked blocks (it only pins on wide screens), with room at the sides. */
+@media (max-width:899px){[data-pin-stage] [data-at]{padding-left:clamp(18px,5vw,32px);padding-right:clamp(18px,5vw,32px);box-sizing:border-box}}
 html.m-wait [data-split],html.m-wait [data-reveal]{visibility:hidden}
 html.m-on,html.m-on body{overflow-x:clip}html.lenis,html.lenis body{height:auto}.lenis.lenis-smooth{scroll-behavior:auto!important}.lenis.lenis-stopped{overflow:hidden}
 @media (prefers-reduced-motion:reduce){[data-grain]::after{animation:none}}
@@ -410,11 +415,13 @@ all("[data-mask-zoom]").forEach(function(sec){
   var img=sec.querySelector("img"),word=(sec.getAttribute("data-word")||"").trim().slice(0,12),after=sec.querySelector("[data-mask-after]");if(!img||!word)return;
   var cs=getComputedStyle(sec),bg=cs.backgroundColor;if(!bg||/rgba\(0, 0, 0, 0\)|transparent/.test(bg))bg=getComputedStyle(d.body).backgroundColor||"#fff";
   var font=getComputedStyle(sec.querySelector("h2")||d.body).fontFamily,NS="http://www.w3.org/2000/svg",id="m-mask-"+Math.random().toString(36).slice(2,8);
-  var svg=d.createElementNS(NS,"svg");svg.setAttribute("class","m-mask-svg");svg.setAttribute("viewBox","0 0 1600 900");svg.setAttribute("preserveAspectRatio","xMidYMid slice");svg.setAttribute("aria-hidden","true");
-  svg.innerHTML='<defs><mask id="'+id+'"><rect width="1600" height="900" fill="#fff"/><text x="800" y="470" text-anchor="middle" dominant-baseline="middle" font-weight="900" font-size="400" textLength="1360" lengthAdjust="spacingAndGlyphs" fill="#000"></text></mask></defs><rect width="1600" height="900" fill="'+bg+'" mask="url(#'+id+')"/>';
+  // A tall (phone) screen gets a portrait canvas, so the whole word fits across it instead of being cropped at the sides.
+  var tall=innerHeight>innerWidth*1.1,VW=tall?900:1600,VH=tall?1600:900;
+  var svg=d.createElementNS(NS,"svg");svg.setAttribute("class","m-mask-svg");svg.setAttribute("viewBox","0 0 "+VW+" "+VH);svg.setAttribute("preserveAspectRatio","xMidYMid slice");svg.setAttribute("aria-hidden","true");
+  svg.innerHTML='<defs><mask id="'+id+'"><rect width="'+VW+'" height="'+VH+'" fill="#fff"/><text x="'+VW/2+'" y="'+(VH/2+20)+'" text-anchor="middle" dominant-baseline="middle" font-weight="900" font-size="'+(tall?Math.min(300,Math.round(1500/Math.max(3,word.length))):400)+'" textLength="'+(tall?780:1360)+'" lengthAdjust="spacingAndGlyphs" fill="#000"></text></mask></defs><rect width="'+VW+'" height="'+VH+'" fill="'+bg+'" mask="url(#'+id+')"/>';
   var tx=svg.querySelector("text");tx.textContent=word.toUpperCase();tx.setAttribute("font-family",font);
   sec.classList.add("m-mask");if(img.parentNode!==sec)sec.insertBefore(img,sec.firstChild);sec.insertBefore(svg,img.nextSibling);
-  var ox=50,oy=52;try{var n=word.length,ce=tx.getExtentOfChar(Math.floor((n-1)/2));ox=(ce.x+ce.width/2)/16;oy=(ce.y+ce.height*.55)/9}catch(e){}
+  var ox=50,oy=52;try{var n=word.length,ce=tx.getExtentOfChar(Math.floor((n-1)/2));ox=(ce.x+ce.width/2)/(VW/100);oy=(ce.y+ce.height*.55)/(VH/100)}catch(e){}
   svg.style.transformOrigin=ox+"% "+oy+"%";
   if(after)G.set(after,{opacity:0,y:30});
   G.timeline({scrollTrigger:{trigger:sec,start:"top top",end:function(){return "+="+innerHeight*2},pin:true,scrub:.6,invalidateOnRefresh:true}})
@@ -423,7 +430,9 @@ all("[data-mask-zoom]").forEach(function(sec){
     .to(after||{},{opacity:1,y:0,duration:.2},.8);
 });
 // --- brand moment, particles: the object bursts into dots that re-form as the business's name
-all("[data-particles]").forEach(function(sec){
+// (Phones skip it: almost two screens of scrolling through dots before anything readable appears.)
+if(innerWidth<900)all("[data-particles]").forEach(function(sec){sec.classList.add("m-parts-off")});
+all("[data-particles]:not(.m-parts-off)").forEach(function(sec){
   var word=(sec.getAttribute("data-word")||"").trim().slice(0,16),after=sec.querySelector("[data-particles-after]");if(!word)return;
   var src=(d.querySelector(".m-float")||d.querySelector(".m-spin img")||{getAttribute:function(){return ""}}),url=src.getAttribute(src.tagName==="IMG"?"src":"data-still")||"";
   sec.classList.add("m-parts");var cv=d.createElement("canvas");cv.className="m-parts-cv";cv.setAttribute("aria-hidden","true");sec.insertBefore(cv,sec.firstChild);

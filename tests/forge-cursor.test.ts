@@ -2,6 +2,8 @@
 import { describe, expect, it } from "vitest";
 import { assemble, samplesNotPlaceholders } from "../cloudflare/forge/src/site";
 import { MOTION_CSS } from "../cloudflare/forge/src/motion";
+import { QA_CSS, QA_JS } from "../cloudflare/forge/src/qa";
+import { FACTS } from "../cloudflare/forge/src/review";
 import { CONCEPT_IDS } from "../cloudflare/forge/src/concepts";
 
 const kit = (concept?: string) => ({ theme: "dark", accent: "#aa3333", fonts: "", css: "", header: "<header></header>", footer: "<footer></footer>", script: "", components: "", brief: "", pages: [], style: "studio", concept }) as never;
@@ -22,5 +24,19 @@ describe("the pointer", () => {
     const html = '<p>Placeholders for now.</p><span>SAMPLE REVIEW · Placeholder text, not a real customer</span><small>each one is a placeholder</small><input placeholder="Your name"><style>input::placeholder{color:red}</style><p>PLACEHOLDER</p>';
     expect(samplesNotPlaceholders(html)).toBe('<p>Samples for now.</p><span>SAMPLE REVIEW · Sample text, not a real customer</span><small>each one is a sample</small><input placeholder="Your name"><style>input::placeholder{color:red}</style><p>SAMPLE</p>');
     expect(assemble(kit("swiss"), { ...page, body: "<main><h1>Hi</h1><p>Placeholder voices</p></main>" }, "s")).toContain("<p>Sample voices</p>");
+  });
+  it("ships the phone and header safety nets with every page, and the review measures phone fit", () => {
+    // A see-through header that can't be read gets a solid background (always, past the first screen, on a phone).
+    expect(QA_JS).toContain('hd.classList.add("fg-solid")');
+    expect(QA_JS).toContain("innerWidth<900&&scrollY>innerHeight*0.6");
+    expect(QA_CSS).toContain("header.fg-solid{");
+    // Text touching the edge gets room; a heading too wide is set smaller.
+    expect(QA_JS).toContain('e.style.paddingLeft=');
+    expect(QA_JS).toContain("fs*=0.92");
+    // The page script still parses.
+    expect(() => new Function(QA_JS)).not.toThrow();
+    expect(FACTS).toContain("cramped:");
+    // The particles brand moment is shown still on phones.
+    expect(MOTION_CSS).toContain(".m-parts-off::before{content:attr(data-word)");
   });
 });

@@ -118,6 +118,9 @@ interface PageFacts {
   textPx: number;
   words: number;
   https: boolean;
+  /** Text blocks that touch or run past the screen's edges (a phone's main fault), and headings wider than their box. */
+  cramped?: number;
+  tooWide?: number;
 }
 
 /** Evaluated in the browser: an expression that CALLS the function (a bare function string would just return the function). */
@@ -144,6 +147,8 @@ export const FACTS = `(() => ({
   textPx: parseFloat(getComputedStyle(document.body).fontSize) || 0,
   words: (document.body.innerText || "").split(/\\s+/).filter(Boolean).length,
   https: location.protocol === "https:",
+  cramped: Array.from(document.querySelectorAll("main h1, main h2, main h3, main p, main li, main blockquote")).filter((e) => { if (!(e.innerText || "").trim() || e.closest("[data-horizontal-track], [data-marquee], [aria-hidden=true]")) return false; const r = e.getBoundingClientRect(), c = getComputedStyle(e); if (!r.width || c.display === "none" || parseFloat(c.fontSize) >= 40) return false; return r.right > window.innerWidth + 1 || r.left < -1 || ((r.left < 8 || r.right > window.innerWidth - 8) && r.width < window.innerWidth - 4); }).length,
+  tooWide: Array.from(document.querySelectorAll("main h1, main h2, main h3")).filter((h) => !h.closest("[data-horizontal-track], [data-marquee]") && (h.scrollWidth > h.clientWidth + 2 || h.getBoundingClientRect().right > window.innerWidth + 1)).length,
 }))()`;
 
 /** Open the home page again on desktop and phone and have it critiqued afresh (after a rewrite). */
@@ -485,6 +490,19 @@ function checksFor(desktop: PageFacts, phone: PageFacts, paths: string[], prefix
     ...(hasPhone ? [{ id: "tel", label: "Tap-to-call phone link", ok: desktop.tel }] : []),
     { id: "form", label: "A form on the page", ok: desktop.forms > 0 },
     { id: "text", label: "Readable text size on a phone", ok: phone.textPx >= 15, detail: `${phone.textPx}px` },
+    ...(phone.cramped !== undefined
+      ? [
+          {
+            id: "phone-fit",
+            label: "Text fits a phone screen, with room at the sides",
+            ok: (phone.cramped ?? 0) <= 1 && (phone.tooWide ?? 0) === 0,
+            detail:
+              (phone.cramped ?? 0) > 1 || phone.tooWide
+                ? [phone.cramped && phone.cramped > 1 ? `${phone.cramped} text blocks touch or run past the screen's edge (keep at least 18px each side)` : "", phone.tooWide ? `${phone.tooWide} heading${phone.tooWide === 1 ? " is" : "s are"} wider than the screen (smaller on phones, or let long words break)` : ""].filter(Boolean).join("; ")
+                : undefined,
+          },
+        ]
+      : []),
   ];
 }
 
@@ -743,7 +761,8 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     review = { at, ...(down.frames.length ? { blank: down.blank } : {}), ...(wide.length ? { wide } : {}), score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues, checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
 
     // Fix: write the home page again with the notes, when it isn't good enough.
-    const failed = checks.filter((c) => !c.ok && !["tel", "form", "text", "alt", "overflow-inner"].includes(c.id));
+    // (A tight phone layout is fixed for free when the page is served, so it never buys a rewrite on its own.)
+    const failed = checks.filter((c) => !c.ok && !["tel", "form", "text", "alt", "overflow-inner", "phone-fit"].includes(c.id));
     const notes = [
       ...failed.map((c) => `${c.label}: FAILED${c.detail ? ` (${c.detail})` : ""}. Fix this.`),
       ...crit.issues.filter((i) => i.severity !== "low").map((i) => `${i.what} → ${i.fix}`),
