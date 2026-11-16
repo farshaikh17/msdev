@@ -86,6 +86,21 @@ export function widgetFor(tenant: Pick<Tenant, "id" | "chatWidget">, demoWidget:
   return widgetId(demoWidget, widgetId(tenant.chatWidget, tenant.id === 1 ? DEFAULT_WIDGET_ID : ""));
 }
 
+/**
+ * Sample reviews and photos called "placeholders" read as an unfinished site to the owner: in the page's
+ * visible text (never in attributes, styles or scripts) they become "samples".
+ */
+export function samplesNotPlaceholders(html: string): string {
+  const word = (w: string) => {
+    const plural = /s$/i.test(w);
+    const out = plural ? "samples" : "sample";
+    return w === w.toUpperCase() ? out.toUpperCase() : w[0] === w[0]!.toUpperCase() ? out[0]!.toUpperCase() + out.slice(1) : out;
+  };
+  return html.replace(/(<(script|style)\b[\s\S]*?<\/\2>)|>([^<]+)</gi, (m, block, _t, text) =>
+    block ? m : `>${text.replace(/\bplaceholders?\b/gi, word)}<`,
+  );
+}
+
 /** One page of a multi-page site as a full HTML document. */
 export function assemble(kit: Kit, page: PageDraft, slug: string, credit: string = CREDIT): string {
   const key = JSON.stringify(`fg-theme-${slug}`);
@@ -99,7 +114,7 @@ export function assemble(kit: Kit, page: PageDraft, slug: string, credit: string
 <title>${esc(page.title)}</title>${icon}<meta name="description" content="${esc(page.description)}"><meta name="robots" content="noindex">
 ${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${HEADER_CSS}\n${HERO_CSS}\n${CREDIT_CSS}\n${QA_CSS}${studio ? MOTION_CSS : ""}</style></head><body>
 ${kit.header}
-${/<main\b[^>]*\sid\s*=/i.test(page.body) ? page.body : page.body.replace(/<main\b/i, '<main id="main"')}
+${samplesNotPlaceholders(/<main\b[^>]*\sid\s*=/i.test(page.body) ? page.body : page.body.replace(/<main\b/i, '<main id="main"'))}
 ${kit.footer.split(CREDIT_MARKER).join(credit)}
 <script>${kit.script}</script><script>${QA_JS}</script>${studio ? motionScripts() : ""}</body></html>`;
   // The QA standards that need no judgement: +1 on phone links, legal links always in the footer.

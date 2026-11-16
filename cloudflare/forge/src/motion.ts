@@ -77,6 +77,17 @@ html.m-on.m-moved .m-cursor,html.m-on.m-moved .m-ring{opacity:1}
 [data-slides-tabs]{position:relative}.m-slide-tab{display:flex;align-items:baseline;gap:12px;background:none;border:0;color:inherit;font:inherit;cursor:pointer;opacity:.62;padding:0;margin:0 0 18px;text-align:left;transition:opacity .4s}.m-slide-tab.on{opacity:1}.m-slide-tab small{font-size:.58em;opacity:.7}
 .m-slides-bar{position:absolute;left:-22px;top:0;width:2px;height:24px;background:rgba(128,128,128,.3);transition:transform .6s cubic-bezier(.77,0,.18,1),height .6s}.m-slides-bar i{display:block;width:100%;height:100%;background:currentColor;transform-origin:50% 0;transform:scaleY(0)}
 @media (max-width:899px){[data-slides-tabs]{display:flex;gap:14px;flex-wrap:wrap}.m-slide-tab{margin:0}.m-slide-tab small,.m-slides-bar{display:none}}
+/* Phones: a slide taller than the screen used to spill under the tabs and the next slide. Only the current slide is shown, in the page flow, with the tabs as a row beneath it. */
+@media (max-width:899px){
+.m-sl{height:auto!important;min-height:0!important;display:flex!important;flex-direction:column!important;padding-bottom:28px!important}
+.m-sl [data-slide]{position:relative!important;inset:auto!important;transform:none!important;opacity:1!important;visibility:visible!important;height:auto!important;min-height:0!important;padding-left:clamp(18px,5vw,32px)!important;padding-right:clamp(18px,5vw,32px)!important;padding-bottom:20px!important;order:1}
+.m-sl [data-slide]:not(.on){display:none!important}
+.m-sl [data-slide].on{animation:m-slide-in .7s cubic-bezier(.2,.7,.2,1)}
+.m-sl [data-slides-tabs]{order:2;position:relative!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;transform:none!important;display:flex!important;flex-wrap:nowrap!important;overflow-x:auto;gap:8px 16px!important;margin:0!important;padding:4px clamp(18px,5vw,32px)!important;z-index:5;scrollbar-width:none;width:auto!important}
+.m-sl [data-slides-tabs]::-webkit-scrollbar{display:none}
+.m-sl .m-slide-tab{white-space:nowrap;flex:0 0 auto}
+}
+@keyframes m-slide-in{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
 [data-pin].m-pinned [data-pin-stage]{position:relative;height:100vh;overflow:hidden}
 .m-pin-bar{position:absolute;left:50%;bottom:22px;width:120px;height:2px;margin-left:-60px;background:rgba(128,128,128,.3);border-radius:2px;z-index:5;pointer-events:none}.m-pin-bar i{display:block;height:100%;background:var(--m-accent,#111);transform-origin:0 50%;transform:scaleX(0)}
 [data-follow]{pointer-events:none;display:none}html.m-on.m-fine [data-follow]{display:block}
