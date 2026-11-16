@@ -210,12 +210,16 @@ export function pickHero(intake: { hero?: string }, slug: string, recent: string
   if (clips >= 2 && !recent.slice(0, 1).includes("switcher") && !exclude.includes("switcher")) return heroById("switcher")!;
   const ok = (id: string) => (id !== "switcher" || clips >= 1) && !exclude.includes(id);
   const fresh = HERO_IDS.filter((id) => !recent.slice(0, 2).includes(id) && ok(id));
-  const from = fresh.length ? fresh : HERO_IDS.filter(ok);
+  // Everything ruled out (no photos, no object, no clips): any of them beats a failed build.
+  const from = fresh.length ? fresh : HERO_IDS.filter(ok).length ? HERO_IDS.filter(ok) : HERO_IDS.filter((id) => id !== "switcher" || clips >= 1);
   return heroById(from[hash(slug) % from.length])!;
 }
 
 /** Heroes whose first screen is built around the signature object (not offered when a site's idea has no object). */
 export const OBJECT_HEROES = ["float", "spin", "orbit"];
+
+/** Heroes whose first screen is the first preview photo: without photos they open on an empty screen. */
+export const PHOTO_HEROES: string[] = HEROES.filter((h) => ["pair", "dive", "photo", "front", "breakout"].includes(h.media)).map((h) => h.id);
 
 /** Heroes that already carry the signature object in their first screen (so no separate flight is planned for them). */
 const OBJECT_IN_HERO = ["spin"];

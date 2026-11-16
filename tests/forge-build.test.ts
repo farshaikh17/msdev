@@ -6,6 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../cloudflare/forge/src/index";
+import { PHOTO_HEROES } from "../cloudflare/forge/src/heroes";
 import { adaptKit, designKit, designSitePage, planSite, systemFor, Fatal, TryLater } from "../cloudflare/forge/src/designer";
 import { writeBrief } from "../cloudflare/forge/src/brief";
 import { MOTION_LIBS } from "../cloudflare/forge/src/motion";
@@ -314,6 +315,22 @@ describe("the planning step", () => {
     expect(demo.buildStatus).toBe("ready");
     expect(h.db.prepare("SELECT count(*) n FROM site_images WHERE slug = ? AND name LIKE 'photo-%'").get(slug)).toEqual({ n: 2 });
   }, 20_000);
+});
+
+describe("a Studio build without preview photos", () => {
+  it("passes over a first screen built on the first photo, so it doesn't open on an empty screen", async () => {
+    vi.mocked(planSite).mockResolvedValue({ services: ["Outpatient Care"], imagePrompts: [], cost: 0.002 });
+    vi.mocked(writeBrief).mockResolvedValueOnce({ tier: "none", concepts: [{ lens: "place", truth: "A hospital in Kota.", evidence: '"Kota"', idea: "Saving life.", refuses: "No stock.", look: "swiss - clarity", firstScreen: "spotlight - look inside", object: "none", moment: "a statement assembles" }], chosen: 0, why: "", invented: [], cost: 0.05 });
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 20);
+    await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Dhakar Hospital", city: "Kota, IN-RJ", style: "studio", saw: "Saving Life" } });
+    await drain(h);
+    expect(h.db.prepare("SELECT build_status FROM demos").get()).toEqual({ build_status: "ready" });
+    const hero = vi.mocked(designKit).mock.calls.at(-1)![6]!;
+    expect(PHOTO_HEROES).toContain("spotlight");
+    expect(PHOTO_HEROES).not.toContain(hero);
+    expect(hero).toBe("own");
+  });
 });
 
 describe("Studio builds", () => {

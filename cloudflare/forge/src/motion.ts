@@ -43,6 +43,15 @@ export const MOTION_CSS = `
 .m-cursor span{opacity:0;transition:opacity .2s;white-space:nowrap}.m-cursor.label span{opacity:1}
 .m-ring{position:fixed;left:0;top:0;width:38px;height:38px;border:1px solid rgba(255,255,255,.7);border-radius:50%;mix-blend-mode:difference;pointer-events:none;z-index:2147483599;transform:translate(-50%,-50%);opacity:0;transition:opacity .3s}
 html.m-on.m-moved .m-cursor,html.m-on.m-moved .m-ring{opacity:1}
+/* Each look has its own pointer (set on <html> as data-m-cursor). */
+[data-m-cursor=editorial] .m-cursor{width:6px;height:6px;background:var(--m-accent,#111);mix-blend-mode:normal}[data-m-cursor=editorial] .m-ring{width:30px;height:30px;border-color:var(--m-accent,#111);mix-blend-mode:normal}
+[data-m-cursor=cinematic] .m-cursor{width:14px;height:14px;background:rgba(255,255,255,.9);box-shadow:0 0 24px 8px rgba(255,255,255,.35)}[data-m-cursor=cinematic] .m-ring{width:64px;height:64px;border-color:rgba(255,255,255,.25)}
+[data-m-cursor=brutalist] .m-cursor{width:16px;height:16px;border-radius:0;background:var(--m-accent,#000);mix-blend-mode:normal;color:#fff}[data-m-cursor=brutalist] .m-ring{display:none}
+[data-m-cursor=swiss] .m-cursor{width:22px;height:22px;background:none;mix-blend-mode:normal;border-radius:0;background-image:linear-gradient(var(--m-accent,#e30),var(--m-accent,#e30)),linear-gradient(var(--m-accent,#e30),var(--m-accent,#e30));background-size:2px 100%,100% 2px;background-position:center;background-repeat:no-repeat}[data-m-cursor=swiss] .m-cursor.label{background:var(--m-accent,#e30);border-radius:0;color:#fff}[data-m-cursor=swiss] .m-ring{display:none}
+[data-m-cursor=organic] .m-cursor{width:22px;height:22px;background:var(--m-accent,#6a8);opacity:.55;mix-blend-mode:multiply;border-radius:46% 54% 60% 40%/50% 42% 58% 50%}[data-m-cursor=organic] .m-ring{display:none}html.m-on.m-moved[data-m-cursor=organic] .m-cursor{opacity:.55}
+[data-m-cursor=americana] .m-cursor{width:12px;height:12px;background:var(--m-accent,#b22);mix-blend-mode:normal;color:#fff}[data-m-cursor=americana] .m-ring{border:2px dashed var(--m-accent,#b22);mix-blend-mode:normal;width:34px;height:34px}
+[data-m-cursor=playful] .m-cursor{width:26px;height:26px;background:var(--m-accent,#f60);mix-blend-mode:normal;color:#fff}[data-m-cursor=playful] .m-ring{display:none}
+[data-m-cursor=luxe] .m-cursor{width:4px;height:4px;background:var(--m-accent,#b8975a);mix-blend-mode:normal}[data-m-cursor=luxe] .m-ring{width:46px;height:46px;border:1px solid var(--m-accent,#b8975a);mix-blend-mode:normal;opacity:.8}
 @media (hover:none),(pointer:coarse){.m-cursor,.m-ring{display:none}}
 .m-curtain{position:fixed;inset:0;z-index:2147483500;background:var(--m-accent,#111);transform:translateY(100%);pointer-events:none}
 .m-pre{position:fixed;inset:0;z-index:2147483550;background:var(--m-ink,#0b0b0d);color:var(--m-paper,#f5f3ee);display:flex;align-items:flex-end;justify-content:space-between;padding:clamp(20px,4vw,48px);font:500 clamp(14px,1.4vw,18px)/1.2 system-ui,sans-serif;letter-spacing:.02em}
@@ -478,6 +487,8 @@ all("[data-counter]").forEach(function(el){
   el.textContent=pre+"0"+suf;
   G.to(o,{v:end,duration:2,ease:"power3.out",scrollTrigger:{trigger:el,start:"top 90%"},onUpdate:function(){el.textContent=pre+o.v.toFixed(dec).replace(/\B(?=(\d{3})+(?!\d))/g,",")+suf}});
 });
+// --- pointer hints ("Move to look inside") mean nothing on a touch screen: hide them there
+if(!fine)all("p,span,small,div,a,figcaption,li").forEach(function(el){var t=(el.textContent||"").trim();if(t.length<60&&!el.querySelector(":scope>:not(svg):not(i)")&&/^(\W*)(move|hover|drag)\b[^.]*\b(to|across|over|around)\b/i.test(t))el.style.display="none"});
 // --- spotlight: a second picture shows through a soft circle that trails the pointer (drifts by itself on touch screens)
 all("[data-spotlight]").forEach(function(box){
   var top=box.querySelector("[data-spotlight-reveal]");if(!top)return;
@@ -504,15 +515,15 @@ all("[data-spotlight]").forEach(function(box){
 if(fine){
   root.classList.add("m-fine");
   var dot=d.createElement("div");dot.className="m-cursor";dot.innerHTML="<span></span>";var ring=d.createElement("div");ring.className="m-ring";
-  d.body.appendChild(ring);d.body.appendChild(dot);
+  d.body.appendChild(ring);d.body.appendChild(dot);var base=dot.offsetWidth||10;
   var dx=G.quickTo(dot,"x",{duration:.12}),dy=G.quickTo(dot,"y",{duration:.12}),rx=G.quickTo(ring,"x",{duration:.5,ease:"power3"}),ry=G.quickTo(ring,"y",{duration:.5,ease:"power3"});
   W.addEventListener("pointermove",function(e){root.classList.add("m-moved");dx(e.clientX);dy(e.clientY);rx(e.clientX);ry(e.clientY)});
   d.addEventListener("pointerover",function(e){
     var t=e.target.closest&&e.target.closest("[data-cursor-text],a,button,summary,label,input,textarea,select");
-    if(!t){G.to(dot,{width:10,height:10,duration:.3});G.to(ring,{scale:1,opacity:1,duration:.3});dot.classList.remove("label");return}
+    if(!t){G.to(dot,{width:base,height:base,duration:.3});G.to(ring,{scale:1,opacity:1,duration:.3});dot.classList.remove("label");return}
     var txt=t.getAttribute("data-cursor-text");
     if(txt){dot.firstChild.textContent=txt;dot.classList.add("label");G.to(dot,{width:86,height:86,duration:.35,ease:"power3"});G.to(ring,{opacity:0,duration:.2})}
-    else{dot.classList.remove("label");G.to(dot,{width:10,height:10,duration:.3});G.to(ring,{scale:1.6,duration:.35})}
+    else{dot.classList.remove("label");G.to(dot,{width:base,height:base,duration:.3});G.to(ring,{scale:1.6,duration:.35})}
   });
   all("[data-magnetic]").forEach(function(el){
     var mx=G.quickTo(el,"x",{duration:.6,ease:"elastic.out(1,.4)"}),my=G.quickTo(el,"y",{duration:.6,ease:"elastic.out(1,.4)"});

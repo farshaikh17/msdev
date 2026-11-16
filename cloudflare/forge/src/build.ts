@@ -41,9 +41,9 @@ import { studioMedia, type StudioMedia } from "./media";
 import { nicheOf } from "./niche";
 import { privacyPage, termsPage } from "./legal";
 import { CONCEPT_IDS, conceptById, drawFor, pickConcept } from "./concepts";
-import { chooseDesign, ideaOf, wants, writeBrief, type Idea } from "./brief";
+import { chooseDesign, firstScreenOf, ideaOf, ownScreen, wants, writeBrief, type Idea } from "./brief";
 import { mergeIntake, reverseGeocode } from "./places";
-import { HERO_IDS, heroById, OBJECT_HEROES, pickHero } from "./heroes";
+import { HERO_IDS, heroById, OBJECT_HEROES, PHOTO_HEROES, pickHero } from "./heroes";
 import { matchClips } from "./hero";
 import { readWebsite } from "./scrape";
 import { buildCost, chargeBuild, getTenant, recordBuildCost, type Tenant } from "./tenants";
@@ -308,7 +308,15 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       // The signature hero: the idea's choice; otherwise video scenes when the trade has library clips, otherwise one
       // the account hasn't used lately (never one built around an object when the idea has none).
       const noObject = !!idea && !wants(idea.object);
-      const heroId = look ? (chosen.hero ?? pickHero(intake, slug, looks.map((l) => l.hero).filter(Boolean), clips, noObject ? OBJECT_HEROES : []).id) : undefined;
+      // No preview photos (the plan failed): a first screen built on the first photo would open on an empty screen,
+      // so it is passed over unless the form asked for it.
+      const noPhotos = !plan?.imagePrompts.length;
+      if (noPhotos && chosen.hero && PHOTO_HEROES.includes(chosen.hero) && chosen.hero !== intake.hero) chosen.hero = undefined;
+      // With no photos the idea's own first screen (drawn in type, no picture needed) is the best stand-in.
+      if (noPhotos && !chosen.hero && idea && firstScreenOf(idea, HERO_IDS) === "own" && ownScreen(idea).length > 40) chosen.hero = "own";
+      const picked = look ? (chosen.hero ?? pickHero(intake, slug, looks.map((l) => l.hero).filter(Boolean), clips, [...(noObject ? OBJECT_HEROES : []), ...(noPhotos ? PHOTO_HEROES : [])]).id) : undefined;
+      // Still a photo-led first screen with no photo to show: our own type-led first screen instead.
+      const heroId = picked && noPhotos && (PHOTO_HEROES.includes(picked) || (noObject && OBJECT_HEROES.includes(picked))) && picked !== intake.hero ? "own" : picked;
       const sig = heroById(heroId);
       // The object is drawn when the idea asks for one (or the first screen is built around it).
       const wantObject = !idea || wants(idea.object) || OBJECT_HEROES.includes(heroId ?? "");
