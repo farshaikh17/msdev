@@ -34,10 +34,17 @@ const WORKERS_AI_USD_PER_NEURON = 0.011 / 1000;
  * never goes past it: pictures use about 78 neurons each (counted in images.ts), the rest is left for
  * pages, and a page call is made only while a whole page (about 1,500 neurons at most) still fits.
  * Otherwise the page is written by Claude, as before. CF_FREE_NEURONS can set a lower ceiling.
+ * PHOTO_RESERVE of it is never used for pages.
  */
 const FREE_NEURONS = 10_000;
 const NEURONS_PER_PICTURE = 78;
 const PAGE_HEADROOM = 1_500;
+/**
+ * Kept free for pictures: a page goes to Workers AI only while this much is still left after it. Pages
+ * used to take the whole allowance (two Studio builds' pages came to about 9,500), so the next build got
+ * no photos at all. Photos matter more than the saving on a page, so about five sites' worth stay reserved.
+ */
+const PHOTO_RESERVE = 4_000;
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** Is there free Workers AI room left today for one more page? */
@@ -46,7 +53,7 @@ export async function workersAiRoom(env: Env): Promise<boolean> {
   const row = await env.DB.prepare("SELECT (SELECT CAST(value AS REAL) FROM settings WHERE key = ?1) AS text, (SELECT CAST(value AS REAL) FROM settings WHERE key = ?2) AS pics")
     .bind(`ai-neurons:${today()}`, `ai-images:${today()}`)
     .first<{ text: number | null; pics: number | null }>();
-  return (row?.text ?? 0) + (row?.pics ?? 0) * NEURONS_PER_PICTURE + PAGE_HEADROOM <= cap;
+  return (row?.text ?? 0) + (row?.pics ?? 0) * NEURONS_PER_PICTURE + PAGE_HEADROOM + PHOTO_RESERVE <= cap;
 }
 
 /** Count what a Workers AI page call used today. */

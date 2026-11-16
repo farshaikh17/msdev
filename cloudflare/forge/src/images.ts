@@ -42,6 +42,17 @@ async function spendImages(env: Env, n: number, weight = 1): Promise<boolean> {
   return true;
 }
 
+/** Whether `n` more pictures fit in today's free allowance (read only: nothing is counted). */
+export async function imagesRoom(env: Env, n: number): Promise<boolean> {
+  if (!env.AI) return false;
+  const day = new Date().toISOString().slice(0, 10);
+  const row = await env.DB.prepare("SELECT (SELECT CAST(value AS REAL) FROM settings WHERE key = ?1) AS pics, (SELECT CAST(value AS REAL) FROM settings WHERE key = ?2) AS text")
+    .bind(`ai-images:${day}`, `ai-neurons:${day}`)
+    .first<{ pics: number | null; text: number | null }>();
+  const pics = (row?.pics ?? 0) + n;
+  return pics <= DAILY_IMAGES && pics * 78 + (row?.text ?? 0) <= 10_000;
+}
+
 async function generate(env: Env, description: string, opts: { reference?: Uint8Array; small?: boolean; square?: boolean; raw?: boolean } = {}): Promise<Uint8Array | null> {
   try {
     const form = new FormData();

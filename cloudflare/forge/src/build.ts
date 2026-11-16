@@ -36,7 +36,7 @@ import type { Kit } from "./designer";
 import { lintSite, repairNote, type QaIssue, type QaResult } from "./qa";
 import { adaptKit, thinServices, fixChrome, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, studioHome, TryLater, type Plan } from "./designer";
 import type { BuildJob, Env } from "./env";
-import { heroPair, beforeAfterImages, objectImage, previewImages } from "./images";
+import { heroPair, beforeAfterImages, imagesRoom, objectImage, previewImages } from "./images";
 import { studioMedia, type StudioMedia } from "./media";
 import { nicheOf } from "./niche";
 import { privacyPage, termsPage } from "./legal";
@@ -310,7 +310,8 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       const noObject = !!idea && !wants(idea.object);
       // No preview photos (the plan failed): a first screen built on the first photo would open on an empty screen,
       // so it is passed over unless the form asked for it.
-      const noPhotos = !plan?.imagePrompts.length;
+      // Also when today's free picture allowance can't cover them (the site would get none).
+      const noPhotos = !plan?.imagePrompts.length || !(await imagesRoom(env, Math.min(8, plan.imagePrompts.length)).catch(() => true));
       if (noPhotos && chosen.hero && PHOTO_HEROES.includes(chosen.hero) && chosen.hero !== intake.hero) chosen.hero = undefined;
       // With no photos the idea's own first screen (drawn in type, no picture needed) is the best stand-in.
       if (noPhotos && !chosen.hero && idea && firstScreenOf(idea, HERO_IDS) === "own" && ownScreen(idea).length > 40) chosen.hero = "own";

@@ -389,7 +389,7 @@ function siteCard(d: Listed, url: string): string {
 <div class="row" style="justify-content:space-between"><div class="row"><a class="btn ghost" href="/demos/${esc(d.slug)}">Open</a><button class="btn ghost" data-copy="${esc(url)}">Copy link</button></div>${d.buildStatus === "ready" || d.leadStatus !== "new" ? leadPill(d.leadStatus) : ""}</div></article>`;
 }
 
-export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string, leadFilter = "", reuseFrom = ""): Response {
+export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string, leadFilter = "", reuseFrom = "", photos = true): Response {
   const out = !s.tenant.unlimited && s.tenant.credits < 1;
   // "Use this design" in the gallery: that site's design comes first and is already picked.
   const ready = demos.filter((d) => d.buildStatus === "ready" && d.shot);
@@ -411,7 +411,7 @@ ${out ? `<div class="flash bad" role="alert">You have no builds left. Ask your F
 <form method="post" action="/demos" class="card hero-form" id="build">${chosen ? `<div class="flash ok" role="status" style="margin:0">Building on the design of <b>${esc(chosen.businessName)}</b>: type the new business below. It skips the design step, so it's faster and cheaper.</div>` : ""}<div><h1>Build a website for any business</h1>
 <p class="lead">Type the business name or paste its Google Maps link. That's all we need.${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template.)"}</p></div>
 ${fields(chosen ? { reuseFrom: chosen.slug } : undefined, reuse)}
-<div class="row"><button class="btn ember big" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build website</button><span class="note">Ready in about 10–20 minutes. You can close this page; it keeps building.</span></div></form>
+<div class="row"><button class="btn ember big" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build website</button><span class="note">Ready in about 10–20 minutes. You can close this page; it keeps building.</span></div>${photos ? "" : `<p class="flash bad" role="status" style="margin:12px 0 0">Today&#39;s free photo allowance is used up, so a website built now gets <b>no photos</b>. It resets at midnight UTC (7pm US Eastern): for the best result, wait until then.</p>`}</form>
 <section style="display:grid;gap:14px"><h2>Your websites${demos.length ? ` (${demos.length})` : ""}</h2>${leadsBar(demos, on)}${list}</section>
 <details class="card"><summary>Have a list? Build several at once</summary><form method="post" action="/demos/bulk" style="display:grid;gap:14px">
 <label for="bulk">One business per line: <b>name | city | website or Facebook link | phone</b> (everything after the name is optional), or a Google Maps link (up to 25). Studio lines without a link are built as Standard.<textarea id="bulk" name="bulk" rows="6" placeholder="Joe's Plumbing | Tampa, FL | https://joesplumbing.com | (813) 555-0142&#10;Bright Smile Dental | Austin, TX | https://facebook.com/brightsmile&#10;https://maps.app.goo.gl/…"></textarea></label>

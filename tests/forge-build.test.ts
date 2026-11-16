@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../cloudflare/forge/src/index";
 import { PHOTO_HEROES } from "../cloudflare/forge/src/heroes";
+import { imagesRoom } from "../cloudflare/forge/src/images";
 import { adaptKit, designKit, designSitePage, planSite, systemFor, Fatal, TryLater } from "../cloudflare/forge/src/designer";
 import { writeBrief } from "../cloudflare/forge/src/brief";
 import { MOTION_LIBS } from "../cloudflare/forge/src/motion";
@@ -22,6 +23,7 @@ vi.mock("../cloudflare/forge/src/designer", async (orig) => {
   return { ...real, planSite: vi.fn(), designKit: vi.fn(), designSitePage: vi.fn(), adaptKit: vi.fn() };
 });
 vi.mock("../cloudflare/forge/src/images", () => ({
+  imagesRoom: vi.fn(async () => true),
   beforeAfterImages: vi.fn(async () => []),
   heroPair: vi.fn(async () => null),
   previewImages: vi.fn(async () => [
@@ -318,6 +320,25 @@ describe("the planning step", () => {
 });
 
 describe("a Studio build without preview photos", () => {
+  it("the build form says so when today's photos are used up", async () => {
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 20);
+    h.env = { ...h.env, AI: h.env.AI ?? ({} as never) };
+    vi.mocked(imagesRoom).mockResolvedValueOnce(false);
+    expect(await html(await call(h, "/", { cookie: b.cookie }))).toContain("gets <b>no photos</b>");
+    expect(await html(await call(h, "/", { cookie: b.cookie }))).not.toContain("gets <b>no photos</b>");
+  });
+  it("treats a day whose free picture allowance is used up the same way", async () => {
+    vi.mocked(imagesRoom).mockResolvedValueOnce(false);
+    vi.mocked(writeBrief).mockResolvedValueOnce({ tier: "none", concepts: [{ lens: "place", truth: "Frozen yogurt in the Gables.", evidence: '"Coral Gables"', idea: "Heat to cold.", refuses: "No clichés.", look: "playful - pop", firstScreen: "dive - into the arch", object: "none", moment: "a swirl" }], chosen: 0, why: "", invented: [], cost: 0.05 });
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 20);
+    await call(h, "/demos", { cookie: b.cookie, form: { businessName: "MELI Frozen Yogurt", city: "Coral Gables, FL", style: "studio", saw: "Move On" } });
+    await drain(h);
+    expect(PHOTO_HEROES).toContain("dive");
+    expect(PHOTO_HEROES).not.toContain(vi.mocked(designKit).mock.calls.at(-1)![6]);
+  });
+
   it("passes over a first screen built on the first photo, so it doesn't open on an empty screen", async () => {
     vi.mocked(planSite).mockResolvedValue({ services: ["Outpatient Care"], imagePrompts: [], cost: 0.002 });
     vi.mocked(writeBrief).mockResolvedValueOnce({ tier: "none", concepts: [{ lens: "place", truth: "A hospital in Kota.", evidence: '"Kota"', idea: "Saving life.", refuses: "No stock.", look: "swiss - clarity", firstScreen: "spotlight - look inside", object: "none", moment: "a statement assembles" }], chosen: 0, why: "", invented: [], cost: 0.05 });

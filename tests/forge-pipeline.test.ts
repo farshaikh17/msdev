@@ -109,10 +109,12 @@ describe("a Studio build, rehearsed end to end at no cost", () => {
     expect(byTask("@@@ TRADE")).toHaveLength(1);
     // Inner pages: Workers AI (DeepSeek, thinking off), not Claude.
     const pageCalls = workersAi.filter((w) => !w.input.multipart);
-    expect(pageCalls.length).toBeGreaterThanOrEqual(10);
+    // A day's first build writes most of its pages there; what would eat into the photo reserve goes to Claude.
+    expect(pageCalls.length).toBeGreaterThanOrEqual(8);
     expect(pageCalls.every((w) => w.model === "@cf/deepseek-ai/deepseek-v4.1-flash-1017" && (w.input.chat_template_kwargs as { thinking: boolean }).thinking === false)).toBe(true);
     const claudePages = claude.filter((q) => /## Write this page: /.test(textOf(q)) && !textOf(q).includes("(/)"));
-    expect(claudePages.map((q) => textOf(q).match(/## Write this page: ([^\n]+)/)![1])).toEqual([]);
+    expect(pageCalls.length + claudePages.length).toBeGreaterThanOrEqual(10);
+    expect(claudePages.length).toBeLessThanOrEqual(5);
     // Photos: all 8 made, and counted with the pages against the free 10,000 neurons.
     expect(workersAi.filter((w) => w.input.multipart)).toHaveLength(8);
     const day = new Date().toISOString().slice(0, 10);
@@ -120,6 +122,8 @@ describe("a Studio build, rehearsed end to end at no cost", () => {
     expect(used(`ai-images:${day}`)).toBe(8);
     expect(used(`ai-neurons:${day}`)).toBe(480 * pageCalls.length);
     expect(used(`ai-neurons:${day}`) + 8 * 78).toBeLessThanOrEqual(10_000);
+    // Pages never take the 4,000 kept for the next builds' photos.
+    expect(used(`ai-neurons:${day}`) + 8 * 78).toBeLessThanOrEqual(10_000 - 4_000);
     // The cost is recorded; no art pass (no browser here, and it is off); nothing hit the network.
     const cost = h.db.prepare("SELECT sum(usd) usd FROM build_costs WHERE slug = ?").get(slug) as { usd: number };
     expect(cost.usd).toBeGreaterThan(0);

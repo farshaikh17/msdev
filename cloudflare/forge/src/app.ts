@@ -4,6 +4,7 @@
  * Public pages and the API are routed first; everything else needs a session, and everything a
  * session touches is scoped to its own account.
  */
+import { imagesRoom } from "./images";
 import { handleApi } from "./api";
 import { checkLogin, checkOwnPassword, checkTeamPassword, currentSession, passwordProblem, sameOrigin, sessionCookie, signOutCookie, type Session } from "./auth";
 import { hashPassword } from "./crypto";
@@ -223,8 +224,8 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
 
   // ---- Dashboard and demos -------------------------------------------------------------------
   if (path === "/" && req.method === "GET") {
-    const [demos, views, usage] = await Promise.all([listDemos(env, s.tenant.id), viewStats(env, { tenantId: s.tenant.id }), tenantUsage(env, s.tenant.id)]);
-    return homePage(s, demos.map((d) => ({ ...d, views: views.get(d.slug) })), site, aiOn, usage, q("error"), q("ok"), q("lead") ?? "", q("reuse") ?? "");
+    const [demos, views, usage, photos] = await Promise.all([listDemos(env, s.tenant.id), viewStats(env, { tenantId: s.tenant.id }), tenantUsage(env, s.tenant.id), env.AI ? imagesRoom(env, 10).catch(() => true) : Promise.resolve(true)]);
+    return homePage(s, demos.map((d) => ({ ...d, views: views.get(d.slug) })), site, aiOn, usage, q("error"), q("ok"), q("lead") ?? "", q("reuse") ?? "", photos);
   }
   if (path === "/gallery" && req.method === "GET") {
     const f = { niche: q("niche") ?? "", look: q("look") ?? "", first: q("first") ?? "", style: q("style") ?? "", lead: q("lead") ?? "", sort: q("sort") ?? "new", view: q("view") ?? "desktop" };
