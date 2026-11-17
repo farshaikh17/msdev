@@ -373,18 +373,20 @@ if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){set
 
 // Before/after pairs shown as two separate pictures become one drag slider (the "after" revealed over the
 // "before"), which works with a mouse, a finger or the keyboard. A pair already inside a slider is left alone.
-(function(){var done=[];document.querySelectorAll('main img[src*="-before."]').forEach(function(bi){var m=bi.getAttribute("src").match(/ba-(\\d+)-before\\./);if(!m)return;
-var ai=document.querySelector('main img[src*="ba-'+m[1]+'-after."]');if(!ai||done.indexOf(m[1])>=0)return;
-for(var n=bi.parentElement;n&&n.tagName!=="MAIN";n=n.parentElement){if(n.querySelector('input[type=range]')||/compare|slider|juxta|ba-?slide/i.test(n.className&&n.className.baseVal===undefined?n.className:""))return;if(n.contains(ai))break}
+(function(){var done=[];document.querySelectorAll('main img[src*="-before."]').forEach(function(bi){if(bi.closest(".fg-ba"))return;var m=bi.getAttribute("src").match(/ba-(\\d+)-before\\./);if(!m)return;
+var ai=[].filter.call(document.querySelectorAll('main img[src*="ba-'+m[1]+'-after."]'),function(x){return !x.closest(".fg-ba")})[0];if(!ai||done.indexOf(m[1])>=0)return;
 var row=bi.parentElement;while(row&&!row.contains(ai))row=row.parentElement;if(!row||row.tagName==="MAIN")return;
-function tileOf(img){var t=img;while(t.parentElement!==row)t=t.parentElement;return t}var bt=tileOf(bi),at=tileOf(ai);if(bt===at)return;done.push(m[1]);
-var r=bt.getBoundingClientRect(),w=document.createElement("div");w.className="fg-ba";w.setAttribute("role","group");w.setAttribute("aria-label","Before and after");
+// The design's own slider (the two pictures stacked in one box): its box keeps its size and gets our slider instead.
+var rb=bi.getBoundingClientRect(),ra=ai.getBoundingClientRect(),stacked=Math.abs(rb.left-ra.left)<4&&Math.abs(rb.top-ra.top)<4||(ra.width<rb.width*0.98&&ra.left>=rb.left-2&&ra.top>=rb.top-2&&ra.bottom<=rb.bottom+2);
+function tileOf(img){var t=img;while(t.parentElement!==row)t=t.parentElement;return t}var bt=stacked?null:tileOf(bi),at=stacked?null:tileOf(ai);if(!stacked&&bt===at)return;done.push(m[1]);
+var w=document.createElement("div");w.className="fg-ba";w.setAttribute("role","group");w.setAttribute("aria-label","Before and after");
 w.style.aspectRatio=(bi.naturalWidth&&bi.naturalHeight?bi.naturalWidth+" / "+bi.naturalHeight:"4 / 3");
 var b=document.createElement("img");b.src=bi.src;b.alt=bi.alt||"Before";var cl=document.createElement("div");cl.className="fg-ba-after";var a=document.createElement("img");a.src=ai.src;a.alt=ai.alt||"After";cl.appendChild(a);
 var line=document.createElement("div");line.className="fg-ba-line";line.innerHTML="<span></span>";var lb=document.createElement("b");lb.className="fg-ba-l";lb.textContent="Before";var la=document.createElement("b");la.className="fg-ba-r";la.textContent="After";
 var inp=document.createElement("input");inp.type="range";inp.min="0";inp.max="100";inp.value="50";inp.setAttribute("aria-label","Drag to compare before and after");
 function set(v){cl.style.clipPath="inset(0 0 0 "+v+"%)";line.style.left=v+"%"}inp.addEventListener("input",function(){set(inp.value)});set(50);
 [b,cl,line,lb,la,inp].forEach(function(x){w.appendChild(x)});
+if(stacked){row.innerHTML="";row.appendChild(w);w.style.aspectRatio="";w.style.height="100%";w.style.minHeight=Math.max(200,Math.round(rb.height))+"px";return}
 var box=document.createElement(bt.tagName==="LI"?"li":"div");box.className="fg-ba-box";box.appendChild(w);row.insertBefore(box,bt);bt.style.display="none";at.style.display="none";
 var cs=getComputedStyle(row);if(cs.display.indexOf("grid")>=0)box.style.gridColumn="1 / -1"})})();
 

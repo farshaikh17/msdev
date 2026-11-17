@@ -66,6 +66,7 @@ describe("the pointer", () => {
     expect(QA_JS).toContain('brand.style.minWidth="max-content"');
     expect(MOTION_CSS).toContain(".m-parts-off{display:block!important");
     expect(MOTION_CSS).toContain("calc(170vw / var(--m-len,6))");
+    expect(MOTION_CSS).toContain(".m-bob{animation:m-bob");
     expect(() => new Function(QA_JS)).not.toThrow();
   });
   it("takes call links with no number out of the page, and keeps real ones", () => {

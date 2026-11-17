@@ -94,6 +94,9 @@ html.m-on.m-moved .m-cursor,html.m-on.m-moved .m-ring{opacity:1}
 .m-float{position:fixed;left:0;top:0;z-index:30;pointer-events:none;opacity:0;transform-origin:0 0;will-change:transform,opacity;filter:drop-shadow(0 30px 34px rgba(0,0,0,.32)) drop-shadow(0 6px 10px rgba(0,0,0,.16))}
 .m-float canvas{width:100%;height:100%;display:block}
 html.m-floating main h1{position:relative;z-index:31}
+@keyframes m-bob{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-10px) rotate(3deg)}}.m-bob{animation:m-bob 4.5s ease-in-out infinite}@media (prefers-reduced-motion:reduce){.m-bob{animation:none}}
+/* The still brand word rises in when it is reached. */
+@keyframes m-rise{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:none}}.m-parts-off.m-seen::before{animation:m-rise 1s cubic-bezier(.2,.7,.2,1) both}.m-parts-off.m-seen>*{animation:m-rise 1s .15s cubic-bezier(.2,.7,.2,1) both}
 [data-perch]{pointer-events:none}[data-perch] .m-perch-still{width:100%;height:100%;object-fit:contain;display:block}
 .hero-motion:has(.m-spin){z-index:1}
 .hero-motion .m-spin{position:absolute;inset:7% 10%;filter:drop-shadow(0 44px 50px rgba(0,0,0,.45));will-change:transform}
@@ -112,7 +115,7 @@ html.m-floating main h1{position:relative;z-index:31}
 .m-parts{position:relative;height:100vh;overflow:hidden}.m-parts canvas.m-parts-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
 .m-parts [data-particles-after]{position:absolute;left:0;right:0;bottom:10vh;z-index:2;text-align:center;padding:0 20px}
 /* Phones: the brand moment is shown still (the name set large, then what follows it), not as scrolling dots. */
-.m-parts-off{display:block!important;height:auto!important;min-height:0!important;padding:14vh clamp(18px,5vw,32px)!important;text-align:center}.m-parts-off>*{max-width:100%!important;margin-left:auto!important;margin-right:auto!important}.m-parts-off::before{content:attr(data-word);display:block;width:100%;font-weight:800;font-size:min(110px,15vw,calc(170vw / var(--m-len,6)));line-height:1;letter-spacing:-.02em;margin-bottom:28px;overflow-wrap:break-word}
+.m-parts-off{display:block!important;height:auto!important;min-height:0!important;padding:14vh clamp(18px,5vw,32px)!important;text-align:center}.m-parts-off>*{max-width:100%!important;margin-left:auto!important;margin-right:auto!important}.m-parts-off::before{content:attr(data-word);display:block;width:100%;font-weight:800;font-size:min(200px,15vw,calc(170vw / var(--m-len,6)));line-height:1;letter-spacing:-.02em;margin-bottom:28px;overflow-wrap:break-word}
 .m-parts-off [data-particles-after]{opacity:1!important;transform:none!important;position:static!important}
 /* Phones: the scroll story is read as ordinary stacked blocks (it only pins on wide screens), with room at the sides. */
 @media (max-width:899px){[data-pin-stage] [data-at]{padding-left:clamp(18px,5vw,32px);padding-right:clamp(18px,5vw,32px);box-sizing:border-box}}
@@ -268,9 +271,10 @@ all(".m-spin").forEach(function(box){
   if(!perches.length||!still){layer.remove();return}
   if(reduce){var im=d.createElement("img");im.src=still;im.alt="";im.className="m-perch-still";perches[0].appendChild(im);layer.remove();return}
   // Phones: a flying object crosses the words of a narrow, stacked page. It rests, still, in each of its places instead.
-  if(!fine&&innerWidth<900){perches.forEach(function(p){var im=d.createElement("img");im.src=still;im.alt="";im.className="m-perch-still";p.appendChild(im)});layer.remove();return}
+  if(!fine&&innerWidth<900){perches.forEach(function(p,i){var im=d.createElement("img");im.src=still;im.alt="";im.className="m-perch-still m-bob";im.style.animationDelay=(i*-1.3)+"s";p.appendChild(im)});layer.remove();return}
   root.classList.add("m-floating");
   var h1=d.querySelector("main h1");
+  var fade=1,texts=all("main h2,main h3,main p,main li,main blockquote,main label,main input,main textarea,main button,main a.btn,main [class*=btn]").filter(function(e){return !e.closest("[data-perch],.m-float")});
   function h1rects(){var r=d.createRange();r.selectNodeContents(h1);var out=[];var rs=r.getClientRects();for(var q=0;q<rs.length;q++){var x=rs[q];if(x.width>4&&x.bottom>-200&&x.top<innerHeight+200)out.push(x)}return out}
   var urls=(layer.getAttribute("data-frames")||"").split("|").filter(Boolean),set=frameSet(urls.length>1?urls:[still]),cv=layer.querySelector("canvas"),path=layer.getAttribute("data-path")||"arc";
   var px=0,tilt=0,cx=null,cy=0,cs=0,born=null,last=-1,t0=performance.now(),max=0;
@@ -292,6 +296,9 @@ all(".m-spin").forEach(function(box){
       else if(path==="zig")tx+=Math.sin(e*Math.PI*3)*amp*.8*dir;
       else tx+=lift*amp*dir;
       tx=Math.max(ts*.45,Math.min(innerWidth-ts*.45,tx));
+      // Over any other words on the screen it fades right back, so it never sits on top of text.
+      var cover=0,half2=ts/2;for(var ti=0;ti<texts.length;ti++){var tr=texts[ti].getBoundingClientRect();if(tr.bottom<0||tr.top>innerHeight||!tr.width)continue;if(tx+half2>tr.left&&tx-half2<tr.right&&ty+half2>tr.top&&ty-half2<tr.bottom){cover=1;break}}
+      fade+=((cover?.12:1)-fade)*.15;
       // Never over the main headline's words: past the end of the line it would cover, or smaller to fit beside it.
       if(h1){var lines=h1rects(),half=ts/2;for(var li=0;li<lines.length;li++){var lr=lines[li];if(tx+half>lr.left&&tx-half<lr.right&&ty+half>lr.top&&ty-half<lr.bottom){var room=innerWidth-lr.right-24;if(room>=ts){tx=lr.right+12+half}else if(room>ts*.45){ts=room;half=ts/2;tx=lr.right+12+half}else{ty=lr.bottom+half+12}}}}
       var time=(now-t0)/1000;ty+=Math.sin(time*1.3)*Math.min(12,ts*.025)*(1-lift);
@@ -302,7 +309,7 @@ all(".m-spin").forEach(function(box){
       var swing=Math.sin((i+t)*Math.PI*2+time*.5)*(.08+.1*lift),f=set.n>1?Math.round(((swing%1)+1)%1*set.n)%set.n:0;
       if(f!==last&&paint(cv,set,f)){last=f;if(born===null)born=now}
       var grow=born===null?0:Math.min(1,(now-born)/1100),ge=1-Math.pow(1-grow,3);
-      layer.style.opacity=ge;
+      layer.style.opacity=ge*fade;
       layer.style.transform="translate3d("+(cx-cs/2).toFixed(1)+"px,"+(cy-cs/2+(1-ge)*40).toFixed(1)+"px,0) scale("+(cs/max*(.8+.2*ge)).toFixed(4)+") rotate("+tilt.toFixed(2)+"deg)";
     }
     requestAnimationFrame(frame);
@@ -442,7 +449,7 @@ all("[data-mask-zoom]").forEach(function(sec){
 });
 // --- brand moment, particles: the object bursts into dots that re-form as the business's name
 // (Phones skip it: almost two screens of scrolling through dots before anything readable appears.)
-if(innerWidth<900)all("[data-particles]").forEach(function(sec){sec.classList.add("m-parts-off");sec.style.setProperty("--m-len",Math.max(4,(sec.getAttribute("data-word")||"").trim().length))});
+all("[data-particles]").forEach(function(sec){sec.classList.add("m-parts-off");if(W.IntersectionObserver){var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){sec.classList.add("m-seen");io.disconnect()}})},{threshold:.25});io.observe(sec)}else sec.classList.add("m-seen");sec.style.setProperty("--m-len",Math.max(4,(sec.getAttribute("data-word")||"").trim().length))});
 all("[data-particles]:not(.m-parts-off)").forEach(function(sec){
   var word=(sec.getAttribute("data-word")||"").trim().slice(0,16),after=sec.querySelector("[data-particles-after]");if(!word)return;
   var src=(d.querySelector(".m-float")||d.querySelector(".m-spin img")||{getAttribute:function(){return ""}}),url=src.getAttribute(src.tagName==="IMG"?"src":"data-still")||"";
