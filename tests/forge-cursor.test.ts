@@ -33,6 +33,7 @@ describe("the pointer", () => {
     // Text touching the edge gets room; a heading too wide is set smaller.
     expect(QA_JS).toContain('e.style.paddingLeft=');
     expect(QA_JS).toContain("fs*=0.92");
+    expect(QA_JS).toContain("an ad tracker, not a photo");
     // The page script still parses.
     expect(() => new Function(QA_JS)).not.toThrow();
     expect(FACTS).toContain("cramped:");

@@ -242,6 +242,9 @@ var P=/(photos?|pictures?|images?)\\b[^.!?]{0,60}\\b(appears?|go|goes|added)\\b[
 var abs=function(u){try{return new URL(u,location.href).href}catch(e){return u}},used={};
 [].forEach.call(document.images,function(i){used[i.currentSrc||i.src]=1});
 var pool=urls.filter(function(u){return !used[abs(u)]}).concat(urls),k=0,done=[];
+/* A picture copied from a parked web page is an ad tracker, not a photo: swap in a real one, or hide it. */
+[].forEach.call(document.querySelectorAll("main img"),function(i){var s=i.getAttribute("src")||"";if(!/\\.php(\\?|$)|bping|\\/pixel[./?]/i.test(s))return;
+if(pool.length){i.src=pool[k++%pool.length];i.removeAttribute("srcset")}else{var f=i.closest("figure,div")||i;f.style.display="none"}});
 [].slice.call(document.querySelectorAll("main p,main span,main div,main figcaption,main h3,main h4,main small,main strong")).forEach(function(el){
 var t=(el.textContent||"").trim();if(!t||t.length>170||!P.test(t)||/before|after|review/i.test(t))return;
 var box=el;while(box.parentElement&&!/^(MAIN|SECTION|ARTICLE|BODY)$/.test(box.parentElement.tagName)&&(box.parentElement.textContent||"").trim().length<=t.length+110&&!box.parentElement.querySelector("img,video,iframe,form,a[href]"))box=box.parentElement;
@@ -260,7 +263,7 @@ function behind(){var r=hd.getBoundingClientRect();var y=Math.min(innerHeight-1,
 for(var i=0;i<els.length;i++){if(hd.contains(els[i]))continue;for(var n=els[i];n&&n!==document.documentElement;n=n.parentElement){var st=getComputedStyle(n);
 if(/^(IMG|VIDEO|CANVAS|PICTURE|svg)$/i.test(n.tagName)||st.backgroundImage!=="none")return null;var c=rgb(st.backgroundColor);if(c&&(c.length<4||c[3]>0.5))return c}}
 return rgb(getComputedStyle(document.body).backgroundColor)}
-var fg0=null;
+var fg0=null,held=0,ht=0;
 // Decides from the colours as designed (measured while the header is not solid), and only changes the class
 // when the answer changes, so it never flickers while scrolling.
 function check(){var on=hd.classList.contains("fg-solid");
@@ -268,7 +271,7 @@ if(!on){var own=rgb(getComputedStyle(hd).backgroundColor);if(own&&(own.length===
 if(!fg0)return;var want;
 // On a phone a see-through header over the page's words is a jumble whatever the colours: past the first screen it is always solid.
 if(innerWidth<900&&scrollY>innerHeight*0.6)want=true;else{var bg=behind();if(!bg)return;var a=lum(fg0),b=lum(bg);want=(Math.max(a,b)+0.05)/(Math.min(a,b)+0.05)<2.5}
-if(want&&!on)solid();else if(!want&&on)hd.classList.remove("fg-solid")}
+if(want){held=Date.now();if(!on)solid()}else if(on){if(Date.now()-held<600){clearTimeout(ht);ht=setTimeout(check,650);return}hd.classList.remove("fg-solid")}}
 function solid(){
 hd.querySelectorAll("a,button,summary,span,[class*=brand i],[class*=logo i]").forEach(function(el){if(el.closest(".dd-panel,[class*=panel i],[class*=dropdown i],[class*=menu-overlay i]"))return;for(var n=el;n&&n!==hd;n=n.parentElement){var c=rgb(getComputedStyle(n).backgroundColor);if(c&&!(c.length>=4&&c[3]<0.3))return}el.setAttribute("data-fg-ink","")});
 hd.classList.add("fg-solid")}
