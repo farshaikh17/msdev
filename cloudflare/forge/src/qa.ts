@@ -330,4 +330,22 @@ var ls=kids.map(function(c){return c.getBoundingClientRect().left});if(Math.max.
 var bad=kids.some(function(c){var r=c.getBoundingClientRect(),words=(c.textContent||"").trim().length;return r.right>W+2||c.scrollWidth>c.clientWidth+4||(words>40&&r.width<W*0.45&&!c.matches("img,picture,video,figure"))});
 if(!bad)return;g.style.gridTemplateColumns="minmax(0,1fr)";g.style.gridTemplateAreas="none";kids.forEach(function(c){c.style.gridColumn="1 / -1";c.style.gridRow="auto";c.style.gridArea="auto";c.style.maxWidth="100%";c.style.minWidth="0"})})}
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(one,700)});else setTimeout(one,1000);addEventListener("orientationchange",function(){setTimeout(one,300)})})();
+
+// Any screen: the main headline's words never run past the edge of the screen (or are cut off by their box):
+// it is set smaller until its last line ends inside, down to 55% of its size.
+(function(){function clear(h){var r=document.createRange();r.selectNodeContents(h);var lines=[].filter.call(r.getClientRects(),function(x){return x.width>2});if(!lines.length)return;
+var top=Math.min.apply(null,lines.map(function(x){return x.top})),bot=Math.max.apply(null,lines.map(function(x){return x.bottom})),L=Math.min.apply(null,lines.map(function(x){return x.left})),R=Math.max.apply(null,lines.map(function(x){return x.right}));
+var sec=h.closest("section")||h.parentElement;[].forEach.call(sec.querySelectorAll("*"),function(e){if(e.contains(h)||h.contains(e))return;var st=getComputedStyle(e);if(st.position!=="absolute"||!(e.textContent||"").trim()||e.closest("[aria-hidden=true]"))return;
+var b=e.getBoundingClientRect();if(!(b.width&&b.left<R&&b.right>L&&b.top<bot&&b.bottom>top))return;
+var room=sec.getBoundingClientRect().bottom-bot-24;if(room>=b.height){e.style.top=(parseFloat(st.top)||0)+(bot+16-b.top)+"px";e.style.bottom="auto"}else e.style.visibility="hidden"})}
+function fit(){var h=document.querySelector("main h1");if(!h)return;setTimeout(function(){clear(h)},60);var W=document.documentElement.clientWidth,cs=getComputedStyle(h),fs=parseFloat(cs.fontSize),min=fs*0.55,n=0;
+function out(){var r=document.createRange();r.selectNodeContents(h);var rs=r.getClientRects(),box=h.parentElement.getBoundingClientRect();for(var i=0;i<rs.length;i++){if(rs[i].width<2)continue;if(rs[i].right>W-6||rs[i].left<0)return true}return h.scrollWidth>h.clientWidth+2}
+if(!out())return;
+// First let it wrap inside the room it has; only then make it smaller.
+var left=Math.max(0,h.getBoundingClientRect().left);h.style.whiteSpace="normal";h.style.overflowWrap="break-word";h.style.maxWidth=Math.max(240,W-left-24)+"px";
+// ...unless wrapping makes it run into other words on the first screen: then it stays on its lines and only shrinks.
+var sec=h.closest("section")||h.parentElement,hr=h.getBoundingClientRect(),hit=[].some.call(sec.querySelectorAll("p,span,a,li,small,div"),function(e){if(h.contains(e)||e.contains(h)||!(e.textContent||"").trim()||e.children.length>3)return false;var r=e.getBoundingClientRect();return r.width>0&&r.left<hr.right&&r.right>hr.left&&r.top<hr.bottom&&r.bottom>hr.top});
+if(hit){h.style.whiteSpace="";h.style.overflowWrap="";h.style.maxWidth=""}
+while(out()&&fs>min&&n++<14){fs*=0.92;h.style.fontSize=fs+"px"}}
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(fit,1600);setTimeout(fit,4000)});else setTimeout(fit,2000);addEventListener("resize",function(){clearTimeout(fit.t);fit.t=setTimeout(fit,300)})})();
 }catch(x){}};`;

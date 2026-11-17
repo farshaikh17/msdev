@@ -363,7 +363,8 @@ mm0.add("(min-width: 900px)",function(){
       var w=el.hasAttribute("data-write")?el:el.querySelector("[data-write]"),words=null;
       if(w&&SPLIT){words=new SPLIT(w,{type:"words"}).words}
       var c=el.hasAttribute("data-pin-count")?el:el.querySelector("[data-pin-count]");
-      return {el:el,at:num(el.dataset.at,0),until:el.hasAttribute("data-until")?num(el.dataset.until,1):null,words:words,count:c,end:c?num(c.dataset.pinCount,0):0};
+      var t0=getComputedStyle(el).transform;
+      return {el:el,base:t0&&t0!=="none"?t0+" ":"",at:num(el.dataset.at,0),until:el.hasAttribute("data-until")?num(el.dataset.until,1):null,words:words,count:c,end:c?num(c.dataset.pinCount,0):0};
     });
     var zoom=stage.querySelector("[data-pin-zoom]"),z=zoom?num(zoom.dataset.pinZoom,1.2):1,spin=stage.querySelector(".m-spin");
     var bar=d.createElement("div");bar.className="m-pin-bar";bar.innerHTML="<i></i>";stage.appendChild(bar);
@@ -372,7 +373,7 @@ mm0.add("(min-width: 900px)",function(){
       blocks.forEach(function(b){
         var k=cl((p-b.at)/.1),o=b.until===null?0:cl((p-b.until)/.08);
         b.el.style.opacity=k*(1-o);b.el.style.visibility=k*(1-o)<=0?"hidden":"visible";
-        b.el.style.transform="translate3d(0,"+((1-k)*30-o*40)+"px,0)";
+        b.el.style.transform=b.base+"translate3d(0,"+((1-k)*30-o*40)+"px,0)";
         b.el.style.filter=k<1||o>0?"blur("+((1-k)*10+o*10)+"px)":"";
         if(b.words){var span=(b.until===null?1:b.until)-b.at,n=b.words.length;b.words.forEach(function(wd,i){var q=cl(((p-b.at)/(span*.6))*1.6-i/n*1.1);wd.style.opacity=.15+.85*q})}
         if(b.count){var q2=cl((p-b.at)/Math.max(.12,((b.until===null?1:b.until)-b.at)*.6));b.count.textContent=(b.count.dataset.prefix||"")+Math.round(b.end*q2).toLocaleString()+(b.count.dataset.suffix||"")}
@@ -392,6 +393,8 @@ mm0.add("(min-width: 900px)",function(){
     var stage=sec.querySelector("[data-dive-stage]")||sec,layer=stage.querySelector(".hero-motion");if(!layer)return;
     var to=layer.querySelector("[data-dive-to]"),first=layer.querySelector("img:not([data-dive-to]),video");
     var outs=all("[data-dive-out]",stage),ins=all("[data-dive-in]",stage),screens=Math.max(1,Math.min(4,num(sec.dataset.dive,2.4)));
+    // Keep each block's own transform (a centred block is moved left by half its width) and add the motion to it.
+    outs.concat(ins).forEach(function(el){var t=getComputedStyle(el).transform;el.__base=t&&t!=="none"?t+" ":""});
     layer.style.transformOrigin=stage.getAttribute("data-dive-origin")||"55% 55%";
     var bar=d.createElement("div");bar.className="m-pin-bar";bar.innerHTML="<i></i>";stage.appendChild(bar);
     function cl(v){return v<0?0:v>1?1:v}function seg(p,a,b){return cl((p-a)/(b-a))}function ease(t){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2}
@@ -400,8 +403,8 @@ mm0.add("(min-width: 900px)",function(){
       if(first)first.style.transform="scale("+(1+push*1.6)+")";
       if(first)first.style.filter=push>.55?"blur("+((push-.55)*14).toFixed(1)+"px)":"";
       if(to){var land=seg(p,.42,.62);to.style.opacity=land;to.style.transform="scale("+(1.18-.18*ease(seg(p,.42,1)))+")"}
-      var o=seg(p,.02,.16);outs.forEach(function(el){el.style.opacity=1-o;el.style.transform="translate3d(0,"+(-o*70)+"px,0) scale("+(1+o*.08)+")";el.style.filter=o>0?"blur("+(o*12).toFixed(1)+"px)":"";el.style.visibility=o>=1?"hidden":"visible"});
-      ins.forEach(function(el,i){var k=seg(p,.6+i*.04,.76+i*.04);el.style.opacity=k;el.style.transform="translate3d(0,"+((1-k)*30)+"px,0)";el.style.filter=k<1?"blur("+((1-k)*12).toFixed(1)+"px)":"";el.style.visibility=k<=0?"hidden":"visible"});
+      var o=seg(p,.02,.16);outs.forEach(function(el){el.style.opacity=1-o;el.style.transform=el.__base+"translate3d(0,"+(-o*70)+"px,0) scale("+(1+o*.08)+")";el.style.filter=o>0?"blur("+(o*12).toFixed(1)+"px)":"";el.style.visibility=o>=1?"hidden":"visible"});
+      ins.forEach(function(el,i){var k=seg(p,.6+i*.04,.76+i*.04);el.style.opacity=k;el.style.transform=el.__base+"translate3d(0,"+((1-k)*30)+"px,0)";el.style.filter=k<1?"blur("+((1-k)*12).toFixed(1)+"px)":"";el.style.visibility=k<=0?"hidden":"visible"});
       bar.firstChild.style.transform="scaleX("+p+")";
     }
     sec.classList.add("m-diving");apply(0);

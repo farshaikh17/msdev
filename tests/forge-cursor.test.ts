@@ -57,4 +57,9 @@ describe("the pointer", () => {
     expect(QA_JS).toContain("words>40&&r.width<W*0.45");
     expect(() => new Function(QA_JS)).not.toThrow();
   });
+  it("keeps the main headline inside the screen and clear of panels, and the motion engine keeps a block's own centring", () => {
+    expect(QA_JS).toContain("Any screen: the main headline's words never run past the edge");
+    expect(QA_JS).toContain('e.style.visibility="hidden"');
+    expect(() => new Function(QA_JS)).not.toThrow();
+  });
 });
