@@ -515,7 +515,7 @@ mm.add("(min-width: 900px)",function(){
     cards.forEach(function(card,i){if(getComputedStyle(card).position==="static")card.style.position="relative";card.style.zIndex=String(i+1)});
     cards.forEach(function(card,i){
       if(i===cards.length-1)return;
-      G.to(card,{scale:.92,filter:"brightness(.8) blur(1px)",ease:"none",scrollTrigger:{trigger:cards[i+1],start:"top bottom",end:"top 15%",scrub:true}});
+      G.fromTo(card,{scale:1,filter:"brightness(1) blur(0px)"},{scale:.92,filter:"brightness(.8) blur(1px)",ease:"none",scrollTrigger:{trigger:cards[i+1],start:"top bottom",end:"top 15%",scrub:true}});
       ST.create({trigger:card,start:"top 12%",endTrigger:wrap,end:"bottom bottom",pin:true,pinSpacing:false,onToggle:function(self){card.style.zIndex=String(i+1)}});
     });
   });

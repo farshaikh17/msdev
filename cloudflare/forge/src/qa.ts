@@ -253,6 +253,10 @@ if(!pool.length){box.style.display="none";box.setAttribute("data-fg-filled","");
 var img=document.createElement("img");img.src=pool[k++%pool.length];img.alt="Sample photo";img.loading="lazy";img.setAttribute("data-fg-zoom","");
 var tag=document.createElement("span");tag.textContent="Sample photo";
 box.innerHTML="";box.setAttribute("data-fg-filled","");box.appendChild(img);box.appendChild(tag)});
+/* A before-and-after section with no real pairs yet is removed: two unrelated sample photos there say nothing. */
+[].forEach.call(document.querySelectorAll("main section"),function(sec){if(!sec.querySelector("[data-fg-filled]")||sec.querySelector(".fg-ba"))return;
+if(!/before (and|&) after|before\\/after/i.test(sec.textContent||""))return;
+if([].some.call(sec.querySelectorAll("img"),function(i){return !i.closest("[data-fg-filled]")}))return;sec.style.display="none"});
 
 // A see-through header whose text can't be read against what is behind it (light text over a light
 // section, often in the other theme) gets a solid background and the page's ink colour until it can.
@@ -279,6 +283,25 @@ var t=0;function soon(){if(t)return;t=requestAnimationFrame(function(){t=0;check
 addEventListener("scroll",soon,{passive:true});addEventListener("resize",soon);
 new MutationObserver(soon).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme","class"]});
 setTimeout(check,400);setTimeout(check,2500)})();
+
+// Cards pulled over their neighbours with negative side margins cut off the neighbours' words: the pull is removed.
+// A block that opens with a heading and sits flush against a list, form or cards above it gets room to breathe.
+(function(){function fix(){
+[].forEach.call(document.querySelectorAll("main *"),function(e){var cs=getComputedStyle(e);if(parseFloat(cs.marginLeft)>-8&&parseFloat(cs.marginRight)>-8)return;var par=e.parentElement;if(!par)return;var pd=getComputedStyle(par).display;if(!/grid|flex/.test(pd))return;
+var r=e.getBoundingClientRect();if(!(e.innerText||"").trim())return;var hit=[].some.call(par.children,function(o){if(o===e||!(o.innerText||"").trim())return false;var q=o.getBoundingClientRect();return Math.min(r.right,q.right)-Math.max(r.left,q.left)>12&&Math.min(r.bottom,q.bottom)-Math.max(r.top,q.top)>40});
+if(hit){e.style.marginLeft="0";e.style.marginRight="0"}});
+[].forEach.call(document.querySelectorAll("main h2"),function(h){var a=h;while(a.parentElement&&a.parentElement.tagName!=="SECTION"&&a.parentElement.tagName!=="MAIN"&&!a.previousElementSibling&&a.parentElement.firstElementChild===a)a=a.parentElement;
+var prev=a.previousElementSibling;if(!prev||a.getAttribute("data-fg-gap"))return;var pc=getComputedStyle(prev);if(pc.position==="absolute"||pc.position==="fixed"||pc.display==="none")return;
+var pr=prev.getBoundingClientRect(),ar=a.getBoundingClientRect();if(pr.height<120||!prev.querySelector("details,summary,ul,ol,form,img,article,[class*=card i],[class*=item i]"))return;
+var gap=a.offsetParent&&a.offsetParent===prev.offsetParent?a.offsetTop-(prev.offsetTop+prev.offsetHeight):ar.top-pr.bottom;if(gap>-2&&gap<10){a.style.marginTop="clamp(40px,5vw,72px)";a.setAttribute("data-fg-gap","1")}})}
+addEventListener("load",function(){setTimeout(fix,300)});})();
+
+// Phones: a box set to full width plus side padding, in a design with no border-box rule, is wider than the
+// screen and pushes its words and pictures off the right edge. Such boxes are measured with their padding inside.
+(function(){function fix(){if(innerWidth>=700)return;[].forEach.call(document.querySelectorAll("main *,footer *,header *"),function(e){
+var cs=getComputedStyle(e);if(cs.boxSizing!=="content-box"||cs.position==="fixed"||cs.position==="absolute")return;var pl=parseFloat(cs.paddingLeft)+parseFloat(cs.paddingRight)+parseFloat(cs.borderLeftWidth)+parseFloat(cs.borderRightWidth);if(pl<2)return;
+var par=e.parentElement;if(!par)return;var w=e.getBoundingClientRect().width,pw=par.clientWidth;if(w>pw+2&&w-pl<=pw+2)e.style.boxSizing="border-box"})}
+addEventListener("load",fix);setTimeout(fix,600);addEventListener("resize",fix)})();
 
 // Phones: text that touches or runs past the screen's edge gets room at the sides, and a heading wider
 // than the screen is set smaller until it fits (never below 60% of its size). Free, on every site.
