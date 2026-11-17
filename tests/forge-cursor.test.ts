@@ -47,4 +47,9 @@ describe("the pointer", () => {
     expect(QA_JS).toContain('a[href^="tel:"]');
     expect(() => new Function(QA_JS)).not.toThrow();
   });
+  it("keeps a phone header's menu button on screen when the name or tagline is long", () => {
+    expect(QA_JS).toContain("Phones: a header whose name or tagline is too long");
+    expect(QA_JS).toContain('brand.style.textOverflow="ellipsis"');
+    expect(() => new Function(QA_JS)).not.toThrow();
+  });
 });

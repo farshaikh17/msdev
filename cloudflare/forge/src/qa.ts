@@ -309,4 +309,14 @@ for(var n=e.parentElement,k=0;n&&k<3&&n.tagName!=="MAIN";n=n.parentElement,k++){
 if(cs.display.indexOf("grid")>=0){n.style.gridTemplateColumns="minmax(0,1fr)";n.style.gridTemplateAreas="none";[].forEach.call(n.children,function(c){c.style.gridColumn="1 / -1";c.style.gridRow="auto";c.style.gridArea="auto"});return}
 if(cs.display.indexOf("flex")>=0&&cs.flexDirection.indexOf("row")===0){n.style.flexWrap="wrap";[].forEach.call(n.children,function(c){c.style.minWidth="0"});e.style.flexBasis="100%";return}}})}
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(stack,900)});else setTimeout(stack,1200)})();
+
+// Phones: a header whose name or tagline is too long pushes the menu button off the screen. Its smaller
+// tagline lines are hidden first, then the name is cut with an ellipsis, until the last button fits.
+(function(){function fit(){var hd=document.querySelector("body>header,header");if(!hd||innerWidth>=900)return;
+function over(){var W=document.documentElement.clientWidth,bs=hd.querySelectorAll("button,summary,a[class*=menu i],[class*=toggle i],[class*=burger i]");for(var i=0;i<bs.length;i++){var r=bs[i].getBoundingClientRect();if(r.width&&(r.right>W+1||r.left<-1))return true}return hd.scrollWidth>hd.clientWidth+2}
+if(!over())return;var brand=hd.querySelector("a[href]");if(!brand)return;var big=parseFloat(getComputedStyle(brand).fontSize)||0;
+brand.querySelectorAll("*").forEach(function(e){var f=parseFloat(getComputedStyle(e).fontSize);if(f>big)big=f});
+hd.querySelectorAll("small,span,em,div,p").forEach(function(e){if(!over())return;if(e.querySelector("a,button,summary,svg,img")||e.closest("nav,button,summary"))return;var f=parseFloat(getComputedStyle(e).fontSize);if(f<big*0.8&&(e.textContent||"").trim())e.style.display="none"});
+if(over()){brand.style.minWidth="0";brand.style.overflow="hidden";brand.style.textOverflow="ellipsis";brand.style.whiteSpace="nowrap";brand.style.flex="1 1 auto";brand.style.maxWidth="60vw"}}
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(fit,200)});else setTimeout(fit,600);addEventListener("orientationchange",function(){setTimeout(fit,200)})})();
 }catch(x){}};`;
