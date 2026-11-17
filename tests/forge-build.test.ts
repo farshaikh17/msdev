@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../cloudflare/forge/src/index";
 import { PHOTO_HEROES } from "../cloudflare/forge/src/heroes";
+import { MAINTENANCE_KEY, maintenanceRebuild } from "../cloudflare/forge/src/maintenance";
 import { exportSite } from "../cloudflare/forge/src/export";
 import { imagesRoom } from "../cloudflare/forge/src/images";
 import { adaptKit, designKit, designSitePage, planSite, systemFor, Fatal, TryLater } from "../cloudflare/forge/src/designer";
@@ -322,6 +323,31 @@ describe("the planning step", () => {
     expect(demo.buildStatus).toBe("ready");
     expect(h.db.prepare("SELECT count(*) n FROM site_images WHERE slug = ? AND name LIKE 'photo-%'").get(slug)).toEqual({ n: 2 });
   }, 20_000);
+});
+
+describe("maintenance rebuilds", () => {
+  it("builds listed sites again, two at a time, taking each off the list as it starts", async () => {
+    const admin = await setupAdmin(h);
+    const b = await makeAccount(h, admin, "Bright Ideas", "owner@b.test", 20);
+    const slugs: string[] = [];
+    for (const name of ["Alpha Plumbing", "Beta Dental", "Gamma Roofing"]) {
+      slugs.push(slugOf(await build(h, b.cookie, name)));
+      await drain(h);
+    }
+    const live = () => slugs.map((sl) => (h.db.prepare("SELECT live_version v FROM demos WHERE slug = ?").get(sl) as { v: string }).v);
+    const before = live();
+    h.db.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").run(MAINTENANCE_KEY, slugs.join("\n"));
+    expect(await maintenanceRebuild(h.env)).toEqual(slugs.slice(0, 2));
+    expect((h.db.prepare("SELECT value FROM settings WHERE key = ?").get(MAINTENANCE_KEY) as { value: string }).value).toBe(slugs[2]);
+    // While those two build, nothing else starts.
+    expect(await maintenanceRebuild(h.env)).toEqual([]);
+    await drain(h);
+    expect(await maintenanceRebuild(h.env)).toEqual([slugs[2]]);
+    await drain(h);
+    // Each is live on a new version.
+    live().forEach((v, n) => expect(v).not.toBe(before[n]));
+    expect(await maintenanceRebuild(h.env)).toEqual([]);
+  });
 });
 
 describe("a Studio build without preview photos", () => {
