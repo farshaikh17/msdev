@@ -158,6 +158,14 @@ describe("contact details nobody gave", () => {
     const out = scrubContacts(reply, given);
     expect(out).not.toMatch(/446|hello@/);
     expect(out).toContain('<a href="/">Margaux</a>');
+    // International numbers too (a made-up Indian number on a hospital in Kota), and the real one is kept.
+    const kota = "Business: Dhakar Hospital\nPhone: +91 63776 74016";
+    const page = '<a class="call" href="tel:+917412345678">Call now</a><p>Call +91 74123 45678 or +91 63776 74016.</p><a href="tel:+916377674016">Call</a>';
+    const kept = scrubContacts(page, kota);
+    expect(kept).not.toMatch(/74123|7412345678/);
+    expect(kept).toContain("+91 63776 74016");
+    expect(kept).toContain('href="tel:+916377674016"');
+    expect(inventedContacts("Founded in 2026. Plot 1, Kota 324008. Open 9 to 5.", kota)).toEqual([]);
     // A call link left with no number in it goes too.
     expect(scrubContacts('<a href="tel:+1" class="b">Call the desk</a><a href="tel:+13059990000">Call</a>', given)).toBe("");
     const real = '<a href="tel:+13056675657">(305) 667-5657</a>';

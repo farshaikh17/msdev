@@ -80,10 +80,14 @@ async function spendNeurons(env: Env, n: number, bucket: "free" | "paid" = "free
  * Contact details in a reply that aren't in what the model was given: a phone number or an email the
  * business never gave. Workers AI models have been seen inventing a phone number; such a reply is not used.
  */
+/** A phone number reduced to its last nine digits: the same number written "+1 (305) 667-5657", "305.667.5657" or "+91 63776 74016" / "063776 74016" matches itself. */
+const phoneKey = (t: string) => t.replace(/\D/g, "").slice(-9);
+/** US-style numbers, international ones ("+91 74123 45678") and tel: links. */
+const PHONE_RE = /(?:tel:[+\d][\d\s().-]{6,18}\d|\+\d{1,3}[\s.-]?\(?\d[\d\s().-]{6,14}\d|\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b|\b\d{5}[\s-]\d{5}\b)/g;
+
 export function inventedContacts(reply: string, given: string): string[] {
-  const digits = (t: string) => t.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
-  const known = new Set((given.match(/\+?1?[\s.(-]*\d{3}[\s.)-]*\d{3}[\s.-]*\d{4}/g) ?? []).map(digits));
-  const phones = (reply.match(/(?:tel:\+?1?\d{10}|\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b)/g) ?? []).filter((p) => !known.has(digits(p)));
+  const known = new Set([...(given.match(PHONE_RE) ?? []), ...(given.match(/\d[\d\s().-]{7,}\d/g) ?? [])].map(phoneKey).filter((k) => k.length >= 9));
+  const phones = (reply.match(PHONE_RE) ?? []).filter((p) => phoneKey(p).length >= 9 && !known.has(phoneKey(p)));
   const givenLower = given.toLowerCase();
   const emails = (reply.match(/\b[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}\b/gi) ?? []).filter((e) => !/^(?:wght|ital|opsz)@/i.test(e) && !/@\d/.test(e) && !givenLower.includes(e.toLowerCase()));
   return [...new Set([...phones, ...emails])];
@@ -97,7 +101,7 @@ export function inventedContacts(reply: string, given: string): string[] {
 export function scrubContacts(reply: string, given: string): string {
   const bad = inventedContacts(reply, given);
   if (!bad.length) return reply;
-  const digits = (t: string) => t.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  const digits = phoneKey;
   const badPhones = new Set(bad.filter((b) => !b.includes("@")).map(digits));
   const badMails = new Set(bad.filter((b) => b.includes("@")).map((b) => b.toLowerCase()));
   let out = reply.replace(/<a\b[^>]*href\s*=\s*["'](tel|mailto):([^"']*)["'][^>]*>[\s\S]*?<\/a>/gi, (m, kind: string, v: string) =>
@@ -106,7 +110,7 @@ export function scrubContacts(reply: string, given: string): string {
   for (const b of bad) out = out.split(b).join("");
   // A link whose number was taken out ("tel:+1", "tel:") goes too.
   out = out.replace(/<a\b[^>]*href\s*=\s*["']tel:([^"']*)["'][^>]*>[\s\S]*?<\/a>/gi, (m, v: string) => (v.replace(/\D/g, "").length < 10 ? "" : m));
-  out = out.replace(/\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/g, (m) => (badPhones.has(digits(m)) ? "" : m));
+  out = out.replace(PHONE_RE, (m) => (badPhones.has(digits(m)) ? "" : m));
   return out;
 }
 
