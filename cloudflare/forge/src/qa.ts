@@ -319,4 +319,15 @@ brand.querySelectorAll("*").forEach(function(e){var f=parseFloat(getComputedStyl
 hd.querySelectorAll("small,span,em,div,p").forEach(function(e){if(!over())return;if(e.querySelector("a,button,summary,svg,img")||e.closest("nav,button,summary"))return;var f=parseFloat(getComputedStyle(e).fontSize);if(f<big*0.8&&(e.textContent||"").trim())e.style.display="none"});
 if(over()){brand.style.minWidth="0";brand.style.overflow="hidden";brand.style.textOverflow="ellipsis";brand.style.whiteSpace="nowrap";brand.style.flex="1 1 auto";brand.style.maxWidth="60vw"}}
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(fit,200)});else setTimeout(fit,600);addEventListener("orientationchange",function(){setTimeout(fit,200)})})();
+
+// Phones: a grid of side-by-side columns that doesn't collapse (a column running off the screen, or words
+// crushed into a narrow one) is laid out as a single column instead. Sideways tracks and marquees are left alone.
+(function(){function one(){if(innerWidth>=700)return;var W=document.documentElement.clientWidth;
+document.querySelectorAll("main *").forEach(function(g){var cs=getComputedStyle(g);if(cs.display.indexOf("grid")<0)return;
+if(g.closest("[data-horizontal-track],[data-marquee],[class*=marquee i],[class*=ticker i],[class*=track i],[class*=carousel i],[class*=slider i],header,nav"))return;
+var kids=[].filter.call(g.children,function(c){var k=getComputedStyle(c);return k.display!=="none"&&k.position!=="absolute"&&k.position!=="fixed"});if(kids.length<2)return;
+var ls=kids.map(function(c){return c.getBoundingClientRect().left});if(Math.max.apply(null,ls)-Math.min.apply(null,ls)<60)return;
+var bad=kids.some(function(c){var r=c.getBoundingClientRect(),words=(c.textContent||"").trim().length;return r.right>W+2||c.scrollWidth>c.clientWidth+4||(words>40&&r.width<W*0.45&&!c.matches("img,picture,video,figure"))});
+if(!bad)return;g.style.gridTemplateColumns="minmax(0,1fr)";g.style.gridTemplateAreas="none";kids.forEach(function(c){c.style.gridColumn="1 / -1";c.style.gridRow="auto";c.style.gridArea="auto";c.style.maxWidth="100%";c.style.minWidth="0"})})}
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(one,700)});else setTimeout(one,1000);addEventListener("orientationchange",function(){setTimeout(one,300)})})();
 }catch(x){}};`;

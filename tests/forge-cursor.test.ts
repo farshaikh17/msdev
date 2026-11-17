@@ -52,4 +52,9 @@ describe("the pointer", () => {
     expect(QA_JS).toContain('brand.style.textOverflow="ellipsis"');
     expect(() => new Function(QA_JS)).not.toThrow();
   });
+  it("collapses a phone layout whose side-by-side columns run off the screen or crush their words", () => {
+    expect(QA_JS).toContain("Phones: a grid of side-by-side columns");
+    expect(QA_JS).toContain("words>40&&r.width<W*0.45");
+    expect(() => new Function(QA_JS)).not.toThrow();
+  });
 });
