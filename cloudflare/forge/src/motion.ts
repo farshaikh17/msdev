@@ -112,7 +112,7 @@ html.m-floating main h1{position:relative;z-index:31}
 .m-parts{position:relative;height:100vh;overflow:hidden}.m-parts canvas.m-parts-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
 .m-parts [data-particles-after]{position:absolute;left:0;right:0;bottom:10vh;z-index:2;text-align:center;padding:0 20px}
 /* Phones: the brand moment is shown still (the name set large, then what follows it), not as scrolling dots. */
-.m-parts-off{height:auto!important;min-height:0!important;padding:14vh clamp(18px,5vw,32px)!important;text-align:center}.m-parts-off::before{content:attr(data-word);display:block;font-weight:800;font-size:clamp(44px,15vw,110px);line-height:1;letter-spacing:-.02em;margin-bottom:28px;overflow-wrap:anywhere}
+.m-parts-off{display:block!important;height:auto!important;min-height:0!important;padding:14vh clamp(18px,5vw,32px)!important;text-align:center}.m-parts-off>*{max-width:100%!important;margin-left:auto!important;margin-right:auto!important}.m-parts-off::before{content:attr(data-word);display:block;width:100%;font-weight:800;font-size:min(110px,15vw,calc(170vw / var(--m-len,6)));line-height:1;letter-spacing:-.02em;margin-bottom:28px;overflow-wrap:break-word}
 .m-parts-off [data-particles-after]{opacity:1!important;transform:none!important;position:static!important}
 /* Phones: the scroll story is read as ordinary stacked blocks (it only pins on wide screens), with room at the sides. */
 @media (max-width:899px){[data-pin-stage] [data-at]{padding-left:clamp(18px,5vw,32px);padding-right:clamp(18px,5vw,32px);box-sizing:border-box}}
@@ -442,7 +442,7 @@ all("[data-mask-zoom]").forEach(function(sec){
 });
 // --- brand moment, particles: the object bursts into dots that re-form as the business's name
 // (Phones skip it: almost two screens of scrolling through dots before anything readable appears.)
-if(innerWidth<900)all("[data-particles]").forEach(function(sec){sec.classList.add("m-parts-off")});
+if(innerWidth<900)all("[data-particles]").forEach(function(sec){sec.classList.add("m-parts-off");sec.style.setProperty("--m-len",Math.max(4,(sec.getAttribute("data-word")||"").trim().length))});
 all("[data-particles]:not(.m-parts-off)").forEach(function(sec){
   var word=(sec.getAttribute("data-word")||"").trim().slice(0,16),after=sec.querySelector("[data-particles-after]");if(!word)return;
   var src=(d.querySelector(".m-float")||d.querySelector(".m-spin img")||{getAttribute:function(){return ""}}),url=src.getAttribute(src.tagName==="IMG"?"src":"data-still")||"";

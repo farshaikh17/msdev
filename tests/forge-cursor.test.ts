@@ -62,4 +62,10 @@ describe("the pointer", () => {
     expect(QA_JS).toContain('e.style.visibility="hidden"');
     expect(() => new Function(QA_JS)).not.toThrow();
   });
+  it("never lets a header's name spill over the menu, and the still brand word fits a phone", () => {
+    expect(QA_JS).toContain('brand.style.minWidth="max-content"');
+    expect(MOTION_CSS).toContain(".m-parts-off{display:block!important");
+    expect(MOTION_CSS).toContain("calc(170vw / var(--m-len,6))");
+    expect(() => new Function(QA_JS)).not.toThrow();
+  });
 });

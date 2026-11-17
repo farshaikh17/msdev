@@ -353,4 +353,17 @@ var sec=h.closest("section")||h.parentElement,hr=h.getBoundingClientRect(),hit=[
 if(hit){h.style.whiteSpace="";h.style.overflowWrap="";h.style.maxWidth=""}
 while(out()&&fs>min&&n++<14){fs*=0.92;h.style.fontSize=fs+"px"}}
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(fit,1600);setTimeout(fit,4000)});else setTimeout(fit,2000);addEventListener("resize",function(){clearTimeout(fit.t);fit.t=setTimeout(fit,300)})})();
+
+// Any screen: the header's name is never squeezed narrower than its own words (the name then spills over the
+// menu links). It keeps its width; if the row then overflows, the menu's gaps tighten, then the phone link's
+// words go (its icon stays), then the last menu links are hidden, until the row fits.
+(function(){function fit(){var hd=document.querySelector("body>header,header");if(!hd)return;var brand=hd.querySelector("a[href]");if(!brand)return;
+var spill=[].some.call(brand.querySelectorAll("*"),function(e){return e.scrollWidth>brand.clientWidth+2})||brand.scrollWidth>brand.clientWidth+2;if(!spill)return;
+brand.style.flexShrink="0";brand.style.minWidth="max-content";
+var W=document.documentElement.clientWidth;function over(){var bs=hd.querySelectorAll("a,button");for(var i=0;i<bs.length;i++){var r=bs[i].getBoundingClientRect();if(r.width&&r.right>W-4)return true}
+var br=brand.getBoundingClientRect(),nav=hd.querySelector("nav");if(!nav)return false;var first=[].filter.call(nav.querySelectorAll("a,button"),function(x){return x.getBoundingClientRect().width>0})[0];return !!first&&first.getBoundingClientRect().left<br.right+8}
+if(!over())return;var nav=hd.querySelector("nav");if(nav){nav.style.gap="4px";[].forEach.call(nav.querySelectorAll("a,button"),function(a){a.style.paddingLeft=a.style.paddingRight="8px"})}
+if(over())[].forEach.call(hd.querySelectorAll('a[href^="tel:"]'),function(a){[].forEach.call(a.childNodes,function(n){if(n.nodeType===3&&n.textContent.trim()){var s=document.createElement("span");s.textContent=n.textContent;s.style.cssText="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)";n.replaceWith(s)}})});
+if(nav){var links=[].filter.call(nav.children,function(x){return x.getBoundingClientRect().width>0});for(var k=links.length-1;k>0&&over();k--)links[k].style.display="none"}}
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(fit,100)});else setTimeout(fit,500);addEventListener("resize",function(){clearTimeout(fit.t);fit.t=setTimeout(fit,300)})})();
 }catch(x){}};`;
