@@ -504,10 +504,12 @@ mm.add("(min-width: 900px)",function(){
   });
   all("[data-stack]").forEach(function(wrap){
     var cards=Array.prototype.slice.call(wrap.children);
+    // Each card sits above the ones before it, so the next slides OVER the pinned one (never under it).
+    cards.forEach(function(card,i){if(getComputedStyle(card).position==="static")card.style.position="relative";card.style.zIndex=String(i+1)});
     cards.forEach(function(card,i){
       if(i===cards.length-1)return;
-      G.to(card,{scale:.9,opacity:.55,filter:"blur(1px)",ease:"none",scrollTrigger:{trigger:cards[i+1],start:"top bottom",end:"top 15%",scrub:true}});
-      ST.create({trigger:card,start:"top 12%",endTrigger:wrap,end:"bottom bottom",pin:true,pinSpacing:false});
+      G.to(card,{scale:.92,filter:"brightness(.8) blur(1px)",ease:"none",scrollTrigger:{trigger:cards[i+1],start:"top bottom",end:"top 15%",scrub:true}});
+      ST.create({trigger:card,start:"top 12%",endTrigger:wrap,end:"bottom bottom",pin:true,pinSpacing:false,onToggle:function(self){card.style.zIndex=String(i+1)}});
     });
   });
   return function(){all("[data-horizontal]").forEach(function(sec){sec.classList.remove("m-pinned")})};

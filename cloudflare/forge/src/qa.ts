@@ -76,7 +76,7 @@ function links(html: string): Link[] {
 }
 
 /** The wording of an empty photo box ("Your photos appear here", "Space for your photos", "Photo coming soon"). */
-export const EMPTY_PHOTO = /(photos?|pictures?|images?)\b[^.!?<]{0,60}\b(appears?|go|goes|added)\b[^.!?<]{0,20}\bhere|space for (your|real|the)\b[^.!?<]{0,20}(photos?|pictures?)|(photos?|pictures?) coming soon/i;
+export const EMPTY_PHOTO = /(photos?|pictures?|images?)\b[^.!?<]{0,60}\b(appears?|go|goes|added)\b[^.!?<]{0,20}\bhere|space for (your|real|the)\b[^.!?<]{0,20}(photos?|pictures?)|(photos?|pictures?) coming soon|\b(your|real) (own |real )?(photos?|pictures?|images?) (here|go here)\b|\badd your (own )?(photos?|pictures?)\b/i;
 
 const SOCIAL = /\b(facebook|instagram|twitter|linkedin|pinterest|tiktok|youtube|yelp|whatsapp|snapchat|threads)\b|^(x|fb|ig|social( link)?)$/i;
 const isSocial = (l: Link) => SOCIAL.test(l.label) || SOCIAL.test(l.tag) || /(facebook|instagram|twitter|x|linkedin|pinterest|tiktok|youtube)\.com/i.test(l.href ?? "");
@@ -193,7 +193,8 @@ export function qaFixHtml(html: string, footer: { hasPrivacy: boolean; hasTerms:
   return out;
 }
 
-export const QA_CSS = `header.fg-solid{background:color-mix(in srgb,var(--bg,#fff) 94%,transparent)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-color:transparent!important;box-shadow:0 1px 0 rgba(0,0,0,.08)!important;transition:background-color .3s}
+export const QA_CSS = `.fg-ba-box{list-style:none;margin:0 auto;padding:0;width:100%;max-width:880px}.fg-ba{position:relative;overflow:hidden;width:100%;border-radius:inherit;user-select:none;-webkit-user-select:none;touch-action:pan-y}.fg-ba>img,.fg-ba-after img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;margin:0;max-width:none}.fg-ba-after{position:absolute;inset:0}.fg-ba-line{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.15);pointer-events:none}.fg-ba-line span{position:absolute;top:50%;left:50%;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.3)}.fg-ba-line span::before{content:"\\2039\\00a0\\203A";position:absolute;inset:0;display:grid;place-items:center;font:700 18px/1 system-ui,sans-serif;color:#222}.fg-ba-l,.fg-ba-r{position:absolute;top:12px;font:600 12px/1 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:6px 9px;border-radius:4px;pointer-events:none}.fg-ba-l{left:12px}.fg-ba-r{right:12px}.fg-ba input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize;-webkit-appearance:none;appearance:none}
+header.fg-solid{background:color-mix(in srgb,var(--bg,#fff) 94%,transparent)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-color:transparent!important;box-shadow:0 1px 0 rgba(0,0,0,.08)!important;transition:background-color .3s}
 header.fg-solid [data-fg-ink],header.fg-solid [data-fg-ink] svg{color:var(--ink,#111)!important}header.fg-solid [data-fg-ink][class*="icon" i],header.fg-solid [data-fg-ink][class*="toggle" i]{border-color:color-mix(in srgb,var(--ink,#111) 25%,transparent)!important}
 .fg-legal{text-align:center;font-size:.85rem;opacity:.85;margin:14px 0 0}.fg-legal a{color:inherit;text-decoration:underline;text-underline-offset:3px}
 main img[data-fg-zoom]{cursor:zoom-in}
@@ -237,7 +238,7 @@ o.addEventListener("click",close);document.addEventListener("keydown",key)});
 }catch(x){}})();
 /* Any empty photo box left on a page ("Your photos appear here") is filled with one of the site's photos, or hidden when the site has none. */
 window.__fgFill=function(urls){try{urls=urls||[];
-var P=/(photos?|pictures?|images?)\\b[^.!?]{0,60}\\b(appears?|go|goes|added)\\b[^.!?]{0,20}\\bhere|space for (your|real|the)\\b[^.!?]{0,20}(photos?|pictures?)|(photos?|pictures?) coming soon/i;
+var P=/(photos?|pictures?|images?)\\b[^.!?]{0,60}\\b(appears?|go|goes|added)\\b[^.!?]{0,20}\\bhere|space for (your|real|the)\\b[^.!?]{0,20}(photos?|pictures?)|(photos?|pictures?) coming soon|\\b(your|real) (own |real )?(photos?|pictures?|images?) (here|go here)\\b|\\badd your (own )?(photos?|pictures?)\\b/i;
 var abs=function(u){try{return new URL(u,location.href).href}catch(e){return u}},used={};
 [].forEach.call(document.images,function(i){used[i.currentSrc||i.src]=1});
 var pool=urls.filter(function(u){return !used[abs(u)]}).concat(urls),k=0,done=[];
@@ -259,12 +260,15 @@ function behind(){var r=hd.getBoundingClientRect();var y=Math.min(innerHeight-1,
 for(var i=0;i<els.length;i++){if(hd.contains(els[i]))continue;for(var n=els[i];n&&n!==document.documentElement;n=n.parentElement){var st=getComputedStyle(n);
 if(/^(IMG|VIDEO|CANVAS|PICTURE|svg)$/i.test(n.tagName)||st.backgroundImage!=="none")return null;var c=rgb(st.backgroundColor);if(c&&(c.length<4||c[3]>0.5))return c}}
 return rgb(getComputedStyle(document.body).backgroundColor)}
-function check(){if(hd.classList.contains("fg-solid")){hd.classList.remove("fg-solid")}
-var own=rgb(getComputedStyle(hd).backgroundColor);if(own&&own.length>=4&&own[3]>0.5)return;if(own&&own.length===3)return;
+var fg0=null;
+// Decides from the colours as designed (measured while the header is not solid), and only changes the class
+// when the answer changes, so it never flickers while scrolling.
+function check(){var on=hd.classList.contains("fg-solid");
+if(!on){var own=rgb(getComputedStyle(hd).backgroundColor);if(own&&(own.length===3||own[3]>0.5))return;var link=hd.querySelector("nav a,a");if(!link)return;fg0=rgb(getComputedStyle(link).color)}
+if(!fg0)return;var want;
 // On a phone a see-through header over the page's words is a jumble whatever the colours: past the first screen it is always solid.
-if(innerWidth<900&&scrollY>innerHeight*0.6){solid();return}
-var link=hd.querySelector("nav a,a");if(!link)return;var fg=rgb(getComputedStyle(link).color);var bg=behind();if(!fg||!bg)return;
-var a=lum(fg),b=lum(bg);if((Math.max(a,b)+0.05)/(Math.min(a,b)+0.05)<2.5)solid()}
+if(innerWidth<900&&scrollY>innerHeight*0.6)want=true;else{var bg=behind();if(!bg)return;var a=lum(fg0),b=lum(bg);want=(Math.max(a,b)+0.05)/(Math.min(a,b)+0.05)<2.5}
+if(want&&!on)solid();else if(!want&&on)hd.classList.remove("fg-solid")}
 function solid(){
 hd.querySelectorAll("a,button,summary,span,[class*=brand i],[class*=logo i]").forEach(function(el){if(el.closest(".dd-panel,[class*=panel i],[class*=dropdown i],[class*=menu-overlay i]"))return;for(var n=el;n&&n!==hd;n=n.parentElement){var c=rgb(getComputedStyle(n).backgroundColor);if(c&&!(c.length>=4&&c[3]<0.3))return}el.setAttribute("data-fg-ink","")});
 hd.classList.add("fg-solid")}
@@ -366,4 +370,40 @@ if(!over())return;var nav=hd.querySelector("nav");if(nav){nav.style.gap="4px";[]
 if(over())[].forEach.call(hd.querySelectorAll('a[href^="tel:"]'),function(a){[].forEach.call(a.childNodes,function(n){if(n.nodeType===3&&n.textContent.trim()){var s=document.createElement("span");s.textContent=n.textContent;s.style.cssText="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)";n.replaceWith(s)}})});
 if(nav){var links=[].filter.call(nav.children,function(x){return x.getBoundingClientRect().width>0});for(var k=links.length-1;k>0&&over();k--)links[k].style.display="none"}}
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(fit,100)});else setTimeout(fit,500);addEventListener("resize",function(){clearTimeout(fit.t);fit.t=setTimeout(fit,300)})})();
+
+// Before/after pairs shown as two separate pictures become one drag slider (the "after" revealed over the
+// "before"), which works with a mouse, a finger or the keyboard. A pair already inside a slider is left alone.
+(function(){var done=[];document.querySelectorAll('main img[src*="-before."]').forEach(function(bi){var m=bi.getAttribute("src").match(/ba-(\\d+)-before\\./);if(!m)return;
+var ai=document.querySelector('main img[src*="ba-'+m[1]+'-after."]');if(!ai||done.indexOf(m[1])>=0)return;
+for(var n=bi.parentElement;n&&n.tagName!=="MAIN";n=n.parentElement){if(n.querySelector('input[type=range]')||/compare|slider|juxta|ba-?slide/i.test(n.className&&n.className.baseVal===undefined?n.className:""))return;if(n.contains(ai))break}
+var row=bi.parentElement;while(row&&!row.contains(ai))row=row.parentElement;if(!row||row.tagName==="MAIN")return;
+function tileOf(img){var t=img;while(t.parentElement!==row)t=t.parentElement;return t}var bt=tileOf(bi),at=tileOf(ai);if(bt===at)return;done.push(m[1]);
+var r=bt.getBoundingClientRect(),w=document.createElement("div");w.className="fg-ba";w.setAttribute("role","group");w.setAttribute("aria-label","Before and after");
+w.style.aspectRatio=(bi.naturalWidth&&bi.naturalHeight?bi.naturalWidth+" / "+bi.naturalHeight:"4 / 3");
+var b=document.createElement("img");b.src=bi.src;b.alt=bi.alt||"Before";var cl=document.createElement("div");cl.className="fg-ba-after";var a=document.createElement("img");a.src=ai.src;a.alt=ai.alt||"After";cl.appendChild(a);
+var line=document.createElement("div");line.className="fg-ba-line";line.innerHTML="<span></span>";var lb=document.createElement("b");lb.className="fg-ba-l";lb.textContent="Before";var la=document.createElement("b");la.className="fg-ba-r";la.textContent="After";
+var inp=document.createElement("input");inp.type="range";inp.min="0";inp.max="100";inp.value="50";inp.setAttribute("aria-label","Drag to compare before and after");
+function set(v){cl.style.clipPath="inset(0 0 0 "+v+"%)";line.style.left=v+"%"}inp.addEventListener("input",function(){set(inp.value)});set(50);
+[b,cl,line,lb,la,inp].forEach(function(x){w.appendChild(x)});
+var box=document.createElement(bt.tagName==="LI"?"li":"div");box.className="fg-ba-box";box.appendChild(w);row.insertBefore(box,bt);bt.style.display="none";at.style.display="none";
+var cs=getComputedStyle(row);if(cs.display.indexOf("grid")>=0)box.style.gridColumn="1 / -1"})})();
+
+// A page that already ends with a big call to action, followed by a footer that opens with another one (two
+// full-screen "get a quote" blocks in a row): the footer's copy is hidden.
+(function(){var main=document.querySelector("main"),ft=document.querySelector("body>footer,footer");if(!main||!ft)return;
+var CTA=/quote|book|reserve|enquir|contact|call|visit|appointment|estimate|order|get in touch|plan/i;
+function isCta(el){if(!el)return false;var r=el.getBoundingClientRect();if(r.height<250)return false;var as=[].filter.call(el.querySelectorAll("a,button"),function(a){return CTA.test(a.textContent||"")||CTA.test(a.getAttribute("href")||"")});var t=(el.innerText||"").trim().length;return as.length>0&&t<600&&!el.querySelector("form,nav,ul li a[href] ~ a")}
+var last=main.lastElementChild;while(last&&(last.offsetHeight===0||/^(SCRIPT|STYLE)$/.test(last.tagName)))last=last.previousElementSibling;
+var first=ft.firstElementChild;if(!first||first.querySelector("nav,ul"))return;
+if(isCta(last)&&isCta(first))first.style.display="none"})();
+
+// Desktop footers: a column that collides with another and drops to a row of its own while the right of the
+// grid stands empty (a CSS rule that counted the columns by element type) moves into that empty space.
+(function(){function fix(){if(innerWidth<900)return;var ft=document.querySelector("body>footer,footer");if(!ft)return;
+ft.querySelectorAll("*").forEach(function(g){var cs=getComputedStyle(g);if(cs.display.indexOf("grid")<0)return;var cols=cs.gridTemplateColumns.split(" ").length;if(cols<4)return;
+var kids=[].filter.call(g.children,function(k){return k.offsetHeight>0});if(kids.length<3)return;var top=kids[0].getBoundingClientRect().top;
+var first=kids.filter(function(k){return Math.abs(k.getBoundingClientRect().top-top)<4}),rest=kids.filter(function(k){return first.indexOf(k)<0});if(!rest.length||rest.length>2)return;
+var end=0;first.forEach(function(k){var e=parseInt(getComputedStyle(k).gridColumnEnd,10);if(e>end)end=e});if(!end||cols+1-end<2)return;
+var at=end;rest.forEach(function(k){if(cols+1-at<2)return;var span=Math.min(cols+1-at,Math.max(2,(parseInt(getComputedStyle(k).gridColumnEnd,10)-parseInt(getComputedStyle(k).gridColumnStart,10))||2));k.style.gridColumn=at+" / "+(at+span);k.style.gridRow="1";at+=span})})}
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(fix,300)});else setTimeout(fix,800)})();
 }catch(x){}};`;

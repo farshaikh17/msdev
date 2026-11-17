@@ -101,6 +101,20 @@ export function samplesNotPlaceholders(html: string): string {
   );
 }
 
+/**
+ * One credit line per page. Some designs wrote their own "Made with ♥ by Mianro Systems" into the footer and
+ * ours was added as well (two lines). Ours then takes the place of theirs, and the extra one goes.
+ */
+export function oneCredit(footer: string, credit: string): string {
+  if (!credit) return footer;
+  const at = footer.indexOf(credit);
+  if (at < 0) return footer;
+  const OTHER = /Made with\s*(?:<span\b[^>]*>\s*(?:♥|❤️?|&hearts;|love)?\s*<\/span>|♥|❤️?|&hearts;|love)?\s*by\s*(?:<a\b[^>]*>\s*)?Mianro Systems(?:\s*<\/a>)?/i;
+  const without = (footer.slice(0, at) + "\u0000" + footer.slice(at + credit.length)).replace(/<p>\s*\u0000\s*<\/p>/, "\u0000");
+  if (!OTHER.test(without.replace("\u0000", ""))) return footer;
+  return without.replace("\u0000", "").replace(OTHER, credit);
+}
+
 /** Call links with no number in them ("tel:", "tel:+1") go nowhere: they are taken out of the page. */
 export function dropEmptyCalls(html: string): string {
   return html.replace(/<a\b[^>]*href\s*=\s*["']tel:([^"']*)["'][^>]*>[\s\S]*?<\/a>/gi, (m, v: string) => (v.replace(/\D/g, "").length < 10 ? "" : m));
@@ -120,7 +134,7 @@ export function assemble(kit: Kit, page: PageDraft, slug: string, credit: string
 ${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${HEADER_CSS}\n${HERO_CSS}\n${CREDIT_CSS}\n${QA_CSS}${studio ? MOTION_CSS : ""}</style></head><body>
 ${kit.header}
 ${dropEmptyCalls(samplesNotPlaceholders(/<main\b[^>]*\sid\s*=/i.test(page.body) ? page.body : page.body.replace(/<main\b/i, '<main id="main"')))}
-${kit.footer.split(CREDIT_MARKER).join(credit).replace(/(©|&copy;)(\s*)20\d\d(?!\s*[-–])/g, `$1$2${new Date().getUTCFullYear()}`)}
+${oneCredit(kit.footer.split(CREDIT_MARKER).join(credit), credit).replace(/(©|&copy;)(\s*)20\d\d(?!\s*[-–])/g, `$1$2${new Date().getUTCFullYear()}`)}
 <script>${kit.script}</script><script>${QA_JS}</script>${studio ? motionScripts() : ""}</body></html>`;
   // The QA standards that need no judgement: +1 on phone links, legal links always in the footer.
   const legal = (path: string) => !pagesOf(kit).some((p) => p.path === path) || new RegExp(`href\\s*=\\s*["']${path}["']`, "i").test(kit.footer);

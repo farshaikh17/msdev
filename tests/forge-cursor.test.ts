@@ -1,6 +1,6 @@
 // Every Studio look has its own pointer, not one cursor shared by every site.
 import { describe, expect, it } from "vitest";
-import { assemble, dropEmptyCalls, samplesNotPlaceholders } from "../cloudflare/forge/src/site";
+import { assemble, dropEmptyCalls, oneCredit, samplesNotPlaceholders } from "../cloudflare/forge/src/site";
 import { MOTION_CSS } from "../cloudflare/forge/src/motion";
 import { QA_CSS, QA_JS } from "../cloudflare/forge/src/qa";
 import { FACTS } from "../cloudflare/forge/src/review";
@@ -72,5 +72,24 @@ describe("the pointer", () => {
     expect(dropEmptyCalls('<p>Hi <a class="b" href="tel:+1">Call the desk</a> <a href="tel:">x</a></p>')).toBe("<p>Hi  </p>");
     const real = '<a href="tel:+13056675657">Call</a>';
     expect(dropEmptyCalls(real)).toBe(real);
+  });
+  it("keeps one credit line when a design wrote its own", () => {
+    const ours = '<span class="mianro-credit">Made with <span class="mianro-heart" role="img" aria-label="love">♥</span> by <a href="https://www.mianrosystems.com/">Mianro Systems</a></span>';
+    const footer = `<footer><div class="fb"><span>© 2026 Bright Path.</span> <span>Made with <span class="heart" aria-label="love">♥</span> by Mianro Systems</span></div><p>${ours}</p></footer>`;
+    const out = oneCredit(footer, ours);
+    expect(out.split("Mianro Systems").length - 1).toBe(1);
+    expect(out).toContain(`<span>${ours}</span></div>`);
+    // A footer with only ours is left alone.
+    const plain = `<footer>${ours}</footer>`;
+    expect(oneCredit(plain, ours)).toBe(plain);
+  });
+  it("ships the before/after slider, the duplicate-CTA and footer-column fixes, and a header check that never flickers", () => {
+    expect(QA_JS).toContain("Before/after pairs shown as two separate pictures become one drag slider");
+    expect(QA_CSS).toContain(".fg-ba{position:relative");
+    expect(QA_JS).toContain("the footer's copy is hidden");
+    expect(QA_JS).toContain("Desktop footers: a column that collides");
+    expect(QA_JS).toContain("only changes the class");
+    expect(QA_JS).not.toContain('if(hd.classList.contains("fg-solid")){hd.classList.remove("fg-solid")}');
+    expect(() => new Function(QA_JS)).not.toThrow();
   });
 });
