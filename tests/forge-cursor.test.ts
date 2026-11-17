@@ -1,6 +1,6 @@
 // Every Studio look has its own pointer, not one cursor shared by every site.
 import { describe, expect, it } from "vitest";
-import { assemble, samplesNotPlaceholders } from "../cloudflare/forge/src/site";
+import { assemble, dropEmptyCalls, samplesNotPlaceholders } from "../cloudflare/forge/src/site";
 import { MOTION_CSS } from "../cloudflare/forge/src/motion";
 import { QA_CSS, QA_JS } from "../cloudflare/forge/src/qa";
 import { FACTS } from "../cloudflare/forge/src/review";
@@ -67,5 +67,10 @@ describe("the pointer", () => {
     expect(MOTION_CSS).toContain(".m-parts-off{display:block!important");
     expect(MOTION_CSS).toContain("calc(170vw / var(--m-len,6))");
     expect(() => new Function(QA_JS)).not.toThrow();
+  });
+  it("takes call links with no number out of the page, and keeps real ones", () => {
+    expect(dropEmptyCalls('<p>Hi <a class="b" href="tel:+1">Call the desk</a> <a href="tel:">x</a></p>')).toBe("<p>Hi  </p>");
+    const real = '<a href="tel:+13056675657">Call</a>';
+    expect(dropEmptyCalls(real)).toBe(real);
   });
 });

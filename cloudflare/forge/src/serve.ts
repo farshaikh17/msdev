@@ -29,6 +29,7 @@ import { companionFor, flightPath, heroById } from "./heroes";
 import { HERO_CLIP, heroClipId } from "./media";
 import { assemble, chatWidget, creditFor, finish, templateCredit, widgetFor } from "./site";
 import { sha256Hex } from "./crypto";
+import { privacyPage, termsPage } from "./legal";
 import { pitchPage } from "./pitch";
 import { getTenant } from "./tenants";
 import { deliver } from "./webhook";
@@ -128,8 +129,10 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
     const path = before ? "/" : sub || "/";
     const kit = await getKit(env, slug, demo.liveVersion);
     if (!kit) return text("This page isn't available.", 404);
-    if (!pagesOf(kit).some((p) => p.path === path)) return Response.redirect(new URL(prefix || "/", req.url).toString(), 302);
-    const page = await getPage(env, slug, demo.liveVersion, before ? BEFORE_PAGE : path);
+    // Every site has its privacy and terms pages (sites from before they were added get them made on the spot).
+    const legal = path === "/privacy" ? privacyPage : path === "/terms" ? termsPage : null;
+    if (!legal && !pagesOf(kit).some((p) => p.path === path)) return Response.redirect(new URL(prefix || "/", req.url).toString(), 302);
+    const page = (await getPage(env, slug, demo.liveVersion, before ? BEFORE_PAGE : path)) ?? (legal && !before ? legal(demo.intake) : null);
     if (!page && before) return Response.redirect(new URL(prefix || "/", req.url).toString(), 302);
     if (!page) return text("This page isn't available.", 404);
     html = assemble(kit, page, slug, creditFor(tenant));

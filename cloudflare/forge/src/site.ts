@@ -101,6 +101,11 @@ export function samplesNotPlaceholders(html: string): string {
   );
 }
 
+/** Call links with no number in them ("tel:", "tel:+1") go nowhere: they are taken out of the page. */
+export function dropEmptyCalls(html: string): string {
+  return html.replace(/<a\b[^>]*href\s*=\s*["']tel:([^"']*)["'][^>]*>[\s\S]*?<\/a>/gi, (m, v: string) => (v.replace(/\D/g, "").length < 10 ? "" : m));
+}
+
 /** One page of a multi-page site as a full HTML document. */
 export function assemble(kit: Kit, page: PageDraft, slug: string, credit: string = CREDIT): string {
   const key = JSON.stringify(`fg-theme-${slug}`);
@@ -114,7 +119,7 @@ export function assemble(kit: Kit, page: PageDraft, slug: string, credit: string
 <title>${esc(page.title)}</title>${icon}<meta name="description" content="${esc(page.description)}"><meta name="robots" content="noindex">
 ${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${HEADER_CSS}\n${HERO_CSS}\n${CREDIT_CSS}\n${QA_CSS}${studio ? MOTION_CSS : ""}</style></head><body>
 ${kit.header}
-${samplesNotPlaceholders(/<main\b[^>]*\sid\s*=/i.test(page.body) ? page.body : page.body.replace(/<main\b/i, '<main id="main"'))}
+${dropEmptyCalls(samplesNotPlaceholders(/<main\b[^>]*\sid\s*=/i.test(page.body) ? page.body : page.body.replace(/<main\b/i, '<main id="main"')))}
 ${kit.footer.split(CREDIT_MARKER).join(credit).replace(/(©|&copy;)(\s*)20\d\d(?!\s*[-–])/g, `$1$2${new Date().getUTCFullYear()}`)}
 <script>${kit.script}</script><script>${QA_JS}</script>${studio ? motionScripts() : ""}</body></html>`;
   // The QA standards that need no judgement: +1 on phone links, legal links always in the footer.
