@@ -333,13 +333,18 @@ if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){set
 
 // Any screen: the main headline's words never run past the edge of the screen (or are cut off by their box):
 // it is set smaller until its last line ends inside, down to 55% of its size.
-(function(){function clear(h){var r=document.createRange();r.selectNodeContents(h);var lines=[].filter.call(r.getClientRects(),function(x){return x.width>2});if(!lines.length)return;
+(function(){// The headline's visible lines only: text in a screen-reader-only part (clipped, 1px, hidden, transparent or
+// moved off the screen on purpose) doesn't count.
+function shown(el,h){for(var n=el;n&&n!==h.parentElement;n=n.parentElement){var c=getComputedStyle(n),b=n.getBoundingClientRect();
+if(c.visibility==="hidden"||c.display==="none"||parseFloat(c.opacity)===0||(b.width<=2&&b.height<=2)||(c.clip&&c.clip!=="auto")||(c.clipPath||"").indexOf("inset(50%")>=0||(c.clipPath||"").indexOf("inset(100%")>=0||/sr-only|visually-hidden|screen-reader/i.test(n.className&&n.className.baseVal===undefined?n.className:""))return false}return true}
+function rects(h){var out=[],w=document.createTreeWalker(h,NodeFilter.SHOW_TEXT),t;while((t=w.nextNode())){if(!t.textContent.trim()||!shown(t.parentElement,h))continue;var r=document.createRange();r.selectNodeContents(t);[].forEach.call(r.getClientRects(),function(x){if(x.width>2)out.push(x)})}return out}
+function clear(h){var lines=rects(h);if(!lines.length)return;
 var top=Math.min.apply(null,lines.map(function(x){return x.top})),bot=Math.max.apply(null,lines.map(function(x){return x.bottom})),L=Math.min.apply(null,lines.map(function(x){return x.left})),R=Math.max.apply(null,lines.map(function(x){return x.right}));
 var sec=h.closest("section")||h.parentElement;[].forEach.call(sec.querySelectorAll("*"),function(e){if(e.contains(h)||h.contains(e))return;var st=getComputedStyle(e);if(st.position!=="absolute"||!(e.textContent||"").trim()||e.closest("[aria-hidden=true]"))return;
 var b=e.getBoundingClientRect();if(!(b.width&&b.left<R&&b.right>L&&b.top<bot&&b.bottom>top))return;
 var room=sec.getBoundingClientRect().bottom-bot-24;if(room>=b.height){e.style.top=(parseFloat(st.top)||0)+(bot+16-b.top)+"px";e.style.bottom="auto"}else e.style.visibility="hidden"})}
 function fit(){var h=document.querySelector("main h1");if(!h)return;setTimeout(function(){clear(h)},60);var W=document.documentElement.clientWidth,cs=getComputedStyle(h),fs=parseFloat(cs.fontSize),min=fs*0.55,n=0;
-function out(){var r=document.createRange();r.selectNodeContents(h);var rs=r.getClientRects(),box=h.parentElement.getBoundingClientRect();for(var i=0;i<rs.length;i++){if(rs[i].width<2)continue;if(rs[i].right>W-6||rs[i].left<0)return true}return h.scrollWidth>h.clientWidth+2}
+function out(){var rs=rects(h);for(var i=0;i<rs.length;i++){if(rs[i].right>W-6||rs[i].left<0)return true}return false}
 if(!out())return;
 // First let it wrap inside the room it has; only then make it smaller.
 var left=Math.max(0,h.getBoundingClientRect().left);h.style.whiteSpace="normal";h.style.overflowWrap="break-word";h.style.maxWidth=Math.max(240,W-left-24)+"px";
