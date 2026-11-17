@@ -52,6 +52,16 @@ describe("the QA lint", () => {
     expect(found.find((i) => i.rule === "pictures")!.what).toContain("2 empty photo boxes");
   });
 
+  it("a made-up 555 number on a page is sent back, unless the business was entered with it", () => {
+    const body = '<main><h1>Acme</h1><a href="tel:+13075550142">Call (307) 555-0142</a><form></form></main>';
+    expect(lintSite(kit(), specs, withHome(body), { phone: "(646) 594-9379" }).map((i) => i.rule)).toContain("phone");
+    expect(lintSite(kit(), specs, withHome(body), { phone: "(307) 555-0142" }).map((i) => i.rule)).not.toContain("phone");
+  });
+
+  it("the B&B before/after wording counts as an empty photo box", () => {
+    expect(rules(kit(), withHome('<main><h1>Acme</h1><p>When we have genuine before and after photos of a room update, they go here.</p><form></form></main>'))).toContain("/:pictures");
+  });
+
   it("the logo must link home, in the header and in the footer", () => {
     expect(rules(kit({ header: '<header><span class="logo">Acme</span><a href="/services">Services</a></header>' }))).toContain("site:logo");
     expect(rules(kit({ footer: '<footer><img src="logo.png" alt="Acme"><a href="/privacy">Privacy</a><a href="/terms">Terms</a></footer>' }))).toContain("site:logo");

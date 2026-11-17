@@ -16,6 +16,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "forge:qa": "bash cloudflare/forge/qa/run.sh",
+    "forge:sitecheck": "NODE_PATH=\"$(npm root -g):$PWD/node_modules\" node cloudflare/forge/qa/sitecheck.mjs",
     "forge:dev": "wrangler dev -c cloudflare/forge/wrangler.jsonc",
     "forge:deploy": "wrangler d1 migrations apply forge-demo --remote -c cloudflare/forge/wrangler.jsonc && wrangler deploy -c cloudflare/forge/wrangler.sites.jsonc && wrangler deploy -c cloudflare/forge/wrangler.jsonc"
   },

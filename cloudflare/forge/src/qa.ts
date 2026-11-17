@@ -143,6 +143,9 @@ export function lintSite(kit: Kit, specs: PageSpec[], pages: { path: string; pag
     checkLinks(path, page.body, ids, "dead-link");
     const empty = (page.body.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, " ").match(new RegExp(EMPTY_PHOTO.source, "gi")) ?? []).length;
     if (empty) add(path, "pictures", `The page has ${empty} empty photo box${empty === 1 ? "" : "es"} ("photos appear here" placeholders). Put one of the site's photos (listed in the business facts) in each, as an <img> with object-fit: cover and a descriptive alt, using different photos or crops; remove the placeholder icon and wording. An empty before/after area with no pair of pictures is removed entirely.`);
+    // A made-up "555" phone number (unless it is the number the business was entered with).
+    const fake = page.body.match(/\(?\b\d{3}\)?[\s.-]*555[\s.-]*01\d\d\b/);
+    if (fake && !(opts.phone ?? "").includes("555")) add(path, "phone", `The page shows a made-up phone number (${fake[0]}). Use the business's real number from the facts everywhere, or leave the number out.`);
     const heads = [...page.body.matchAll(/<h([1-3])\b[^>]*>([\s\S]*?)<\/h\1>/gi)].map((m) => ({ level: Number(m[1]), text: text(m[2] ?? "") }));
     const h1 = heads.filter((h) => h.level === 1).length;
     if (h1 !== 1) add(path, "h1", `The page has ${h1} main headings (h1); it needs exactly one.`);
