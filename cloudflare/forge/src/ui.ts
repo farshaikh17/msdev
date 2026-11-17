@@ -389,7 +389,7 @@ function siteCard(d: Listed, url: string): string {
       : letter;
   return `<article class="site-card"><a class="thumb" href="/demos/${esc(d.slug)}" aria-label="${esc(d.businessName)}">${thumb}</a>
 <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><div style="min-width:0"><a class="site-name" href="/demos/${esc(d.slug)}">${esc(d.businessName)}</a><div class="note">${esc([d.city, d.createdAt.slice(0, 10)].filter(Boolean).join(" · "))}</div></div>${state}</div>
-<div class="row" style="justify-content:space-between"><div class="row"><a class="btn ghost" href="/demos/${esc(d.slug)}">Open</a><button class="btn ghost" data-copy="${esc(url)}">Copy link</button></div>${d.buildStatus === "ready" || d.leadStatus !== "new" ? leadPill(d.leadStatus) : ""}</div></article>`;
+<div class="row" style="justify-content:space-between"><div class="row"><a class="btn ghost" href="/demos/${esc(d.slug)}">Open</a><a class="btn ghost" href="${esc(url)}" target="_blank" rel="noopener">Open link</a></div>${d.buildStatus === "ready" || d.leadStatus !== "new" ? leadPill(d.leadStatus) : ""}</div></article>`;
 }
 
 export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string, leadFilter = "", reuseFrom = "", photos = true): Response {
