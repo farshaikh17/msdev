@@ -218,13 +218,16 @@ const SHAPES: ShapeDef[] = [
 ];
 
 /** Standard sites' first screen: varied so they don't all open the same way. */
-const STANDARD_HEROES = [
-  { id: "split", spec: "SPLIT: the first screen is two halves. The headline, sentence and buttons sit on a solid panel of the background colour on the left (or right); the moving picture fills a tall frame on the other half that runs to the screen's edge. The .hero-motion layer goes inside that frame (as its first child), not behind the text, so no overlay is needed on the words." },
-  { id: "fullbleed", spec: "FULL BLEED: the moving picture fills the whole first screen; the words sit low on the left over a directional gradient that darkens only behind them." },
-  { id: "typefirst", spec: "TYPE FIRST: the first screen opens with the headline set very large on a solid colour field (the accent or the ink colour), then the moving picture as a wide band (about 52vh) directly under it, full width. The .hero-motion layer goes inside that band." },
-  { id: "framed", spec: "FRAMED: the moving picture sits in a large inset frame (about 88% of the width, rounded per the shape language), and a solid card holding the headline, sentence and buttons overlaps the frame's bottom-left corner. The .hero-motion layer goes inside the frame." },
-  { id: "collage", spec: "COLLAGE: the headline and buttons on the left; on the right three pictures at different sizes in an offset arrangement (one large, two small, slightly overlapping). The .hero-motion layer fills the large one; the other two are photos from the list." },
-  { id: "centered", spec: "CENTRED STAGE: a centred headline and sentence on a calm solid background, with the moving picture below them in a wide, short frame (about 16:7) and the buttons between; generous space all round. The .hero-motion layer goes inside the frame." },
+// First-screen layouts for Standard sites, after taste-skill's hero compositions (MIT; see ./taste).
+// "place" suits a business people visit (food, rooms, shops, venues); "service" one that comes to you.
+const STANDARD_HEROES: { id: string; fits: "place" | "service" | "any"; spec: string }[] = [
+  { id: "place-band", fits: "place", spec: "PLACE BAND: right under the header the moving picture runs as a full-width band about 56vh tall with nothing on it (no words, no tint); under it, inside the content column, the h1 on the left half (about 48px, max two lines) and, starting at the column's midpoint, the sentence and one button. All of it ends inside the first screen. The .hero-motion layer goes inside the band. No overlay." },
+  { id: "letterbox", fits: "place", spec: "LETTERBOX: the moving picture sits inside the content column as a wide frame (about 1200x500, square or barely rounded corners) 24px under the header; under it the h1 on the left and the sentence plus one button from the column's midpoint, level with the h1's top. The .hero-motion layer goes inside the frame. No overlay, no words on the picture." },
+  { id: "split", fits: "any", spec: "SPLIT: text on the left five columns (h1 at the top, sentence, two buttons, up to three short real facts); the moving picture on the right half, top-aligned with the h1 and ending on the column's right edge, tall (about 70vh). Optionally one small opaque card on the picture's lower-left corner with one real fact. The .hero-motion layer goes inside the picture's frame. No overlay." },
+  { id: "subject-stage", fits: "any", spec: "SUBJECT STAGE: a head row first: the h1 on the left seven columns in two lines; the sentence and buttons stacked on the right four columns, their foot level with the h1's foot. Below it the moving picture as a wide stage across the whole column down to 24px above the fold, square corners. The .hero-motion layer goes inside the stage. No overlay." },
+  { id: "calm-side", fits: "service", spec: "CALM SIDE: the moving picture fills the whole first screen; the words (h1 about 72-80px on two lines, sentence, buttons) sit on its calmer left side across six columns, with up to four real facts in a row at the foot. Only a soft directional shade on that side keeps them readable (the rest of the picture stays clear). On phones the words move under a shorter picture. The .hero-motion layer is the section's first child." },
+  { id: "oversized", fits: "service", spec: "OVERSIZED WORDS: the h1 set very large (about 120-144px on two lines, phone 52px) on the plain ground at the top; under it on the left half the sentence and buttons, and on the right half the moving picture in a wide frame (about 4:3) whose top is level with the sentence. The .hero-motion layer goes inside that frame. No overlay." },
+  { id: "triptych", fits: "any", spec: "TRIPTYCH: the h1 (about 52px) on the left three columns with the sentence and one large button; on the remaining columns a still collage of three pictures at one ratio family (one large, two smaller, edges on the column lines, never overlapping text). The .hero-motion layer fills the large one; the other two are photos from the list." },
 ];
 
 export interface Dna {
@@ -318,8 +321,12 @@ export function pickDna(look: string, slug: string, recent: Recent[] = [], brand
   let hero: (typeof STANDARD_HEROES)[number] | undefined;
   if (standard) {
     const avoid = used(4).slice(0, 3);
-    const fresh = STANDARD_HEROES.filter((h) => !avoid.includes(h.id));
-    const from = fresh.length ? fresh : STANDARD_HEROES;
+    const place = trades.some((t) => ["restaurant", "cafe", "bakery", "hotel", "retail"].includes(t));
+    const service = trades.some((t) => ["workshop", "clinic", "law", "agency", "wellness"].includes(t));
+    const kind = place && !service ? "place" : service && !place ? "service" : "any";
+    const suited = STANDARD_HEROES.filter((h) => kind === "any" || h.fits === "any" || h.fits === kind);
+    const fresh = suited.filter((h) => !avoid.includes(h.id));
+    const from = fresh.length ? fresh : suited;
     hero = from[hash(`${slug}:hero`) % from.length]!;
   }
   return {

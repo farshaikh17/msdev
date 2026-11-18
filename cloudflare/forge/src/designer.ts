@@ -221,13 +221,13 @@ export function sitemapFor(i: Intake, suggested: string[] = []): PageSpec[] {
         "/",
         "Home",
         `At least 12 substantive sections between the header and footer, in this order:
-1. Hero: full-bleed, with the motion layer described in the design system as its background (not a photo beside the text): a headline specific to this business, one sentence of promise, primary and secondary buttons (${p.cta.name} → ${p.cta.path}, and ${p.items.name} → ${p.items.path} or the phone), trust points.
-2. Trust strip: only verified facts given to you; otherwise qualitative points without numbers. The marquee ticker may sit here.
+1. First screen: in the layout the design system describes, with its motion layer: a headline specific to this business, one sentence of promise, primary and secondary buttons (${p.cta.name} → ${p.cta.path}, and ${p.items.name} → ${p.items.path} or the phone), trust points.
+2. Trust: only verified facts given to you; otherwise qualitative points without numbers. Set them inside the next section or the first screen, never as a thin strip of their own.
 ${p.home.map((h, n) => `${n + 3}. ${fill(h)}`).join("\n")}
 ${p.home.length + 3}. Reviews: real reviews, or clearly-labelled sample reviews; link to /reviews.
 ${p.home.length + 4}. FAQs: 5–6 practical questions (${p.faq}) as an accordion; link to /faq.
 ${p.home.length + 5}. A visible "${p.cta.name}" form (${p.cta.form}) with the privacy note, placed before the final CTA.
-${p.home.length + 6}. Final call to action band.`,
+${p.home.length + 6}. Close: the final call to action with a photo not used above.`,
       ),
       ai("/about", "About", p.about),
       ai(
@@ -261,8 +261,8 @@ ${p.home.length + 6}. Final call to action band.`,
       "/",
       "Home",
       `At least 12 substantive sections between the header and footer, in this order:
-1. Hero: full-bleed, with the motion layer described in the design system as its background (not a photo beside the text): niche-specific headline, one sentence of promise, primary and secondary buttons (Get a quote → /quote, and the phone), trust points.
-2. Trust strip: only verified facts (licence, years, guarantees given to you); otherwise qualitative points without numbers. The marquee ticker may sit here.
+1. First screen: in the layout the design system describes, with its motion layer: niche-specific headline, one sentence of promise, primary and secondary buttons (Get a quote → /quote, and the phone), trust points.
+2. Trust: only verified facts (licence, years, guarantees given to you); otherwise qualitative points without numbers. Set them inside the next section or the first screen, never as a thin strip of their own.
 3. Services overview: a card for each service page, each card linking to its own page (${services.map((s) => s.path).join(", ")}), plus "All services" → /services.
 4. Before and after / results: genuine paired photos only if supplied (none are paired unless the facts list illustrative pairs, so show results with the business's own photos or the preview photos; never an empty photo box), linking to /gallery.
 5. Why choose us: 4–6 specific, supportable benefits.
@@ -273,7 +273,7 @@ ${p.home.length + 6}. Final call to action band.`,
 10. Reviews: real reviews, or clearly-labelled sample reviews; link to /reviews.
 11. FAQs: 5–6 practical questions (service, timing, pricing approach, preparation) as an accordion; link to /faq.
 12. Homepage quote form: a visible form (name, phone, email, service select, message) with the privacy note, placed before the final CTA.
-13. Final call to action band.`,
+13. Close: the final call to action with a photo not used above.`,
     ),
     ai(
       "/about",
@@ -658,6 +658,42 @@ Keep it usable: the 360px phone layout must be as considered as desktop (type si
 
 ${MOTION_API}`;
 
+/**
+ * The Standard edition's craft rules, distilled from taste-skill's rules for local-business pages
+ * (MIT, Leonxlnx; see ./taste/README.md): pictures lead, one idea per screen, equal edges, flat grounds.
+ */
+const STANDARD = `## Standard edition (this site is a Standard build: calm, photographic, exact)
+Our Standard sites win on restraint done precisely: the business's pictures lead, every screen holds one idea, and every edge lines up. They must look like a well-made site for a real local business, never like a template.
+
+The grid. One content column for header, every section and footer (about 1200-1280px wide, centred, 12 columns, 24px gutters; phones 20-24px side margins). Every block starts on the left edge or a column start and ends on a column end; anything wider than half the column runs the full column. Text starts on two lines only: the left edge and one split line (the column's midpoint), the same on every split section. Splits are always text left, picture right, top-aligned: never alternating sides. Headings start on the left; no centred block wider than half the column.
+
+Sections. Each section is about one screen of content (a long list may take two), opens with its one h2 at the top left (never a label above it), and fills the screen with a picture and its content: no thin strip sections, no lone element floating in empty ground. Separate sections only by space or by a full-width change of ground, never by rules, shadows or an inset coloured box. Never two neighbours with the same layout; a card layout at most twice per page; after two picture-heavy sections comes a calmer one (a price list, a quote, the FAQ). Pick ONE rhythm per page: one alternate-ground band, or one dark section at mid-page or later (never right under the first screen), or the closing section in the brand colour. Never more than one of these.
+
+Choose each section's layout from these (named for what they do; build the ones the pages need):
+- Visit split (right after the first screen for a place people visit): a panel on the alternate ground (48px padding) with h2 "Visit", the address as a map link, the phone link and the week's hours when known; the shopfront or room photo beside it.
+- Services list beside a photo: a ruled list (name, one line, a price only if given), each row closed by a 1px rule, at most 8 rows; a 4:5 or 4:3 photo of the work on the right half. Never a grid of icon cards.
+- Peek list: 3 to 6 named items; hovering or tapping a row swaps the single photo beside the list.
+- Price list: up to three groups side by side, rows of name left and price right in tabular figures, each row closed by its own hairline; only real prices.
+- Work grid: three to six job photos in rows of three or two, one ratio, no captions; linked ones lift 2px and their photo zooms 1.03 on hover.
+- Pair: two photos at one ratio side by side (before/after, inside/outside), tops level, nothing written under them; the line above says what they show.
+- Tall-small: a tall 4:5 photo on the left half; on the right the h2, a few lines and a link at the top and a square photo at the bottom, its foot level with the tall one.
+- Story row: the h2 and three to six lines on who runs it and what exactly they do, with one photo of the work on the right. Once per page.
+- Statement: one sentence at h2 size (first clause in ink, the rest muted), then a wide photo, then up to three real facts on hairlines.
+- Steps: three cards, each a small step number, a title of verb and object, one or two lines and an equal photo panel. Only with three real steps; no arrows, no giant numerals.
+- Reviews: one strong quote set large with the name and source under it, or three review cards (a one-line title of what happened, the review, name and source). No carousel, no invented stars.
+- FAQ split: h2 "Questions" with a contact link on the left; the questions on the right as accordions, each closed by a hairline.
+- Close: the h2 (8 words at most), one line and the main button, with a photo not used above.
+
+Pictures. Two or three per screen on a place's pages, one or two on a service's. Ratios 4:5, 4:3, 1:1 (and 3:2 for services); one ratio per row and equal sizes in a row; frames sit on column lines. No caption, label or credit on or under any photo, no text on photos outside the first screen, and no scrim, gradient, blur, filter, duotone or tilt on them. One corner radius for every photo (square corners for a place). A photo is never used twice on one page.
+
+Cards. Barely there: a fill one step off the ground or a 1px hairline at 10-14% ink, no shadow at rest; never a card inside a card. Card title one line at about 20px weight 500, then at most two lines of body in the main ink (never small grey text). Linked cards lift 2px on hover with a soft shadow and their photo zooms slightly inside its mask over about 600ms; unlinked cards never move.
+
+Type and colour. Headlines in weight 400-500 carried by size and tight tracking (-0.5% to -3% from 40px up), never heavy and huge; body 16-18px at about 1.6; labels sentence case, never tracked capitals; nothing under 13px; lines at most about 65 characters. Grounds are flat: the page ground, one alternate ground a step darker in the same hue for panels and one band, and at most one dark section. No gradients, grain, glass or patterns behind content; no violet or purple-to-blue.
+
+Movement. Quiet and once: the first screen's words rise in once; buttons and links have hover micro-animations (a 2px lift, an arrow nudging 3px, an underline growing); one or two scroll moments on the home page at most (for example a statement whose words go from muted to ink as it is scrolled, or one photo that develops from a faint print). Never a fade-in on every section. Respect prefers-reduced-motion.
+
+One main action, worded identically in the header, the first screen, the close and the phone call bar, and nowhere else as a filled button.`;
+
 export const ART_DIRECTION_FALLBACK = `Art direction first. Choose ONE strong concept that suits this business and commit to it on every page: editorial (oversized serif, asymmetric grids), kinetic (giant condensed grotesk, hard colour blocks), cinematic (near-black, full-bleed imagery, grain), or playful (chunky rounded type, bright colour). Pair the display face with a clean text face.`;
 
 const artDirection = (concept?: string, heroId?: string, idea?: Idea) => {
@@ -713,8 +749,28 @@ const IDEA_MOVEMENT = `Movement (every Studio home page; a direction's "ruled ou
 On the first screen: the headline splits (data-split), the sentence and the actions rise out of blur (data-reveal="blur"), and any floating piece has data-depth so the layers separate under the pointer.
 `;
 
+/** Sentences of the standing rules that the Standard edition replaces. */
+const STANDARD_SWAPS: [string, string][] = [
+  [
+    "- The home hero has a moving background (a video or slowly animating photos) that our system supplies. Build it as a full-bleed <section> with position:relative, overflow:hidden and a min-height of about 88vh (about 640px on phones) whose FIRST child is exactly <div class=\"hero-motion\" aria-hidden=\"true\"></div> (leave it empty and don't style it; our system fills and positions it), then a gradient overlay layer (position:absolute; inset:0) that keeps the text readable over any photo in both modes, then the content with position:relative and z-index:2. Inner pages keep a page hero without the motion layer.",
+    "- The home page's first screen follows the first-screen layout in this site's design DNA, and the whole of it (headline, sentence, buttons) fits in one screen at 1440x900 and 390x844. Our system supplies a moving picture: put exactly <div class=\"hero-motion\" aria-hidden=\"true\"></div> (empty, unstyled; our system fills and positions it) as the FIRST child of the element the layout puts the picture in, which has position:relative, overflow:hidden and its own size or aspect ratio. Words never sit on the picture unless the layout says so. Inner pages keep a page hero without the motion layer.",
+  ],
+  [
+    "- 1200px max content width, generous and VARIED vertical rhythm (≈96–128px between sections on desktop, not identical padding everywhere), soft 1px borders, cards rounded 12–16px (images and big panels up to 24px), subtle shadows, hover states on every interactive element, balanced headings (text-wrap: balance).",
+    "- About 120px above each section's h2 on desktop (96px on phones), corners and hairlines as the Standard edition below describes, hover states on every interactive element, balanced headings (text-wrap: balance).",
+  ],
+  [
+    "- The hero must work at a glance (our reviews mark these down every time): the photo or video stays recognisable, so darken only behind the text with a directional gradient, never a flat dark wash over the whole picture;",
+    "- The first screen must work at a glance (our reviews mark these down every time): the photo or video stays recognisable and is never washed over;",
+  ],
+];
+
 export const systemFor = (style: Style, concept?: string, heroId?: string, idea?: Idea) => {
-  if (style !== "studio") return SYSTEM;
+  if (style !== "studio") {
+    let base = SYSTEM;
+    for (const [from, to] of STANDARD_SWAPS) base = base.replace(from, to);
+    return base.replace("## Copy rules", `${STANDARD}\n\n## Copy rules`);
+  }
   let studio = STUDIO.replace("{{ART_DIRECTION}}", artDirection(concept, heroId, idea));
   let base = SYSTEM;
   if (idea) {
@@ -755,7 +811,7 @@ the primary colour as #rrggbb
 @@@ FONTS
 the Google Fonts <link> tags (preconnects + one stylesheet)
 @@@ CSS
-the whole site's stylesheet (no <style> tag): tokens for both modes, base, header (with a ${drop} dropdown that works on hover, keyboard focus and tap), footer, buttons, and every component the pages will use — home hero (with the motion layer and overlay described above), page hero with breadcrumb, marquee ticker, service cards, feature/why-us cards, process timeline, before/after and gallery tiles (always holding a photograph: there is no empty photo-space tile), map embed frame with place list, review cards, area cards, checklists, contact cards, forms (with .form-thanks, .form-error and the privacy note), FAQ accordion, CTA band, and legal pages (.legal: a readable article up to 760px wide with h1, h2, p, ul and a .legal-note callout).${index ? " Also what this kind of business needs: an opening-hours table, and a designed list for its offer (for a menu: rows of dish name, short description and an optional price slot, grouped under headings)." : ""}${style === "studio" ? " Also the Studio components this art direction needs: its display type scale, the hero composition it describes, and one component for each scene in its home page sequence (named after what it is in this direction, e.g. contents list, film strip, sign board, spec table), plus the full-screen menu overlay. Do not build components the direction rules out. Under about 35 KB: one rule per need, no unused or duplicate rules." : " Under about 35 KB."}
+the whole site's stylesheet (no <style> tag): tokens for both modes, base, header (with a ${drop} dropdown that works on hover, keyboard focus and tap), footer, buttons, and every component the pages will use — ${style === "studio" ? "home hero (with the motion layer and overlay described above), page hero with breadcrumb, marquee ticker, service cards, feature/why-us cards, process timeline, before/after and gallery tiles (always holding a photograph: there is no empty photo-space tile), map embed frame with place list, review cards, area cards, checklists, contact cards, forms (with .form-thanks, .form-error and the privacy note), FAQ accordion, CTA band" : "the first screen in this site's DNA layout (with the motion layer), page hero with breadcrumb, the 12-column container and split, and the Standard section layouts the pages need (visit split, services list beside a photo, peek list, price list, work grid, pair, tall-small, story row, statement, steps, reviews, FAQ split, close), photo frames at 4:5, 4:3 and 1:1, hover micro-animations, map embed frame with place list, forms (with .form-thanks, .form-error and the privacy note)"}, and legal pages (.legal: a readable article up to 760px wide with h1, h2, p, ul and a .legal-note callout).${index ? " Also what this kind of business needs: an opening-hours table, and a designed list for its offer (for a menu: rows of dish name, short description and an optional price slot, grouped under headings)." : ""}${style === "studio" ? " Also the Studio components this art direction needs: its display type scale, the hero composition it describes, and one component for each scene in its home page sequence (named after what it is in this direction, e.g. contents list, film strip, sign board, spec table), plus the full-screen menu overlay. Do not build components the direction rules out. Under about 35 KB: one rule per need, no unused or duplicate rules." : " Under about 35 KB."}
 @@@ HEADER
 the <header> element: logo/name linking to /, the main nav (${nav}), a phone link, a "${cta?.name ?? "Get a Quote"}" button to ${cta?.path ?? "/quote"}, the theme toggle, and the mobile menu (which lists every page above except the legal ones).
 @@@ FOOTER

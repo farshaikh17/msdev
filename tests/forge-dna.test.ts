@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dnaBrief, dnaTokens, fontFamilies, pickDna, recolor, recolorHtml, refont, sourceHues, tasteTrades, type Recent } from "../cloudflare/forge/src/dna";
-import { holdKitToDna, holdPageToDna, type Kit } from "../cloudflare/forge/src/designer";
+import { holdKitToDna, holdPageToDna, systemFor, type Kit } from "../cloudflare/forge/src/designer";
 
 describe("design DNA", () => {
   it("deals a run of sites different palettes, type, accents and never three dark sites in a row", () => {
@@ -100,5 +100,24 @@ describe("design DNA", () => {
     }
     // Most of a bakery's palettes come from the curated library.
     expect(recent.filter((r) => r.print.startsWith("t-")).length).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe("Standard edition", () => {
+  it("picks a first screen that suits the kind of business", () => {
+    const placeIds = ["place-band", "letterbox", "split", "subject-stage", "triptych"];
+    const serviceIds = ["split", "subject-stage", "calm-side", "oversized", "triptych"];
+    for (let i = 0; i < 12; i++) {
+      expect(placeIds).toContain(pickDna("standard", `cafe-${i}`, [], "", true, ["cafe"]).hero);
+      expect(serviceIds).toContain(pickDna("standard", `plumb-${i}`, [], "", true, ["workshop"]).hero);
+    }
+  });
+
+  it("gives Standard builds the taste rules and drops the overlay hero rule", () => {
+    const s = systemFor("standard");
+    expect(s).toContain("## Standard edition");
+    expect(s).toContain("first-screen layout in this site's design DNA");
+    expect(s).not.toContain("then a gradient overlay layer");
+    expect(systemFor("studio")).not.toContain("## Standard edition");
   });
 });
