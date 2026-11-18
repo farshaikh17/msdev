@@ -14,6 +14,8 @@ export interface Env {
   FORGE_ART_PASS?: string;
   /** "on" brings back the automatic rewrite after a quality check on sites without the art pass (off by default: it cost about $0.40 a time). */
   FORGE_AUTO_FIX?: string;
+  /** "off" stops the one cheap repair of a home page the scroll check found problems on. */
+  FORGE_SCAN_FIX?: string;
   /** The Workers AI model for Studio inner pages (default DeepSeek V4.1 Flash), or "claude" for Sonnet. */
   FORGE_INNER_MODEL?: string;
   /** Workers AI: a lower daily ceiling than the free 10,000 neurons (Forge never goes past the free amount). */

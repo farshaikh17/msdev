@@ -81,7 +81,10 @@ const AT_EACH_STOP = () => {
   if (document.documentElement.scrollWidth > vw + 2) iss.push("page scrolls sideways");
   // How much of the screen shows something (words, a picture, a painted background): sampled on a grid.
   let n = 0, t = 0;
+  // Pictures that pointer sampling can't reach (a background video under a layer with pointer-events: none).
+  const media = [...document.querySelectorAll("img,video,canvas,picture,iframe")].filter((m) => op(m) > 0.3).map((m) => m.getBoundingClientRect()).filter((r) => r.width > 40 && r.height > 40 && r.bottom > 0 && r.top < vh);
   for (let x = 20; x < vw; x += 60) for (let y = 90; y < vh; y += 60) {
+    if (media.some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)) { t++; n++; continue; }
     t++;
     // Looking through see-through layers (a tint over a photo is still a photo on screen).
     const stack = document.elementsFromPoint(x, y).slice(0, 8);

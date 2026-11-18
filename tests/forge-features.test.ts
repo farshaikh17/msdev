@@ -718,7 +718,7 @@ describe("the review's page visits", () => {
     // A standard site settles briefly...
     let r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, deps);
     expect(r.skipped).toBeUndefined();
-    expect(waits.filter((w) => w !== 500)).toEqual([1200, 1200, 1200]);
+    expect(waits.filter((w) => w !== 500 && w !== 450)).toEqual([1200, 1200, 1200]);
     // The other pages are opened at phone width too, with a short wait each.
     expect(waits.filter((w) => w === 500).length).toBeGreaterThanOrEqual(4);
     // ...a Studio site waits out its intro, and each screenshot comes after a wait.
@@ -727,7 +727,7 @@ describe("the review's page visits", () => {
     order.length = 0;
     r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, version, deps);
     expect(r.skipped).toBeUndefined();
-    expect(waits.filter((w) => w !== 500)).toEqual([5500, 5500, 5500]);
+    expect(waits.filter((w) => w !== 500 && w !== 450)).toEqual([5500, 5500, 5500]);
     expect(order.slice(0, 3)).toEqual(["goto", "wait", "shot"]);
   });
 });

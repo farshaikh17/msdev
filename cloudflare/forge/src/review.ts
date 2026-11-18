@@ -17,6 +17,7 @@ import { ownScreen } from "./brief";
 import Anthropic from "@anthropic-ai/sdk";
 import { getDemo, getKit, getPage, getReview, getSetting, saveImage, savePage, saveReview, setSetting, type Stored } from "./db";
 import { costOf, designSitePage, MODEL, pagesOf, parseParts, STUDIO_PAGE_MODEL, type Kit } from "./designer";
+import { pageFixable, scanNote, scrollScan } from "./scrollscan";
 import type { Env } from "./env";
 import { recordBuildCost } from "./tenants";
 
@@ -74,6 +75,9 @@ export interface Review {
   before?: number;
   /** The home page was written again with the notes. */
   fixed?: boolean;
+  /** The home page was repaired once for what the scroll check found (and why that didn't stick, if it didn't). */
+  scanFixed?: boolean;
+  scanFixError?: string;
   fixError?: string;
   consoleErrors?: string[];
   /** Inner pages that were wider than a phone screen, and whether each was repaired. */
@@ -168,6 +172,27 @@ async function rescore(env: Env, deps: ReviewDeps, url: string, settle: number, 
     await page.close();
     const crit = await deps.critique(env, { desktop, phone }, facts, studio);
     return { crit, desktop, phone };
+  } finally {
+    await browser.close().catch(() => undefined);
+    await addBrowserSeconds(env, (Date.now() - started) / 1000).catch(() => undefined);
+  }
+}
+
+/** Scroll the home page again on desktop and phone (after a repair) and return what is still found. */
+async function rescan(env: Env, deps: ReviewDeps, url: string, settle: number, sleep: (ms: number) => Promise<void>): Promise<string[] | null> {
+  if ((await browserUsed(env)).seconds >= BROWSER_BUDGET_SECONDS) return null;
+  const started = Date.now();
+  const browser = await deps.launch(env);
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 800 });
+    await visit(page, url, settle, sleep);
+    const found = await scrollScan(page, sleep);
+    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true });
+    await visit(page, url, settle, sleep);
+    for (const m of await scrollScan(page, sleep)) found.push(`phone: ${m}`);
+    await page.close();
+    return [...new Set(found)];
   } finally {
     await browser.close().catch(() => undefined);
     await addBrowserSeconds(env, (Date.now() - started) / 1000).catch(() => undefined);
@@ -688,6 +713,8 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     await visit(page, siteUrl, settle, sleep);
     const desktop = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
     const dFacts = factsOf(await page.evaluate<PageFacts>(FACTS));
+    // The scroll check, as a person scrolls (every build, both editions).
+    const scanned = await scrollScan(page, sleep).catch((e) => (console.log("scroll scan failed", slug, e instanceof Error ? e.message : String(e)), [] as string[]));
     // A Studio site: the screens below the first, as a visitor scrolling sees them.
     const studioSite = kit.style === "studio";
     const down = studioSite ? await scrollFrames(page, sleep, 8, 1000).catch(() => ({ frames: [] as Uint8Array[], blank: 0 })) : { frames: [] as Uint8Array[], blank: 0 };
@@ -695,6 +722,7 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     await visit(page, siteUrl, settle, sleep);
     const phone = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
     const pFacts = factsOf(await page.evaluate<PageFacts>(FACTS));
+    for (const m of await scrollScan(page, sleep).catch(() => [] as string[])) scanned.push(`phone: ${m}`);
     const phoneDown = studioSite ? await scrollFrames(page, sleep, 3, 800).catch(() => ({ frames: [] as Uint8Array[], blank: 0 })) : { frames: [] as Uint8Array[], blank: 0 };
     // The other main pages, at phone width: a layout that doesn't collapse pushes content off the screen.
     const wide: { path: string; px: number; fixed?: boolean }[] = [];
@@ -724,6 +752,8 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     );
     if (kit.style === "studio") checks.push(motionCheck(kit, dFacts));
     if (down.frames.length) checks.push({ id: "blank", label: "No blank screens while scrolling", ok: down.blank === 0, detail: down.blank ? `${down.blank} of ${down.frames.length} screens below the first look empty` : undefined });
+    const scan = [...new Set(scanned)];
+    checks.push({ id: "scroll-scan", label: "Nothing broken while scrolling (desktop and phone)", ok: !scan.length, detail: scan.length ? scan.slice(0, 4).join("; ") : undefined });
     checks.splice(2, 0, { id: "overflow-inner", label: "Other pages fit a phone screen", ok: !wide.length, detail: wide.length ? wide.map((x) => `${x.path} is ${x.px}px too wide`).join(", ") : undefined });
 
     // The business's current website, for the before/after.
@@ -762,6 +792,35 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     const shotSet: Shots = { desktop, phone, ...(down.frames.length ? { frames: down.frames } : {}), ...(phoneDown.frames.length ? { phoneFrames: phoneDown.frames } : {}) };
     const crit = await deps.critique(env, shotSet, facts + direction, studio);
     review = { at, ...(down.frames.length ? { blank: down.blank } : {}), ...(wide.length ? { wide } : {}), ...("lean" in crit && crit.lean ? { verdict: "Not critiqued: Claude is switched off (lean mode). The measured checks below still ran." } : { score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues }), checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
+
+    // The scroll check found something the home page itself causes: one cheap repair of just that
+    // (sent as edits), looked at again, and kept only if it leaves fewer problems. Once per version.
+    const fixable = scan.filter((m) => pageFixable(m.replace(/^phone: /, "")));
+    if (fixable.length && !prev?.scanFixed && env.FORGE_SCAN_FIX !== "off") {
+      const spec = pagesOf(kit).find((p) => p.path === "/");
+      const current = await getPage(env, slug, version, "/");
+      if (spec && current) {
+        try {
+          const notes = [...new Set(fixable.map((m) => (m.startsWith("phone: ") ? `On a phone: ${scanNote(m.slice(7))}` : scanNote(m))))];
+          const { page: fixedPage, usage } = await designSitePage(env, kit, spec, { notes, current, cheap: true });
+          await savePage(env, slug, version, "/", fixedPage, usage);
+          review.scanFixed = true;
+          review.costUsd = (review.costUsd ?? 0) + (Number((usage as { cost_usd?: number }).cost_usd) || 0);
+          const again = await rescan(env, deps, `${base}${prefix}?r=${version}-scan`, settle, sleep).catch(() => null);
+          const left = again?.filter((m) => pageFixable(m.replace(/^phone: /, ""))) ?? null;
+          const check = checks.find((c) => c.id === "scroll-scan");
+          if (left && left.length >= fixable.length) {
+            await savePage(env, slug, version, "/", current, null);
+            review.scanFixError = `A repair left ${left.length} problem${left.length === 1 ? "" : "s"} (before: ${fixable.length}), so the original page was kept.`;
+          } else if (again && check) {
+            check.ok = !again.length;
+            check.detail = again.length ? again.slice(0, 4).join("; ") : `fixed automatically (was: ${fixable.slice(0, 3).join("; ")})`;
+          }
+        } catch (e) {
+          review.scanFixError = e instanceof Error ? e.message : String(e);
+        }
+      }
+    }
 
     // Fix: write the home page again with the notes, when it isn't good enough.
     // (A tight phone layout is fixed for free when the page is served, so it never buys a rewrite on its own.)
