@@ -15,6 +15,7 @@ import {
   recentIdeas,
   recentLooks,
   recentDna,
+  studioMasters,
   listLibrary,
   saveChrome,
   setHandover,
@@ -36,13 +37,13 @@ import {
 } from "./db";
 import type { Kit } from "./designer";
 import { lintSite, repairNote, type QaIssue, type QaResult } from "./qa";
-import { adaptKit, thinServices, fixChrome, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, studioHome, TryLater, type Plan } from "./designer";
+import { adaptKit, holdKitToDna, leanMode, thinServices, fixChrome, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, studioHome, TryLater, type Plan } from "./designer";
 import type { BuildJob, Env } from "./env";
 import { heroPair, beforeAfterImages, imagesRoom, objectImage, previewImages } from "./images";
 import { studioMedia, type StudioMedia } from "./media";
 import { nicheOf } from "./niche";
 import { privacyPage, termsPage } from "./legal";
-import { CONCEPT_IDS, conceptById, drawFor, pickConcept } from "./concepts";
+import { CONCEPT_IDS, conceptById, drawFor, lookShortlist, pickConcept } from "./concepts";
 import { chooseDesign, firstScreenOf, ideaOf, ownScreen, wants, writeBrief, type Idea } from "./brief";
 import { mergeIntake, reverseGeocode } from "./places";
 import { extrasFor, HERO_IDS, heroById, OBJECT_HEROES, PHOTO_HEROES, pickHero } from "./heroes";
@@ -281,6 +282,32 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       const clips = studio ? matchClips(await listLibrary(env, demo.tenantId).catch(() => []), intake, plan?.services.join(" ") ?? "").length : 0;
       // The brief (a fresh Studio design only): who this business is, worked out before anything is designed.
       // Its idea then chooses the look and the first screen, and heads every writer's instructions.
+      // A lean Studio build is designed on one of the account's Claude-written Studio design systems (its
+      // components, hero and look), suited to the trade and unlike the bases its recent sites used; its own
+      // DNA then gives it new colours and type. Claude-level design at lean cost.
+      let master: { slug: string; version: string; concept: string; hero: string; theme: string } | undefined;
+      if (studio && !intake.reuseFrom && !intake.concept && !intake.hero && (await leanMode(env))) {
+        const masters = await studioMasters(env, demo.tenantId, slug).catch(() => []);
+        const used = dnaRecent.slice(0, 6).map((r) => r.base).filter(Boolean);
+        const usedLooks = dnaRecent.slice(0, 2).map((r) => r.look).filter(Boolean);
+        const suits = lookShortlist({ ...intake, services: intake.services || plan?.services.join(" ") });
+        const fresh = masters.filter((m) => !used.includes(m.slug));
+        const tiers = [fresh.filter((m) => suits.includes(m.concept) && !usedLooks.includes(m.concept)), fresh.filter((m) => !usedLooks.includes(m.concept)), fresh, masters];
+        const pool = tiers.find((t) => t.length) ?? [];
+        let h = 0;
+        for (const ch of slug) h = (Math.imul(h, 31) + ch.charCodeAt(0)) >>> 0;
+        // Builds running at the same moment can't see each other's choice yet: each claims its base for an hour.
+        for (let i = 0; i < pool.length && !master; i++) {
+          const m = pool[(h + i) % pool.length]!;
+          const key = `base-claim:${m.slug}`;
+          const row = await env.DB.prepare("SELECT value FROM settings WHERE key = ?").bind(key).first<{ value: string }>().catch(() => null);
+          const [by, at] = (row?.value ?? "").split("|");
+          if (row && by !== slug && Date.now() - Number(at) < 3_600_000 && i < pool.length - 1) continue;
+          await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").bind(key, `${slug}|${Date.now()}`).run().catch(() => undefined);
+          master = m;
+        }
+        if (master) console.log("lean studio base", slug, master.slug, master.concept, master.hero);
+      }
       let idea: Idea | undefined;
       let briefCost = 0;
       let chosen: { look?: string; hero?: string } = {};
@@ -309,13 +336,16 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
           console.log("brief", slug, JSON.stringify({ lens: idea.lens, idea: idea.idea, look: chosen.look, hero: chosen.hero, cost: brief.cost }));
         }
       }
+      if (master) chosen = { look: master.concept, hero: master.hero };
       const look = studio ? (conceptById(chosen.look) ?? pickConcept(intake, slug, looks.map((l) => l.concept).filter(Boolean))) : undefined;
       const concept = look?.id;
       // A Standard site borrows an art direction too (its type, colour logic and layout language, not the
       // Studio motion), unlike the account's recent Standard sites, so Standard sites stop sharing one template.
       const standardLook = !studio ? pickConcept({ ...intake, concept: undefined }, slug, dnaRecent.filter((r) => r.style !== "studio").map((r) => r.look).filter(Boolean)) : undefined;
       // The design DNA (palette, type, shape, mode; for Standard also the first-screen layout), dealt in code.
-      const dna = intake.reuseFrom ? undefined : pickDna(concept ?? standardLook!.id, slug, dnaRecent, intake.primaryColor ?? "", !studio);
+      const dealt = intake.reuseFrom ? undefined : pickDna(concept ?? standardLook!.id, slug, dnaRecent, intake.primaryColor ?? "", !studio);
+      // A base design keeps the mode it was drawn for (its overlays and glows are made for it).
+      const dna = dealt && master ? { ...dealt, mode: master.theme === "dark" ? ("dark" as const) : ("light" as const), print: dealt.print.replace(/:(light|dark):/, `:${master.theme === "dark" ? "dark" : "light"}:`) } : dealt;
       // Which set piece the home page carries beyond its hero: the flying object, the brand moment, or neither.
       const extras = studio ? extrasFor(slug) : undefined;
       // The deal within the look: scene order, the biggest moment, mirroring, menu and footer, unlike the account's recent sites.
@@ -381,6 +411,9 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
         const src = await getDemo(env, intake.reuseFrom);
         const srcKit = src && src.tenantId === demo.tenantId && src.liveVersion ? await getKit(env, src.slug, src.liveVersion) : null;
         if (src && srcKit && src.liveVersion) base = { slug: src.slug, version: src.liveVersion, kit: srcKit };
+      } else if (master) {
+        const srcKit = await getKit(env, master.slug, master.version);
+        if (srcKit) base = { slug: master.slug, version: master.version, kit: srcKit };
       }
       // The hero this site will open with (a reused design keeps the one it was designed around).
       const heroSig = base ? heroById(base.kit.hero) : (sig ?? (heroId === "own" ? { id: "own", media: "photo" as const } : undefined));
@@ -398,7 +431,12 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
           ? studioMedia(env, { save: (n, d, b) => saveImage(env, slug, version, n, d, b), drawObject: (p) => objectImage(env, p) }, version, heroSig, wantObject ? plan : plan && { ...plan, object: undefined }, photo1, clips > 0).catch((e) => (console.error("studio media failed", slug, errText(e)), null))
           : Promise.resolve(null);
       const [{ kit, usage }, made] = await Promise.all([
-        base ? adaptKit(env, base.kit, { slug: base.slug, version: base.version }, facts, pages) : designKit(env, facts, pages, intake.style, concept, draw, heroId, idea, dna).then((r) => ({ ...r, kit: extras ? { ...r.kit, extras } : r.kit })),
+        base
+          ? adaptKit(env, base.kit, { slug: base.slug, version: base.version }, facts, pages).then((r) =>
+              // Designed on a base: this site's own idea, deal, set piece and DNA, on the base's components.
+              master && dna ? { ...r, kit: holdKitToDna({ ...r.kit, idea, draw: draw?.print, ...(extras ? { extras } : {}), concept: master.concept, hero: master.hero }, dna) } : r,
+            )
+          : designKit(env, facts, pages, intake.style, concept, draw, heroId, idea, dna).then((r) => ({ ...r, kit: extras ? { ...r.kit, extras } : r.kit })),
         mediaJob,
       ]);
       if (made?.made.length) console.log("studio media", slug, JSON.stringify(made));

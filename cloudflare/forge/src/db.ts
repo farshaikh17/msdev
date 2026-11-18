@@ -646,17 +646,35 @@ export async function recentLooks(env: Env, tenantId: number, notSlug: string, l
   return results.map((r) => ({ concept: r.concept ?? "", draw: r.draw ?? "", hero: r.hero ?? "", city: r.city ?? "", trade: r.trade ?? "", name: r.name }));
 }
 
-/** The account's latest sites (any edition): the design DNA, accent and mode each was built with, newest first. */
-export async function recentDna(env: Env, tenantId: number, notSlug: string, limit = 12): Promise<{ print: string; accent: string; theme: string; look: string; style: string }[]> {
+/**
+ * The account's Studio design systems written by Claude (a full design pass, a signature hero, not built on
+ * another site): the bases a lean Studio build is designed on, so it has Claude's components at lean cost.
+ */
+export async function studioMasters(env: Env, tenantId: number, notSlug: string): Promise<{ slug: string; version: string; concept: string; hero: string; theme: string }[]> {
   const { results } = await env.DB.prepare(
-    `SELECT json_extract(v.kit, '$.dna.print') print, json_extract(v.kit, '$.accent') accent, json_extract(v.kit, '$.theme') theme,
+    `SELECT v.slug, v.version, json_extract(v.kit, '$.concept') concept, json_extract(v.kit, '$.hero') hero, json_extract(v.kit, '$.theme') theme
+       FROM demos d JOIN site_versions v ON v.slug = d.slug AND v.version = d.live_version
+      WHERE d.tenant_id = ? AND d.slug != ? AND json_extract(v.kit, '$.style') = 'studio' AND json_extract(v.kit, '$.reuse') IS NULL
+        AND json_extract(v.kit, '$.concept') IS NOT NULL AND json_extract(v.kit, '$.hero') IS NOT NULL AND json_extract(v.kit, '$.dna') IS NULL
+        AND coalesce(json_extract(v.usage, '$.neurons'), 0) = 0 AND coalesce(json_extract(v.usage, '$.cost_usd'), 0) >= 0.5
+      ORDER BY v.created_at`,
+  )
+    .bind(tenantId, notSlug)
+    .all<{ slug: string; version: string; concept: string; hero: string; theme: string }>();
+  return results;
+}
+
+/** The account's latest sites (any edition): the design DNA, accent and mode each was built with, newest first. */
+export async function recentDna(env: Env, tenantId: number, notSlug: string, limit = 12): Promise<{ print: string; accent: string; theme: string; look: string; style: string; base: string }[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT json_extract(v.kit, '$.dna.print') print, json_extract(v.kit, '$.accent') accent, json_extract(v.kit, '$.theme') theme, json_extract(v.kit, '$.reuse.slug') base,
             coalesce(json_extract(v.kit, '$.dna.look'), json_extract(v.kit, '$.concept')) look, coalesce(json_extract(v.kit, '$.style'), 'standard') style
        FROM demos d JOIN site_versions v ON v.slug = d.slug AND v.version = d.live_version
       WHERE d.tenant_id = ? AND d.slug != ? ORDER BY d.created_at DESC LIMIT ?`,
   )
     .bind(tenantId, notSlug, limit)
-    .all<{ print: string | null; accent: string | null; theme: string | null; look: string | null; style: string }>();
-  return results.map((r) => ({ print: r.print ?? "", accent: r.accent ?? "", theme: r.theme ?? "", look: r.look ?? "", style: r.style }));
+    .all<{ print: string | null; accent: string | null; theme: string | null; look: string | null; style: string; base: string | null }>();
+  return results.map((r) => ({ print: r.print ?? "", accent: r.accent ?? "", theme: r.theme ?? "", look: r.look ?? "", style: r.style, base: r.base ?? "" }));
 }
 
 /** Replace a version's shared header and footer (a QA repair). */

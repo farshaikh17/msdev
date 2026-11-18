@@ -298,6 +298,12 @@ function hash(s: string): number {
  * The concept for a Studio build: the one asked for, else one that suits the trade, varied by site,
  * and not one the account's last two Studio sites used (when the trade leaves a choice).
  */
+/** The looks that suit a business (its trade, name and services), best first; every look when nothing matches. */
+export function lookShortlist(intake: { industry?: string; businessName?: string; services?: string }): string[] {
+  const text = `${intake.industry ?? ""} ${intake.businessName ?? ""} ${intake.services ?? ""}`;
+  return SUITS.find(([re]) => re.test(text))?.[1] ?? CONCEPT_IDS;
+}
+
 export function pickConcept(intake: { concept?: string; industry?: string; businessName?: string; services?: string }, slug: string, recent: string[] = []): Concept {
   const asked = conceptById(intake.concept);
   if (asked) return asked;
