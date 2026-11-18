@@ -396,6 +396,11 @@ mm0.add("(min-width: 900px)",function(){
       var ph=all("main img").filter(function(im){return !stage.contains(im)&&/\/_img\/[^/]+\/photo-/.test(im.getAttribute("src")||"")})[0];
       if(ph){var bg=d.createElement("img");bg.src=ph.currentSrc||ph.src;bg.alt="";bg.setAttribute("aria-hidden","true");bg.setAttribute("data-pin-zoom","1.12");bg.className="m-pin-bg";stage.insertBefore(bg,stage.firstChild)}
     }
+    // An empty picture box in the stage (a frame the design meant to hold a photo) gets one of the site's photos.
+    all("div,figure,span",stage).forEach(function(box){if(box.children.length||/\S/.test(box.textContent||"")||box.closest("[data-pin-zoom]"))return;var q=box.getBoundingClientRect(),cs=getComputedStyle(box);if(q.width<180||q.height<160||cs.backgroundImage!=="none")return;
+      var shown=all("img",stage).map(function(im){return (im.getAttribute("src")||"").split("?")[0]}).concat([(getComputedStyle(stage).backgroundImage.match(/url\(["']?([^"')]+)/)||[])[1]||""]);
+      var seen={},phs=all("main img").filter(function(im){var src=(im.getAttribute("src")||"").split("?")[0];if(stage.contains(im)||!/\/_img\/[^/]+\/photo-/.test(src)||seen[src]||shown.some(function(x){return x&&(x===src||x.indexOf(src.split("/").pop())>=0)}))return false;seen[src]=1;return true});var ph=phs[1]||phs[0];if(!ph)return;
+      var im=d.createElement("img");im.src=ph.currentSrc||ph.src;im.alt="";im.setAttribute("aria-hidden","true");im.style.cssText="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit";box.appendChild(im)});
     var zoom=stage.querySelector("[data-pin-zoom]"),z=zoom?num(zoom.dataset.pinZoom,1.2):1,spin=stage.querySelector(".m-spin");
     var bar=d.createElement("div");bar.className="m-pin-bar";bar.innerHTML="<i></i>";stage.appendChild(bar);
     function cl(v){return v<0?0:v>1?1:v}
