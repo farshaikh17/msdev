@@ -89,6 +89,7 @@ html.m-on.m-moved .m-cursor,html.m-on.m-moved .m-ring{opacity:1}
 }
 @keyframes m-slide-in{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
 [data-pin].m-pinned [data-pin-stage]{position:relative;height:100vh;overflow:hidden}
+[data-pin-stage]:has(>.m-pin-bg){isolation:isolate}.m-pin-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.32;z-index:-1;pointer-events:none}
 .m-pin-bar{position:absolute;left:50%;bottom:22px;width:120px;height:2px;margin-left:-60px;background:rgba(128,128,128,.3);border-radius:2px;z-index:5;pointer-events:none}.m-pin-bar i{display:block;height:100%;background:var(--m-accent,#111);transform-origin:0 50%;transform:scaleX(0)}
 [data-follow]{pointer-events:none;display:none}html.m-on.m-fine [data-follow]{display:block}
 .m-float{position:fixed;left:0;top:0;z-index:30;pointer-events:none;opacity:0;transform-origin:0 0;will-change:transform,opacity;filter:drop-shadow(0 30px 34px rgba(0,0,0,.32)) drop-shadow(0 6px 10px rgba(0,0,0,.16))}
@@ -109,7 +110,7 @@ html.m-floating main h1{position:relative;z-index:31}
 [data-breakout] .hero-motion{clip-path:inset(16% 3% 0 3% round 22px);filter:drop-shadow(0 30px 40px rgba(0,0,0,.35))}
 [data-breakout] .hero-subject{overflow:visible;filter:drop-shadow(0 24px 28px rgba(0,0,0,.35))}
 [data-orbit]{position:relative}[data-orbit] .m-orb{position:absolute;left:0;top:0;pointer-events:none;will-change:transform;filter:drop-shadow(0 18px 22px rgba(0,0,0,.35))}[data-orbit] .m-orb.back{z-index:1}[data-orbit] .m-orb.front{z-index:3}
-.m-mask{position:relative;height:100vh;overflow:hidden;padding:0!important}.m-mask>img{position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:cover;border-radius:0;margin:0}
+.m-mask{position:relative;height:100vh;overflow:hidden;padding:0!important}.m-mask>img{display:block!important;position:absolute!important;inset:0;width:100%!important;height:100%!important;max-width:none;object-fit:cover;border-radius:0;margin:0;opacity:1!important;visibility:visible!important}
 .m-mask .m-mask-svg{position:absolute;inset:-2px;width:calc(100% + 4px);height:calc(100% + 4px);z-index:1;will-change:transform}
 .m-mask [data-mask-after]{position:absolute;left:0;right:0;bottom:12vh;z-index:2;text-align:center;padding:0 20px;color:#fff;text-shadow:0 2px 24px rgba(0,0,0,.45)}
 .m-parts{position:relative;height:100vh;overflow:hidden}.m-parts canvas.m-parts-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
@@ -365,7 +366,6 @@ all("[data-parallax]").forEach(function(el){
 mm0.add("(min-width: 900px)",function(){
   all("[data-pin]").forEach(function(sec){
     var stage=sec.querySelector("[data-pin-stage]");if(!stage)return;
-    var screens=Math.max(1,Math.min(6,num(sec.dataset.pin,3)));
     var blocks=all("[data-at]",stage).map(function(el){
       var w=el.hasAttribute("data-write")?el:el.querySelector("[data-write]"),words=null;
       if(w&&SPLIT){words=new SPLIT(w,{type:"words"}).words}
@@ -373,6 +373,17 @@ mm0.add("(min-width: 900px)",function(){
       var t0=getComputedStyle(el).transform;
       return {el:el,base:t0&&t0!=="none"?t0+" ":"",at:num(el.dataset.at,0),until:el.hasAttribute("data-until")?num(el.dataset.until,1):null,words:words,count:c,end:c?num(c.dataset.pinCount,0):0};
     });
+    // Never an empty moment: the beats are taken in order, the first is there from the start, and each one
+    // stays until the next has arrived. The scroll is about three-quarters of a screen per beat (3 at most),
+    // so a story never turns into screens of nothing.
+    blocks.sort(function(a,b){return a.at-b.at});
+    blocks.forEach(function(b,i){var nx=blocks[i+1];if(i===0)b.at=Math.min(b.at,0);if(b.until!==null&&nx&&b.until<nx.at+.06)b.until=nx.at+.06;if(!nx)b.until=null});
+    var screens=Math.max(1,Math.min(3,num(sec.dataset.pin,3),blocks.length*.75+.5));
+    // A stage with no picture of its own gets one of the site's photos, faded behind its words.
+    if(!stage.querySelector("img,video,canvas,picture,.m-spin,[data-pin-zoom]")&&getComputedStyle(stage).backgroundImage==="none"){
+      var ph=all("main img").filter(function(im){return !stage.contains(im)&&/\/_img\/[^/]+\/photo-/.test(im.getAttribute("src")||"")})[0];
+      if(ph){var bg=d.createElement("img");bg.src=ph.currentSrc||ph.src;bg.alt="";bg.setAttribute("aria-hidden","true");bg.setAttribute("data-pin-zoom","1.12");bg.className="m-pin-bg";stage.insertBefore(bg,stage.firstChild)}
+    }
     var zoom=stage.querySelector("[data-pin-zoom]"),z=zoom?num(zoom.dataset.pinZoom,1.2):1,spin=stage.querySelector(".m-spin");
     var bar=d.createElement("div");bar.className="m-pin-bar";bar.innerHTML="<i></i>";stage.appendChild(bar);
     function cl(v){return v<0?0:v>1?1:v}
@@ -597,7 +608,7 @@ d.documentElement.style.setProperty("--m-accent",getComputedStyle(root).getPrope
 var cur=d.createElement("div");cur.className="m-curtain";d.body.appendChild(cur);
 var seen=false;try{seen=sessionStorage.getItem("m-seen")==="1";sessionStorage.setItem("m-seen","1")}catch(e){}
 var arriving=false;try{arriving=sessionStorage.getItem("m-go")==="1";sessionStorage.removeItem("m-go")}catch(e){}
-function start(){intro.play();ST.refresh()}
+function start(){intro.play();ST.sort();ST.refresh()}
 if(arriving){G.set(cur,{yPercent:0});G.to(cur,{yPercent:-100,duration:.8,ease:"expo.inOut",delay:.05,onComplete:function(){G.set(cur,{yPercent:100})}});intro.delay(.35);start()}
 else if(!seen){
   var pre=d.createElement("div");pre.className="m-pre";var name=(d.title.split("|")[0]||"").trim();
@@ -615,7 +626,7 @@ d.addEventListener("click",function(e){
   G.fromTo(cur,{yPercent:100},{yPercent:0,duration:.6,ease:"expo.inOut",onComplete:function(){location.href=u.href}});
 });
 W.addEventListener("pageshow",function(e){if(e.persisted)G.set(cur,{yPercent:100})});
-W.addEventListener("load",function(){ST.refresh()});
+W.addEventListener("load",function(){ST.sort();ST.refresh()});
 }
 
 function shader(box){
