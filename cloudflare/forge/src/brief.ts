@@ -343,7 +343,7 @@ export function chooseDesign(
       const want = firstScreenOf(c, o.heroIds);
       const hasObject = wants(chosen.object) || wants(c.object);
       if (want === "own" && ownScreen(c).length > 40 && !STATIC_SCREEN.test(ownScreen(c)) && !o.recentHeroes.slice(0, 2).includes("own")) hero = "own";
-      else if (want && want !== "own" && want !== o.recentHeroes[0] && (want !== "switcher" || o.clips >= 1) && (!OBJECT_HEROES.includes(want) || hasObject)) hero = want;
+      else if (want && want !== "own" && !o.recentHeroes.slice(0, 4).includes(want) && (want !== "switcher" || o.clips >= 1) && (!OBJECT_HEROES.includes(want) || hasObject)) hero = want;
       if (hero) break;
     }
   return { look, hero };
@@ -357,5 +357,5 @@ The true thing it is built on: ${i.truth}
 The idea: ${i.idea}
 It refuses: ${i.refuses}${line("First-screen headline (use it, or one as good and as true)", i.headline)}${line("Voice", i.voice)}${line("Colour", i.palette)}${line("Lettering", i.type)}${i.arc ? `\nThe home page's story, screen by screen:\n${i.arc}` : ""}
 
-Where the idea and the materials below disagree, the idea wins. Its colour and lettering are this site's own: choose the actual fonts and colours to match them, not the examples the materials mention. Dropping or reshaping a listed scene to serve the idea is correct. Every page carries the idea, not just the home page. Never state anything about the business that isn't in its facts, even if the idea seems to invite it.`;
+Where the idea and the materials below disagree, the idea wins. Its colour and lettering are this site's own: choose the actual fonts and colours to match them, not the examples the materials mention (unless the site's design DNA fixes them: then the DNA's exact fonts and colours are used, and the idea's colour words only set the mood). Dropping or reshaping a listed scene to serve the idea is correct. Every page carries the idea, not just the home page. Never state anything about the business that isn't in its facts, even if the idea seems to invite it.`;
 }

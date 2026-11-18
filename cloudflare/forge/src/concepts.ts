@@ -303,7 +303,7 @@ export function pickConcept(intake: { concept?: string; industry?: string; busin
   if (asked) return asked;
   const text = `${intake.industry ?? ""} ${intake.businessName ?? ""} ${intake.services ?? ""}`;
   const shortlist = SUITS.find(([re]) => re.test(text))?.[1] ?? CONCEPT_IDS;
-  const fresh = shortlist.filter((id) => !recent.slice(0, 2).includes(id));
+  const fresh = shortlist.filter((id) => !recent.slice(0, 3).includes(id));
   const from = fresh.length ? fresh : shortlist;
   return conceptById(from[hash(slug) % from.length])!;
 }

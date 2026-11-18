@@ -297,14 +297,38 @@ if(hit){e.style.marginLeft="0";e.style.marginRight="0"}});
 var prev=a.previousElementSibling;if(!prev||a.getAttribute("data-fg-gap"))return;var pc=getComputedStyle(prev);if(pc.position==="absolute"||pc.position==="fixed"||pc.display==="none")return;
 var pr=prev.getBoundingClientRect(),ar=a.getBoundingClientRect();if(pr.height<120||!prev.querySelector("details,summary,ul,ol,form,img,article,[class*=card i],[class*=item i]"))return;
 var gap=a.offsetParent&&a.offsetParent===prev.offsetParent?a.offsetTop-(prev.offsetTop+prev.offsetHeight):ar.top-pr.bottom;if(gap>-2&&gap<10){a.style.marginTop="clamp(40px,5vw,72px)";a.setAttribute("data-fg-gap","1")}})}
-addEventListener("load",function(){setTimeout(fix,300)});})();
+if(document.readyState==="complete")setTimeout(fix,300);else addEventListener("load",function(){setTimeout(fix,300)});})();
+
+// Big display words laid over a photo (a giant name across the hero) must not vanish into it: the part of
+// the picture behind the word is sampled (the site's photos are its own, so the canvas can read them), and
+// dark lettering over a dark area, which no overlay can rescue, switches to the light ink.
+(function(){function L(r,g,b){return (0.2126*r+0.7152*g+0.0722*b)/255}
+function rgb(v){var m=(v||"").match(/[0-9.]+/g);return m&&m.length>=3?m.map(Number):null}
+function run(){var seen=[];[].forEach.call(document.querySelectorAll("main *"),function(e){
+if(seen.length>12)return;var own=[].some.call(e.childNodes,function(n){return n.nodeType===3&&n.textContent.trim().length>1});if(!own)return;
+var cs=getComputedStyle(e),fs=parseFloat(cs.fontSize);if(fs<(innerWidth<700?40:64)||cs.visibility==="hidden"||+cs.opacity<.05)return;
+var c=rgb(cs.color);if(!c||L(c[0],c[1],c[2])>.3)return;var r=e.getBoundingClientRect();if(r.width<60||r.height<40)return;
+var box=e.closest("section")||e.parentElement;if(!box)return;
+var media=[].filter.call(box.querySelectorAll("img,video"),function(m){if(e.contains(m))return false;var q=m.getBoundingClientRect();return q.width>200&&q.height>120&&q.left<r.right&&q.right>r.left&&q.top<r.bottom&&q.bottom>r.top})[0];if(!media)return;
+// The hero's own headline set in light ink over the same picture says the picture reads dark: a dark giant word there is the odd one out.
+var lightPeer=[].some.call(box.querySelectorAll("h1,h2,p"),function(o){if(o===e||e.contains(o)||o.contains(e))return false;var oc=rgb(getComputedStyle(o).color);return oc&&L(oc[0],oc[1],oc[2])>.75&&parseFloat(getComputedStyle(o).fontSize)>=28});
+var lit=function(){e.style.setProperty("color","#f6f3ee","important");e.style.setProperty("-webkit-text-fill-color","#f6f3ee","important");e.style.textShadow="0 2px 30px rgba(0,0,0,.35)";e.setAttribute("data-fg-lit","")};
+if(lightPeer){seen.push(e);lit();return}
+var nw=media.videoWidth||media.naturalWidth,nh=media.videoHeight||media.naturalHeight;if(!nw||!nh)return;seen.push(e);
+try{var q=media.getBoundingClientRect(),sc=Math.max(q.width/nw,q.height/nh),ox=(q.width-nw*sc)/2,oy=(q.height-nh*sc)/2;
+var x0=Math.max(r.left,q.left),y0=Math.max(r.top,q.top),x1=Math.min(r.right,q.right),y1=Math.min(r.bottom,q.bottom);
+var cv=document.createElement("canvas");cv.width=48;cv.height=24;var g=cv.getContext("2d");
+g.drawImage(media,(x0-q.left-ox)/sc,(y0-q.top-oy)/sc,(x1-x0)/sc,(y1-y0)/sc,0,0,48,24);
+var d=g.getImageData(0,0,48,24).data,t=0;for(var i=0;i<d.length;i+=4)t+=L(d[i],d[i+1],d[i+2]);
+if(t/(d.length/4)<.42)lit()}catch(err){}})}
+function go(){setTimeout(run,900);setTimeout(run,3000)}if(document.readyState==="complete")go();else addEventListener("load",go)})();
 
 // Phones: a box set to full width plus side padding, in a design with no border-box rule, is wider than the
 // screen and pushes its words and pictures off the right edge. Such boxes are measured with their padding inside.
 (function(){function fix(){if(innerWidth>=700)return;[].forEach.call(document.querySelectorAll("main *,footer *,header *"),function(e){
 var cs=getComputedStyle(e);if(cs.boxSizing!=="content-box"||cs.position==="fixed"||cs.position==="absolute")return;var pl=parseFloat(cs.paddingLeft)+parseFloat(cs.paddingRight)+parseFloat(cs.borderLeftWidth)+parseFloat(cs.borderRightWidth);if(pl<2)return;
 var par=e.parentElement;if(!par)return;var w=e.getBoundingClientRect().width,pw=par.clientWidth;if(w>pw+2&&w-pl<=pw+2)e.style.boxSizing="border-box"})}
-addEventListener("load",fix);setTimeout(fix,600);addEventListener("resize",fix)})();
+if(document.readyState==="complete")fix();else addEventListener("load",fix);setTimeout(fix,600);addEventListener("resize",fix)})();
 
 // Phones: text that touches or runs past the screen's edge gets room at the sides, and a heading wider
 // than the screen is set smaller until it fits (never below 60% of its size). Free, on every site.

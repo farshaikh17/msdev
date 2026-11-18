@@ -209,7 +209,7 @@ export function pickHero(intake: { hero?: string }, slug: string, recent: string
   if (asked) return asked;
   if (clips >= 2 && !recent.slice(0, 1).includes("switcher") && !exclude.includes("switcher")) return heroById("switcher")!;
   const ok = (id: string) => (id !== "switcher" || clips >= 1) && !exclude.includes(id);
-  const fresh = HERO_IDS.filter((id) => !recent.slice(0, 2).includes(id) && ok(id));
+  const fresh = HERO_IDS.filter((id) => !recent.slice(0, 4).includes(id) && ok(id));
   // Everything ruled out (no photos, no object, no clips): any of them beats a failed build.
   const from = fresh.length ? fresh : HERO_IDS.filter(ok).length ? HERO_IDS.filter(ok) : HERO_IDS.filter((id) => id !== "switcher" || clips >= 1);
   return heroById(from[hash(slug) % from.length])!;
@@ -236,9 +236,23 @@ export const flightPath = (slug: string): "arc" | "loop" | "zig" => (["arc", "lo
 /** What the writer is told about the flying object's perches. */
 const FLIGHT = `FLYING OBJECT: our system flies the business's signature object (OBJECT in the facts, cut out) down this home page as the visitor scrolls. Place TWO empty perches for it to land in: each exactly <div data-perch aria-hidden="true"></div> with an explicit width and aspect-ratio:1, in the normal flow (never position:absolute, never inside a pinned, horizontal-scroll or stacked section), with nothing inside it or on top of it and clear space around it. One in the second or third scene beside a statement or the list of what the business offers (width min(24vw, 300px); 46vw on phones), and one in the final call-to-action scene beside the action (width min(18vw, 220px); 36vw on phones).`;
 
+/**
+ * Which set piece a Studio home page carries beyond its hero: the flying object, the brand moment, or
+ * neither. Every site used to carry both, so they read as one template; now a third get each.
+ */
+export type Extras = "flight" | "moment" | "none";
+export const extrasFor = (slug: string): Extras => (["flight", "moment", "none"] as const)[hash(`${slug}:extras`) % 3]!;
+
 /** What the home page's writer is told about the flight and the brand moment (Studio only). */
-export function studioExtras(heroId: string | undefined, slug: string, idea?: { object?: string; moment?: string }): string {
+export function studioExtras(heroId: string | undefined, slug: string, idea?: { object?: string; moment?: string }, extras?: Extras): string {
   const parts: string[] = [];
+  if (extras) {
+    const yes = (v?: string) => !!v && !/^\s*(none|no|n\/a|-)\b/i.test(v);
+    const object = !idea || yes(idea.object);
+    if (extras === "flight" && companionFor(heroId) && object) return `\n\n${FLIGHT}`;
+    if (extras !== "moment") return "";
+    idea = idea ? { ...idea, moment: yes(idea.moment) ? idea.moment : "the business in one word" } : idea;
+  }
   // With an idea, the flying object and the brand moment appear only when it asked for them.
   const yes = (v?: string) => !!v && !/^\s*(none|no|n\/a|-)\b/i.test(v);
   const object = !idea || yes(idea.object);

@@ -14,6 +14,7 @@ import {
   pairsDue,
   recentIdeas,
   recentLooks,
+  recentDna,
   listLibrary,
   saveChrome,
   setHandover,
@@ -44,7 +45,8 @@ import { privacyPage, termsPage } from "./legal";
 import { CONCEPT_IDS, conceptById, drawFor, pickConcept } from "./concepts";
 import { chooseDesign, firstScreenOf, ideaOf, ownScreen, wants, writeBrief, type Idea } from "./brief";
 import { mergeIntake, reverseGeocode } from "./places";
-import { HERO_IDS, heroById, OBJECT_HEROES, PHOTO_HEROES, pickHero } from "./heroes";
+import { extrasFor, HERO_IDS, heroById, OBJECT_HEROES, PHOTO_HEROES, pickHero } from "./heroes";
+import { pickDna } from "./dna";
 import { matchClips } from "./hero";
 import { readWebsite } from "./scrape";
 import { buildCost, chargeBuild, getTenant, recordBuildCost, type Tenant } from "./tenants";
@@ -274,6 +276,8 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       // A Studio home page takes its look, its deal within the look and its signature hero before any picture is made.
       const studio = intake.style === "studio";
       const looks = studio ? await recentLooks(env, demo.tenantId, slug).catch(() => []) : [];
+      // The account's latest sites of either edition: their DNA, accents and modes, so this one looks unlike them.
+      const dnaRecent = await recentDna(env, demo.tenantId, slug).catch(() => []);
       const clips = studio ? matchClips(await listLibrary(env, demo.tenantId).catch(() => []), intake, plan?.services.join(" ") ?? "").length : 0;
       // The brief (a fresh Studio design only): who this business is, worked out before anything is designed.
       // Its idea then chooses the look and the first screen, and heads every writer's instructions.
@@ -297,13 +301,23 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
           const town = (c: string) => c.split(",")[0]!.trim().toLowerCase();
           const niche = nicheOf(intake.industry || plan?.trade || "", intake.businessName);
           const neighbours = looks.filter((l) => (intake.city && town(l.city) === town(intake.city)) || nicheOf(l.trade, l.name) === niche);
-          const avoid = [...new Set([...nearby.slice(0, 2).map((n) => n.look), ...neighbours.slice(0, 2).map((l) => l.concept)].filter(Boolean))];
-          chosen = chooseDesign(brief, { askedLook: intake.concept, askedHero: intake.hero, recentLooks: avoid, recentHeroes: neighbours.map((l) => l.hero).filter(Boolean), lookIds: CONCEPT_IDS, heroIds: HERO_IDS, clips });
+          // Sites are compared side by side across the whole account, not only within a town or a trade:
+          // the account's last three looks and last four first screens are passed over too.
+          const avoid = [...new Set([...nearby.slice(0, 2).map((n) => n.look), ...neighbours.slice(0, 2).map((l) => l.concept), ...looks.slice(0, 3).map((l) => l.concept)].filter(Boolean))];
+          const heroesSeen = [...new Set([...neighbours.map((l) => l.hero), ...looks.slice(0, 4).map((l) => l.hero)].filter(Boolean))];
+          chosen = chooseDesign(brief, { askedLook: intake.concept, askedHero: intake.hero, recentLooks: avoid, recentHeroes: heroesSeen, lookIds: CONCEPT_IDS, heroIds: HERO_IDS, clips });
           console.log("brief", slug, JSON.stringify({ lens: idea.lens, idea: idea.idea, look: chosen.look, hero: chosen.hero, cost: brief.cost }));
         }
       }
       const look = studio ? (conceptById(chosen.look) ?? pickConcept(intake, slug, looks.map((l) => l.concept).filter(Boolean))) : undefined;
       const concept = look?.id;
+      // A Standard site borrows an art direction too (its type, colour logic and layout language, not the
+      // Studio motion), unlike the account's recent Standard sites, so Standard sites stop sharing one template.
+      const standardLook = !studio ? pickConcept({ ...intake, concept: undefined }, slug, dnaRecent.filter((r) => r.style !== "studio").map((r) => r.look).filter(Boolean)) : undefined;
+      // The design DNA (palette, type, shape, mode; for Standard also the first-screen layout), dealt in code.
+      const dna = intake.reuseFrom ? undefined : pickDna(concept ?? standardLook!.id, slug, dnaRecent, intake.primaryColor ?? "", !studio);
+      // Which set piece the home page carries beyond its hero: the flying object, the brand moment, or neither.
+      const extras = studio ? extrasFor(slug) : undefined;
       // The deal within the look: scene order, the biggest moment, mirroring, menu and footer, unlike the account's recent sites.
       const draw = look ? drawFor(look, slug, looks.map((l) => l.draw).filter(Boolean)) : undefined;
       // The signature hero: the idea's choice; otherwise video scenes when the trade has library clips, otherwise one
@@ -360,7 +374,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       });
       const pages = sitemapFor(intake, plan?.services);
       // A Studio home page takes its order and layouts from its art direction, not the standard section list.
-      if (concept && pages[0]) pages[0] = { ...pages[0], brief: studioHome(pages, concept, draw, heroId, slug, idea) };
+      if (concept && pages[0]) pages[0] = { ...pages[0], brief: studioHome(pages, concept, draw, heroId, slug, idea, extras) };
       // Built on another of the account's finished sites: reuse its design (far cheaper than a new one).
       let base: { slug: string; version: string; kit: Kit } | null = null;
       if (intake.reuseFrom && intake.reuseFrom !== slug) {
@@ -371,7 +385,12 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       // The hero this site will open with (a reused design keeps the one it was designed around).
       const heroSig = base ? heroById(base.kit.hero) : (sig ?? (heroId === "own" ? { id: "own", media: "photo" as const } : undefined));
       const objectNote = studio && plan?.object && wantObject ? `\n\nOBJECT (the signature object our system supplies, cut out): ${plan.object}.` : "";
-      const facts = factsBlock(intake, site, slug, plan, previews, pairs) + profileNote(intake) + (draw ? `\n\nFor this site the menu is ${draw.nav}, and the footer is ${draw.footer}.` : "") + objectNote;
+      const facts =
+        factsBlock(intake, site, slug, plan, previews, pairs) +
+        profileNote(intake) +
+        (draw ? `\n\nFor this site the menu is ${draw.nav}, and the footer is ${draw.footer}.` : "") +
+        objectNote +
+        (standardLook ? `\n\n## Art direction for this site (its look; where the general rules name radii, a full-bleed hero or a font list, this and the design DNA win)\n${standardLook.brief}\nTake its type, colour logic and layout language; ignore anything it says about marquees, pinned, horizontal or stacked scrolling effects, and keep motion to gentle reveals. The home page's sections each take a different layout (a split, a full-width band, a list with rules, a large quote, a photo grid), never the same card grid twice.` : "");
       // A Studio hero's own media (its object and turning frames, a cut-out subject, a moving hero) is made while the design is written.
       const photo1 = images.find((img) => img.name === "photo-1.jpg")?.bytes ?? null;
       const mediaJob: Promise<StudioMedia | null> =
@@ -379,7 +398,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
           ? studioMedia(env, { save: (n, d, b) => saveImage(env, slug, version, n, d, b), drawObject: (p) => objectImage(env, p) }, version, heroSig, wantObject ? plan : plan && { ...plan, object: undefined }, photo1, clips > 0).catch((e) => (console.error("studio media failed", slug, errText(e)), null))
           : Promise.resolve(null);
       const [{ kit, usage }, made] = await Promise.all([
-        base ? adaptKit(env, base.kit, { slug: base.slug, version: base.version }, facts, pages) : designKit(env, facts, pages, intake.style, concept, draw, heroId, idea),
+        base ? adaptKit(env, base.kit, { slug: base.slug, version: base.version }, facts, pages) : designKit(env, facts, pages, intake.style, concept, draw, heroId, idea, dna).then((r) => ({ ...r, kit: extras ? { ...r.kit, extras } : r.kit })),
         mediaJob,
       ]);
       if (made?.made.length) console.log("studio media", slug, JSON.stringify(made));

@@ -36,6 +36,7 @@ describe("the pointer", () => {
     expect(QA_JS).toContain("an ad tracker, not a photo");
     expect(QA_JS).toContain("measured with their padding inside");
     expect(QA_JS).toContain("pulled over their neighbours");
+    expect(QA_JS).toContain("dark lettering over a dark area");
     // The page script still parses.
     expect(() => new Function(QA_JS)).not.toThrow();
     expect(FACTS).toContain("cramped:");

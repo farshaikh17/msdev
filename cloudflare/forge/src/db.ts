@@ -646,6 +646,19 @@ export async function recentLooks(env: Env, tenantId: number, notSlug: string, l
   return results.map((r) => ({ concept: r.concept ?? "", draw: r.draw ?? "", hero: r.hero ?? "", city: r.city ?? "", trade: r.trade ?? "", name: r.name }));
 }
 
+/** The account's latest sites (any edition): the design DNA, accent and mode each was built with, newest first. */
+export async function recentDna(env: Env, tenantId: number, notSlug: string, limit = 12): Promise<{ print: string; accent: string; theme: string; look: string; style: string }[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT json_extract(v.kit, '$.dna.print') print, json_extract(v.kit, '$.accent') accent, json_extract(v.kit, '$.theme') theme,
+            coalesce(json_extract(v.kit, '$.dna.look'), json_extract(v.kit, '$.concept')) look, coalesce(json_extract(v.kit, '$.style'), 'standard') style
+       FROM demos d JOIN site_versions v ON v.slug = d.slug AND v.version = d.live_version
+      WHERE d.tenant_id = ? AND d.slug != ? ORDER BY d.created_at DESC LIMIT ?`,
+  )
+    .bind(tenantId, notSlug, limit)
+    .all<{ print: string | null; accent: string | null; theme: string | null; look: string | null; style: string }>();
+  return results.map((r) => ({ print: r.print ?? "", accent: r.accent ?? "", theme: r.theme ?? "", look: r.look ?? "", style: r.style }));
+}
+
 /** Replace a version's shared header and footer (a QA repair). */
 export async function saveChrome(env: Env, slug: string, version: string, header: string, footer: string): Promise<void> {
   await env.DB.prepare("UPDATE site_versions SET kit = json_set(kit, '$.header', ?, '$.footer', ?) WHERE slug = ? AND version = ?").bind(header, footer, slug, version).run();

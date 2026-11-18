@@ -8,12 +8,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { splitList, parseReviews } from "../../../src/forge/copy";
 import { GENERIC, presetFor } from "../../../src/forge/presets";
 import { profileFor, type Profile } from "./profiles";
-import { heroById, studioExtras } from "./heroes";
+import { heroById, studioExtras, type Extras } from "./heroes";
 import { ideaBlock, ownScreen, type Idea } from "./brief";
 import type { Intake } from "../../../src/forge/schema";
 import type { Env } from "./env";
 import { conceptById, type Draw } from "./concepts";
 import { MOTION_API } from "./motion";
+import { applyFonts, dnaBrief, dnaTokens, fontRoles, recolor, recolorHtml, refont, sourceHues, type Dna } from "./dna";
 import type { SiteFacts } from "./scrape";
 
 /** Designs the look and writes the home page. */
@@ -455,7 +456,7 @@ export const ownHero = (idea: Idea) =>
   `THIS SITE'S OWN FIRST SCREEN, as its idea describes it: ${ownScreen(idea)}\nBuild it with our motion engine's attributes only (no scripts of your own). If it needs a photograph or video, our system supplies it: put exactly <div class="hero-motion" aria-hidden="true"></div> (empty, unstyled) as the first child of the element the picture belongs in, which has position:relative, overflow:hidden and its own size. The headline, one sentence and the primary button fit in the first screen at 1440x900 and at 390x844.`;
 
 /** A Studio home page built on a brief: the idea's story sets the order; the look's scenes are layouts to draw on. */
-function ideaHome(pages: PageSpec[], c: ReturnType<typeof conceptById>, sig: ReturnType<typeof heroById>, heroId: string | undefined, slug: string, idea: Idea): string {
+function ideaHome(pages: PageSpec[], c: ReturnType<typeof conceptById>, sig: ReturnType<typeof heroById>, heroId: string | undefined, slug: string, idea: Idea, extras?: Extras): string {
   const by = (role: PageSpec["role"], path: string) => pages.find((p) => p.role === role) ?? pages.find((p) => p.path === path);
   const index = by("index", "/services");
   const items = pages.filter((p) => (pages.some((x) => x.role === "index") ? p.role === "item" : p.path.startsWith("/services/")));
@@ -473,13 +474,13 @@ What the home page must carry (fit each where the story puts it):
 - Where to find it: the real map embed from the facts, linking to ${visit?.name ?? "Service Areas"} → ${visit?.path ?? "/areas"}.
 - The action: a visible form for "${cta?.name ?? "Get a Quote"}" with the privacy note.
 The story, how it works, photographs and questions have their own pages (/about, /gallery, /faq): link to them, and give them a scene here only if the idea's story calls for it. If illustrative before/after pairs are in the facts, show them where the story talks about the work.
-${c ? `\nMotion for this direction: ${c.moves}\nRuled out for this direction (it yields where the idea needs otherwise): ${c.never}` : ""}${slug ? studioExtras(heroId, slug, idea) : ""}`;
+${c ? `\nMotion for this direction: ${c.moves}\nRuled out for this direction (it yields where the idea needs otherwise): ${c.never}` : ""}${slug ? studioExtras(heroId, slug, idea, extras) : ""}`;
 }
 
-export function studioHome(pages: PageSpec[], conceptId: string, draw?: Draw, heroId?: string, slug = "", idea?: Idea): string {
+export function studioHome(pages: PageSpec[], conceptId: string, draw?: Draw, heroId?: string, slug = "", idea?: Idea, extras?: Extras): string {
   const c = conceptById(conceptId);
   const sig = heroById(heroId);
-  if (idea) return ideaHome(pages, c, sig, heroId, slug, idea);
+  if (idea) return ideaHome(pages, c, sig, heroId, slug, idea, extras);
   if (!c) return pages[0]?.brief ?? "";
   const order = draw?.order ?? c.scenes.map((_, i) => i);
   const by = (role: PageSpec["role"], path: string) => pages.find((p) => p.role === role) ?? pages.find((p) => p.path === path);
@@ -505,7 +506,7 @@ What the scenes must carry between them (fit each into the scene that suits it; 
 - If illustrative before/after pairs are in the facts, show them inside the photographs scene, in this direction's picture frames.
 
 Motion: ${c.moves}
-Ruled out: ${c.never}${slug ? studioExtras(heroId, slug) : ""}`;
+Ruled out: ${c.never}${slug ? studioExtras(heroId, slug, undefined, extras) : ""}`;
 }
 
 /** Told to the designer and every page writer when the site isn't a contractor's: use its own words and pages. */
@@ -882,6 +883,10 @@ export interface Kit {
   reuse?: { slug: string; version: string };
   /** The idea the site was built on (Studio, see brief.ts): it outranks the look. */
   idea?: Idea;
+  /** Which set piece the home page carries beyond its hero (see extrasFor); absent on older sites (both). */
+  extras?: Extras;
+  /** The design DNA the site is held to (see dna.ts), with what its first stylesheet was written in. */
+  dna?: Dna & { src: number[]; roles: Record<string, "display" | "text"> };
 }
 export interface PageDraft {
   title: string;
@@ -1011,11 +1016,11 @@ const need = (parts: Record<string, string>, names: string[]) => {
 };
 
 /** Stage 1: the design system (fonts, CSS, header, footer, script) for the given pages. */
-export async function designKit(env: Env, brief: string, pages: PageSpec[], style: Style = "standard", concept?: string, draw?: Draw, heroId?: string, idea?: Idea): Promise<{ kit: Kit; usage: unknown }> {
+export async function designKit(env: Env, brief: string, pages: PageSpec[], style: Style = "standard", concept?: string, draw?: Draw, heroId?: string, idea?: Idea, dna?: Dna): Promise<{ kit: Kit; usage: unknown }> {
   // Low effort: the brief already makes the design decisions explicit, and thinking is the costliest part.
   // A Studio site thinks harder about its art direction: that is where the budget goes.
   const studio = style === "studio";
-  const { prompt } = kitRequest(brief, pages, style, concept, heroId, idea);
+  const { prompt } = kitRequest(brief, pages, style, concept, heroId, idea, dna);
   // Low effort for Studio too (was medium): the brief already makes the design decisions, and thinking
   // was about half this call's cost. CLAUDE_EFFORT=medium brings the old setting back.
   const effort = effortOf(env, "low");
@@ -1029,23 +1034,24 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[], styl
     usage = { ...usage, cost_usd: (Number(usage.cost_usd) || 0) + first };
     if (cut) throw new Error("The site's design came back incomplete twice. Try again; if it keeps happening, build it as Standard.");
   }
-  return { kit: kitFromText(text, brief, pages, style, concept, draw, heroId, idea), usage };
+  return { kit: kitFromText(text, brief, pages, style, concept, draw, heroId, idea, dna), usage };
 }
 
 /** What a design kit is written from: the task with the business, and the system prompt. */
-export function kitRequest(brief: string, pages: PageSpec[], style: Style = "standard", concept?: string, heroId?: string, idea?: Idea): { prompt: string; system: string } {
-  return { prompt: `${kitTask(pages, style)}\n\n## The business\n${brief}`, system: systemFor(style, concept, heroId, idea) };
+export function kitRequest(brief: string, pages: PageSpec[], style: Style = "standard", concept?: string, heroId?: string, idea?: Idea, dna?: Dna): { prompt: string; system: string } {
+  // The DNA comes last, nearest the reply, so it is what the writer has freshest in mind.
+  return { prompt: `${kitTask(pages, style)}\n\n## The business\n${brief}${dna ? `\n\n${dnaBrief(dna)}` : ""}`, system: systemFor(style, concept, heroId, idea) };
 }
 
 /** A design kit from a model's reply. */
-export function kitFromText(text: string, brief: string, pages: PageSpec[], style: Style = "standard", concept?: string, draw?: Draw, heroId?: string, idea?: Idea): Kit {
+export function kitFromText(text: string, brief: string, pages: PageSpec[], style: Style = "standard", concept?: string, draw?: Draw, heroId?: string, idea?: Idea, dna?: Dna): Kit {
   const studio = style === "studio";
   const p = parseParts(text);
   need(p, ["CSS", "HEADER", "FOOTER"]);
   // The credit must be on every page: if the marker went missing, put it at the end of the footer.
   let footer = p.FOOTER;
   if (!footer.includes(CREDIT_MARKER)) footer = /<\/footer>/i.test(footer) ? footer.replace(/<\/footer>(?![\s\S]*<\/footer>)/i, `<p>${CREDIT_MARKER}</p></footer>`) : `${footer}${CREDIT_MARKER}`;
-  return {
+  const kit: Kit = {
       theme: /dark/i.test(p.THEME ?? "") ? "dark" : "light",
       accent: /^#[0-9a-f]{6}$/i.test(p.ACCENT ?? "") ? p.ACCENT : "",
       fonts: (p.FONTS ?? "").match(/<link\b[^>]*>/gi)?.filter((l) => /fonts\.(googleapis|gstatic)\.com/.test(l)).join("\n") ?? "",
@@ -1058,6 +1064,34 @@ export function kitFromText(text: string, brief: string, pages: PageSpec[], styl
       pages,
       ...(studio ? { style: "studio" as const, ...(conceptById(concept) ? { concept } : {}), ...(draw ? { draw: draw.print } : {}), ...(heroById(heroId) || heroId === "own" ? { hero: heroId } : {}), ...(idea ? { idea } : {}) } : {}),
   };
+  return dna ? holdKitToDna(kit, dna) : kit;
+}
+
+/**
+ * Hold a fresh design to its DNA, whatever the writer chose: its fonts become the DNA's pair, its
+ * colours move onto the DNA's hues at their own lightness, and it opens in the DNA's mode.
+ */
+export function holdKitToDna(kit: Kit, dna: Dna): Kit {
+  const src = sourceHues(kit.css);
+  const roles = fontRoles(kit.css, kit.fonts, dna);
+  const hold = (t: string) => recolor(refont(t, kit.fonts, dna), dna, src);
+  return {
+    ...kit,
+    theme: dna.mode,
+    accent: dnaTokens(dna).light.accent!,
+    fonts: dna.fonts,
+    css: hold(kit.css),
+    header: recolorHtml(kit.header, dna, src),
+    footer: recolorHtml(kit.footer, dna, src),
+    dna: { ...dna, src, roles },
+  };
+}
+
+/** A page written for a DNA site, held to the same DNA as its stylesheet. */
+export function holdPageToDna(kit: Kit, page: PageDraft): PageDraft {
+  const d = kit.dna;
+  if (!d) return page;
+  return { ...page, css: recolor(applyFonts(page.css, d.roles ?? {}, d), d, d.src), body: recolorHtml(page.body, d, d.src) };
 }
 
 /**
@@ -1179,7 +1213,7 @@ export async function designSitePage(env: Env, kit: Kit, page: PageSpec, rev: Pa
       const r = await writePage(env, kit, page, rev, true);
       spent = r.usage;
       const edited = applyEdits(rev.current, parseEdits(r.text));
-      return { page: { ...edited, css: tidyCss(edited.css.replace(/<\/?style[^>]*>/gi, ""), kit.style === "studio" ? 20_000 : 12_000) }, usage: { ...r.usage, edited: true } };
+      return { page: holdPageToDna(kit, { ...edited, css: tidyCss(edited.css.replace(/<\/?style[^>]*>/gi, ""), kit.style === "studio" ? 20_000 : 12_000) }), usage: { ...r.usage, edited: true } };
     } catch (e) {
       console.log("edit fell back to a full rewrite", page.path, e instanceof Error ? e.message : String(e));
       const whole = await designSitePage(env, kit, page, { ...rev, full: true });
@@ -1194,7 +1228,7 @@ export async function designSitePage(env: Env, kit: Kit, page: PageSpec, rev: Pa
   if (cut && end < 0) throw new Error(`The ${page.name} page came back incomplete (too long).`);
   if (end >= 0) p.MAIN = p.MAIN.slice(0, end + "</main>".length);
   need(p, ["MAIN"]);
-  return { page: { title: p.TITLE ?? page.name, description: p.DESCRIPTION ?? "", css: tidyCss((p.CSS ?? "").replace(/<\/?style[^>]*>/gi, ""), studio ? 20_000 : 12_000), body: p.MAIN }, usage };
+  return { page: holdPageToDna(kit, { title: p.TITLE ?? page.name, description: p.DESCRIPTION ?? "", css: tidyCss((p.CSS ?? "").replace(/<\/?style[^>]*>/gi, ""), studio ? 20_000 : 12_000), body: p.MAIN }), usage };
 }
 
 /** One call that writes a page (whole) or its edits. */
