@@ -1034,7 +1034,54 @@ export async function designKit(env: Env, brief: string, pages: PageSpec[], styl
     usage = { ...usage, cost_usd: (Number(usage.cost_usd) || 0) + first };
     if (cut) throw new Error("The site's design came back incomplete twice. Try again; if it keeps happening, build it as Standard.");
   }
-  return { kit: kitFromText(text, brief, pages, style, concept, draw, heroId, idea, dna), usage };
+  const kit = kitFromText(text, brief, pages, style, concept, draw, heroId, idea, dna);
+  // On the lean model a design comes back about a third thinner than Claude's, and pages then fall back on
+  // generic blocks. Its calls cost a cent or two, so a Studio design gets a second, focused pass that builds
+  // out the art direction's own components, one per home-page scene, held to the same DNA.
+  if (studio && env.AI && (await leanMode(env))) {
+    const more = await enrichKit(env, kit, pages, systemFor(style, concept, heroId, idea)).catch((e) => (console.log("kit enrichment skipped", e instanceof Error ? e.message : String(e)), null));
+    if (more) return { kit: more.kit, usage: { ...usage, cost_usd: (Number(usage.cost_usd) || 0) + (Number(more.usage.cost_usd) || 0), neurons: (Number(usage.neurons) || 0) + (Number(more.usage.neurons) || 0) } };
+  }
+  return { kit, usage };
+}
+
+/** The second design pass (lean Studio builds): richer components for the home page's scenes, in the same look. */
+async function enrichKit(env: Env, kit: Kit, pages: PageSpec[], system: string): Promise<{ kit: Kit; usage: Record<string, unknown> }> {
+  const home = pages.find((p) => p.path === "/");
+  const classes = [...new Set([...kit.css.matchAll(/\.([a-z][\w-]{2,})/gi)].map((m) => m[1]!))].slice(0, 220).join(" ");
+  const prompt = `This site's design system is written (its tokens, fonts and components are listed below). Now make it richer, as a senior art director would, in exactly the same look: the home page needs a distinct, designed component for EACH of its scenes, and the current stylesheet only has generic ones.
+
+## The home page's scenes and first screen
+${home?.brief ?? ""}
+
+## The stylesheet so far: its tokens
+${(kit.css.match(/:root\s*\{[^}]*\}/) ?? [""])[0]}
+${(kit.css.match(/\[data-theme=["']?dark["']?\]\s*\{[^}]*\}/) ?? [""])[0]}
+
+## Classes it already has (don't redefine these)
+${classes}
+
+${kit.dna ? dnaBrief(kit.dna) : ""}
+
+Write NEW CSS only, using the tokens above (var(--...)), for:
+- one component per scene above, named after what it is in this direction (e.g. .contents-row, .spec-table, .film-strip, .sign-board, .pull-quote-page), each with a real layout (grid or flex, asymmetric where the direction allows), its own type scale, its picture treatment (crops, frames, masks, offsets), and a hover or focus state;
+- the first screen's composition exactly as described, with its picture frame;
+- two or three art details that make this look its own (a texture or grain from a CSS gradient, a rule or frame style, a number or label style, a decorative border) used across those components;
+- phone layouts for all of it below 720px (single column, nothing wider than the screen, min-width:0 on grid children).
+No colours outside the tokens, no new fonts, no animations (the motion engine does those), no rules for the header or footer.
+
+Reply with:
+@@@ CSS
+the new rules only
+@@@ COMPONENTS
+one line per new component: its class names and markup pattern, and which scene it is for`;
+  const { text, usage } = await ask(env, prompt, 14000, env.CLAUDE_MODEL || MODEL, "low", system);
+  const p = parseParts(text);
+  const extra = (p.CSS ?? "").replace(/<\/?style[^>]*>/gi, "").trim();
+  if (extra.length < 400) throw new Error("too little came back");
+  const d = kit.dna;
+  const held = d ? recolor(applyFonts(extra, d.roles ?? {}, d), d, d.src) : extra;
+  return { kit: { ...kit, css: `${kit.css}\n/* --- scene components --- */\n${held}`, components: `${kit.components ?? ""}\n${(p.COMPONENTS ?? "").trim()}` }, usage };
 }
 
 /** What a design kit is written from: the task with the business, and the system prompt. */
