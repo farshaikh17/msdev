@@ -78,6 +78,11 @@ describe("the pointer", () => {
     expect(dropEmptyCalls('<p>Hi <a class="b" href="tel:+1">Call the desk</a> <a href="tel:">x</a></p>')).toBe("<p>Hi  </p>");
     const real = '<a href="tel:+13056675657">Call</a>';
     expect(dropEmptyCalls(real)).toBe(real);
+    // The shared header and footer too (a design built on another site's, for a business with no phone).
+    const k = { ...kit(), header: '<header><a href="/">X</a><a class="cta" href="tel:+1">Call for a tow</a></header>', footer: '<footer><a href="tel:">Call</a></footer>' };
+    const html = assemble(k as never, page, "s");
+    expect(html).not.toContain('href="tel:+1"');
+    expect(html).not.toContain('href="tel:"');
   });
   it("keeps one credit line when a design wrote its own", () => {
     const ours = '<span class="mianro-credit">Made with <span class="mianro-heart" role="img" aria-label="love">♥</span> by <a href="https://www.mianrosystems.com/">Mianro Systems</a></span>';

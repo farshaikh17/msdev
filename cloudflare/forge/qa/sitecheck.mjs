@@ -83,10 +83,12 @@ const AT_EACH_STOP = () => {
   let n = 0, t = 0;
   for (let x = 20; x < vw; x += 60) for (let y = 90; y < vh; y += 60) {
     t++;
-    const e = document.elementFromPoint(x, y);
+    // Looking through see-through layers (a tint over a photo is still a photo on screen).
+    const stack = document.elementsFromPoint(x, y).slice(0, 8);
+    const e = stack[0];
     if (!e) continue;
     // The footer is content (sparse link columns on plain paper are not an empty screen).
-    if (e.closest("footer") || /^(IMG|VIDEO|CANVAS|svg|path|PICTURE|IFRAME)$/i.test(e.tagName) || getComputedStyle(e).backgroundImage !== "none" || [...e.childNodes].some((c) => c.nodeType === 3 && c.textContent.trim())) n++;
+    if (e.closest("footer") || [...e.childNodes].some((c) => c.nodeType === 3 && c.textContent.trim()) || stack.some((s) => /^(IMG|VIDEO|CANVAS|svg|path|PICTURE|IFRAME)$/i.test(s.tagName) || getComputedStyle(s).backgroundImage !== "none")) n++;
   }
   window.__fill = (window.__fill || []).concat(Math.round((100 * n) / t));
   return iss;

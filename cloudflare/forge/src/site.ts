@@ -132,9 +132,9 @@ export function assemble(kit: Kit, page: PageDraft, slug: string, credit: string
   const doc = `<!doctype html><html lang="en" data-theme="${kit.theme}"${studio ? ` style="--m-accent:${accent}"${kit.concept && /^[a-z]+$/.test(kit.concept) ? ` data-m-cursor="${kit.concept}"` : ""}` : ""}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(page.title)}</title>${icon}<meta name="description" content="${esc(page.description)}"><meta name="robots" content="noindex">
 ${boot}${kit.fonts}<style>${BASE_CSS}\n${kit.css}${page.css ? `\n${tidyCss(page.css)}` : ""}\n${HEADER_CSS}\n${HERO_CSS}\n${CREDIT_CSS}\n${QA_CSS}${studio ? MOTION_CSS : ""}</style></head><body>
-${kit.header}
+${dropEmptyCalls(kit.header)}
 ${dropEmptyCalls(samplesNotPlaceholders(/<main\b[^>]*\sid\s*=/i.test(page.body) ? page.body : page.body.replace(/<main\b/i, '<main id="main"')))}
-${oneCredit(kit.footer.split(CREDIT_MARKER).join(credit), credit).replace(/(©|&copy;)(\s*)20\d\d(?!\s*[-–])/g, `$1$2${new Date().getUTCFullYear()}`)}
+${oneCredit(dropEmptyCalls(kit.footer).split(CREDIT_MARKER).join(credit), credit).replace(/(©|&copy;)(\s*)20\d\d(?!\s*[-–])/g, `$1$2${new Date().getUTCFullYear()}`)}
 <script>${kit.script}</script><script>${QA_JS}</script>${studio ? motionScripts() : ""}</body></html>`;
   // The QA standards that need no judgement: +1 on phone links, legal links always in the footer.
   const legal = (path: string) => !pagesOf(kit).some((p) => p.path === path) || new RegExp(`href\\s*=\\s*["']${path}["']`, "i").test(kit.footer);
