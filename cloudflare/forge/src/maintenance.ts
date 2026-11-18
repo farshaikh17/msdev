@@ -18,8 +18,9 @@ export async function maintenanceRebuild(env: Env): Promise<string[]> {
   let list = (row?.value ?? "").split(/\s+/).filter(Boolean);
   if (!list.length) return [];
   const busy = (await env.DB.prepare("SELECT count(*) AS n FROM demos WHERE build_status = 'building'").first<{ n: number }>())?.n ?? 0;
+  const atOnce = Math.max(1, Math.min(6, Number((env as unknown as { MAINTENANCE_AT_ONCE?: string }).MAINTENANCE_AT_ONCE) || AT_ONCE));
   const started: string[] = [];
-  for (let room = AT_ONCE - busy; room > 0 && list.length; room--) {
+  for (let room = atOnce - busy; room > 0 && list.length; room--) {
     const slug = list.shift()!;
     await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").bind(MAINTENANCE_KEY, list.join("\n")).run();
     const demo = await getDemo(env, slug);
