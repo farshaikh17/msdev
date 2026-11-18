@@ -122,3 +122,34 @@ Costs: cut-outs and frames sit in Cloudflare's free allowances (5,000 Images tra
 Needs the Images and Media bindings (in wrangler.jsonc) and a deploy.
 
 **Decision (same day): no Cloudflare video generation.** It is switched off (it only runs if the FORGE_VIDEO_GEN variable is set to "on"). GHL Creator Studio has no public API, so moving heroes come from the video library: clips made in Creator Studio (free on the agency plan) are saved into the shared Google Drive folder, and the hourly sync imports them and sorts them by trade. Without a clip, the turning showcase shows the cut-out object swaying and growing as the visitor scrolls (no frames).
+
+## Update, 2026-11-18: lean production, Studio quality restored
+
+**How a site is made now.** Every text call runs on Workers AI (lean mode); Claude is not used. A lean
+Studio build is designed on one of the account's Claude-written Studio design systems (12 today: the
+Studio sites built 12–13 Nov), chosen to suit the trade, least-used first and claimed per build so
+neighbours differ; its own DNA (palette, type, shape, mode, chosen in `src/dna.ts` and enforced after
+writing) and its own idea, scene order and set piece make it its own site. Standard builds are designed
+fresh on the lean model with a dealt DNA, a borrowed art direction and one of six first-screen layouts.
+
+**Cost per site (from production, 18 Nov):** Studio $0.08–0.10, Standard $0.10–0.13. Fixed: the $5/month
+Workers plan. Paid Workers AI is capped at $10/month (`CF_PAID_AI_USD_MONTH`); about 10,000 units a day
+are free (roughly one build). About $4.76 of the paid cap was used by 18 Nov (the rebuilds).
+
+**Where the five goals stand**
+
+| | Status |
+|---|---|
+| 1. Reliable | Met. 39 sites, none failed; 383 tests and the 38-step browser QA pass. |
+| 2. Good | Studio: back at the 12–13 Nov level (Claude-made design systems) at lean cost. Standard: distinct per site, but written from scratch by the lean model, so a step below Studio. No automatic critique score in lean mode. |
+| 3. Meets QA | Met for the rebuilt sites: `npm run forge:sitecheck` (every page, desktop and phone, scrolled) finds nothing open. It is run by hand, not after every build. |
+| 4. Usable | Not yet proven by anyone but the owner. |
+| 5. Sellable | Owner decisions outstanding: prices, payment, legal review (no custom domains for now). |
+
+**Known gaps**
+- The Studio base library grows only with Claude-built designs (about $3 each); with many sites, bases repeat.
+- Standard has no base library (three Claude-built Standard designs exist).
+- A rebuild replaces the stored version: there is no rollback.
+- Planning reads the trade field: a vague trade ("Public Park" for a ballpark) gives generic services.
+- No phone is read from a Google Maps link; a site without a phone has no call button.
+- Cloud Peak and Little Havana carry made-up 555 numbers (portfolio sites).
