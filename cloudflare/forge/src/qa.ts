@@ -365,7 +365,11 @@ if(document.readyState==="complete")setTimeout(run,500);else addEventListener("l
 // screen and pushes its words and pictures off the right edge. Such boxes are measured with their padding inside.
 (function(){function fix(){if(innerWidth>=700)return;[].forEach.call(document.querySelectorAll("main *,footer *,header *"),function(e){
 var cs=getComputedStyle(e);if(cs.boxSizing!=="content-box"||cs.position==="fixed"||cs.position==="absolute")return;var pl=parseFloat(cs.paddingLeft)+parseFloat(cs.paddingRight)+parseFloat(cs.borderLeftWidth)+parseFloat(cs.borderRightWidth);if(pl<2)return;
-var par=e.parentElement;if(!par)return;var w=e.getBoundingClientRect().width,pw=par.clientWidth;if(w>pw+2&&w-pl<=pw+2)e.style.boxSizing="border-box"})}
+var par=e.parentElement;if(!par)return;var w=e.getBoundingClientRect().width,pw=par.clientWidth;if(w>pw+2&&w-pl<=pw+2)e.style.boxSizing="border-box"});
+// A block far wider than the screen while its parent fits (a fixed or percentage width the phone layout forgot) is held to the screen.
+[].forEach.call(document.querySelectorAll("main section,main section > *,main article"),function(e){if(e.closest("[class*=track i],[class*=scroller i],[class*=carousel i],[class*=marquee i],[class*=ticker i],[class*=slider i],[class*=lane i],.pin-spacer,[data-pin]"))return;
+var cs=getComputedStyle(e);if(cs.position==="fixed")return;var r=e.getBoundingClientRect(),par=e.parentElement;if(!par||r.width<=innerWidth+4)return;if(par.getBoundingClientRect().width>innerWidth+4&&par.tagName!=="MAIN")return;
+e.style.setProperty("width","auto","important");e.style.setProperty("max-width","100%","important");e.style.setProperty("min-width","0","important");if(cs.position==="absolute"){e.style.left="0";e.style.right="0"}})}
 if(document.readyState==="complete")fix();else addEventListener("load",fix);setTimeout(fix,600);addEventListener("resize",fix)})();
 
 // Phones: text that touches or runs past the screen's edge gets room at the sides, and a heading wider

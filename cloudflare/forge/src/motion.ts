@@ -119,7 +119,7 @@ html.m-floating main h1{position:relative;z-index:31}
 .m-parts-off{display:block!important;height:auto!important;min-height:0!important;padding:14vh clamp(18px,5vw,32px)!important;text-align:center}.m-parts-off>*{max-width:100%!important;margin-left:auto!important;margin-right:auto!important}.m-parts-off::before{content:attr(data-word);display:block;width:100%;font-weight:800;font-size:min(200px,15vw,calc(170vw / var(--m-len,6)));line-height:1;letter-spacing:-.02em;margin-bottom:28px;overflow-wrap:break-word}
 .m-parts-off [data-particles-after]{opacity:1!important;transform:none!important;position:static!important}
 /* Phones: the scroll story is read as ordinary stacked blocks (it only pins on wide screens), with room at the sides. */
-@media (max-width:899px){[data-pin-stage] [data-at]{padding-left:clamp(18px,5vw,32px);padding-right:clamp(18px,5vw,32px);box-sizing:border-box}}
+@media (max-width:899px){[data-pin-stage]{height:auto!important;min-height:0!important;overflow:visible!important}[data-pin-stage] [data-at]{position:relative!important;inset:auto!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;transform:none!important;width:auto!important;max-width:100%!important;opacity:1!important;visibility:visible!important;filter:none!important;margin:0 0 28px!important;padding-left:clamp(18px,5vw,32px);padding-right:clamp(18px,5vw,32px);box-sizing:border-box}}
 html.m-wait [data-split],html.m-wait [data-reveal]{visibility:hidden}
 html.m-on,html.m-on body{overflow-x:clip}html.lenis,html.lenis body{height:auto}.lenis.lenis-smooth{scroll-behavior:auto!important}.lenis.lenis-stopped{overflow:hidden}
 @media (prefers-reduced-motion:reduce){[data-grain]::after{animation:none}}
@@ -363,6 +363,8 @@ all("[data-parallax]").forEach(function(el){
   G.fromTo(el,{yPercent:-s*50},{yPercent:s*50,ease:"none",scrollTrigger:{trigger:el.parentElement||el,start:"top bottom",end:"bottom top",scrub:true}});
 });
 // --- pinned scroll story: the stage holds still while the scroll writes its content in and out
+// (A stage named by class instead of the attribute is still found: the box its beats sit in.)
+all("[data-pin]").forEach(function(sec){if(sec.querySelector("[data-pin-stage]"))return;var b=sec.querySelector("[data-at]");if(b&&b.parentElement&&b.parentElement!==sec)b.parentElement.setAttribute("data-pin-stage","");else if(b){var w=d.createElement("div");w.setAttribute("data-pin-stage","");while(sec.firstChild)w.appendChild(sec.firstChild);sec.appendChild(w)}});
 mm0.add("(min-width: 900px)",function(){
   all("[data-pin]").forEach(function(sec){
     var stage=sec.querySelector("[data-pin-stage]");if(!stage)return;
