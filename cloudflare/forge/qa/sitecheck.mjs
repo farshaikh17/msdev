@@ -54,16 +54,22 @@ const AT_EACH_STOP = () => {
   const op = (e) => { let o = 1; for (let x = e; x && x !== document.body; x = x.parentElement) { const cs = getComputedStyle(x); o *= +cs.opacity; if (cs.visibility === "hidden" || cs.display === "none") return 0; } return o; };
   const pinned = (e) => { for (let x = e; x; x = x.parentElement) { const p = getComputedStyle(x).position; if (p === "fixed" || p === "sticky") return true; } return false; };
   const moving = (e) => e.closest('[aria-hidden=true],.sr-only,.visually-hidden,marquee,[class*=marquee i],[class*=ticker i],[class*=track i],[class*=scroller i],[class*=carousel i],[class*=slider i],[class*=lane i]');
+  // A tilted card (rotate) has rows whose boxes overlap though the words don't.
+  const tilted = (e) => { for (let x = e, k = 0; x && k < 8; x = x.parentElement, k++) { const m = getComputedStyle(x).transform.match(/^matrix\(([^)]+)\)/); if (m && Math.abs(parseFloat(m[1].split(",")[1])) > 0.005) return true; } return false; };
   // Words on top of words (a floating or pinned bar passing over text is fine).
-  const T = [...document.querySelectorAll("main h1,main h2,main h3,main p,main li,main blockquote,footer p,footer a,footer h2,footer h3")].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 8 && r.top > 70 && r.bottom < vh - 10 && (e.innerText || "").trim().length > 2 && !moving(e) && op(e) > 0.6 && !pinned(e); });
+  const T = [...document.querySelectorAll("main h1,main h2,main h3,main p,main li,main blockquote,footer p,footer a,footer h2,footer h3")].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 8 && r.top > 70 && r.bottom < vh - 10 && (e.innerText || "").trim().length > 2 && !moving(e) && op(e) > 0.6 && !pinned(e) && !tilted(e); });
   const leaf = T.filter((e) => !T.some((o) => o !== e && e.contains(o)));
   for (let a = 0; a < leaf.length; a++) for (let b = a + 1; b < leaf.length; b++) {
     const A = leaf[a].getBoundingClientRect(), B = leaf[b].getBoundingClientRect();
     const ox = Math.min(A.right, B.right) - Math.max(A.left, B.left), oy = Math.min(A.bottom, B.bottom) - Math.max(A.top, B.top);
     if (ox > 8 && oy > 8 && ox * oy > 0.25 * Math.min(A.width * A.height, B.width * B.height)) {
       // Only when the lower words actually show through or get cut (a card sliding fully over another is fine).
-      const pt = document.elementFromPoint(Math.max(A.left, B.left) + ox / 2, Math.max(A.top, B.top) + oy / 2);
-      if (pt && (leaf[a].contains(pt) || leaf[b].contains(pt))) iss.push(`text over text: "${leaf[a].innerText.trim().slice(0, 30)}" / "${leaf[b].innerText.trim().slice(0, 30)}"`);
+      // Both words are painted there, with nothing opaque between them (a card hidden under the next section is fine).
+      const stack = document.elementsFromPoint(Math.max(A.left, B.left) + ox / 2, Math.max(A.top, B.top) + oy / 2);
+      const ia = stack.findIndex((x) => leaf[a].contains(x)), ib = stack.findIndex((x) => leaf[b].contains(x));
+      const solid = (x) => { const c = getComputedStyle(x); const al = c.backgroundColor.match(/[\d.]+/g); return c.backgroundImage !== "none" || (al && (al.length < 4 || +al[3] > 0.85) && c.backgroundColor !== "rgba(0, 0, 0, 0)"); };
+      const between = ia >= 0 && ib >= 0 && stack.slice(Math.min(ia, ib) + 1, Math.max(ia, ib)).some((x) => !leaf[a].contains(x) && !leaf[b].contains(x) && solid(x));
+      if (ia >= 0 && ib >= 0 && !between) iss.push(`text over text: "${leaf[a].innerText.trim().slice(0, 30)}" / "${leaf[b].innerText.trim().slice(0, 30)}"`);
     }
   }
   // A big part of the screen darkened by a filter (the stacked-card black flash).

@@ -15,7 +15,7 @@ describe("scroll check in the worker", () => {
     };
     const found = await scrollScan(page as never, async () => undefined);
     expect(found).toEqual(['text over text: "a" / "b"', "made-up 555 phone number", '2 "Made with" credits']);
-    expect(seen.filter((s) => s === STOP_JS).length).toBe(5);
+    expect(seen.filter((s) => s === STOP_JS).length).toBe(10); // each flagged screen is looked at twice
     expect(found.filter(pageFixable)).toHaveLength(2);
     expect(scanNote(found[0]!)).toMatch(/never cover other words/);
   });
