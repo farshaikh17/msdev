@@ -323,6 +323,44 @@ var d=g.getImageData(0,0,48,24).data,t=0;for(var i=0;i<d.length;i+=4)t+=L(d[i],d
 if(t/(d.length/4)<.42)lit()}catch(err){}})}
 function go(){setTimeout(run,900);setTimeout(run,3000)}if(document.readyState==="complete")go();else addEventListener("load",go)})();
 
+// Words must be readable on the colour actually behind them: a heading, paragraph, link or label whose colour is
+// within a whisker of its solid background (a writer setting text in the background colour, or one mode's ink
+// left on the other mode's paper) takes whichever of the page's two inks reads. Text over photos and big faded
+// watermark words are left as designed.
+(function(){function rgb(v){var m=(v||"").match(/[0-9.]+/g);return m&&m.length>=3?m.map(Number):null}
+function lum(c){var a=[c[0],c[1],c[2]].map(function(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)});return 0.2126*a[0]+0.7152*a[1]+0.0722*a[2]}
+function ratio(a,b){var x=lum(a),y=lum(b);return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05)}
+function behind(e){for(var n=e;n&&n!==document.documentElement;n=n.parentElement){var cs=getComputedStyle(n);if(cs.backgroundImage!=="none"&&!/gradient/.test(cs.backgroundImage))return null;if(/^(IMG|VIDEO|PICTURE)$/.test(n.tagName))return null;var c=rgb(cs.backgroundColor);if(c&&(c.length<4||c[3]>0.85))return c}return rgb(getComputedStyle(document.body).backgroundColor)||[255,255,255]}
+function solid(e){for(var n=e;n&&n!==document.documentElement;n=n.parentElement){var c=rgb(getComputedStyle(n).backgroundColor);if(c&&(c.length<4||c[3]>0.85))return c}return null}
+function overPicture(e){var r=e.getBoundingClientRect(),sec=e.closest("section,header,footer")||document.body;return [].some.call(sec.querySelectorAll("img,video,canvas,.hero-motion"),function(m){if(e.contains(m)||m.contains(e))return false;var q=m.getBoundingClientRect();if(q.width<120||q.height<80)return false;var cs=getComputedStyle(m);if(cs.visibility==="hidden"||+cs.opacity<.1)return false;return q.left<r.right&&q.right>r.left&&q.top<r.bottom&&q.bottom>r.top})}
+function run(){[].forEach.call(document.querySelectorAll("[data-fg-readable]"),function(e){e.style.removeProperty("color");e.style.removeProperty("-webkit-text-fill-color");e.removeAttribute("data-fg-readable")});
+var light=[250,250,248],dark=[18,18,20];
+[].forEach.call(document.querySelectorAll("main h1,main h2,main h3,main h4,main p,main li,main a,main button,main label,main blockquote,main figcaption,main span,footer p,footer a,footer li,footer span,footer h2,footer h3"),function(e){
+if(![].some.call(e.childNodes,function(n){return n.nodeType===3&&n.textContent.trim().length>1}))return;
+if(e.closest(".sr-only,.visually-hidden,[data-fg-lit],[class*=marquee i],[class*=ticker i]"))return;
+// Hidden from screen readers is skipped, except the word and line pieces of an animated heading (the heading reads them out).
+var ah=e.closest("[aria-hidden=true]");if(ah&&!ah.closest("h1,h2,h3,h4,p,[data-split]"))return;
+var cs=getComputedStyle(e),head=!!e.closest("h1,h2,h3");if(cs.display==="none"||(!head&&(cs.visibility==="hidden"||parseFloat(cs.opacity)<.3)))return;
+var fs=parseFloat(cs.fontSize);if(fs>110&&!e.closest("h1,h2"))return;
+var c=rgb(cs.webkitTextFillColor&&!/transparent|rgba\(0, 0, 0, 0\)/.test(cs.webkitTextFillColor)?cs.webkitTextFillColor:cs.color);if(!c||(c.length>3&&c[3]<.35))return;
+var bg=behind(e);
+// The same colour as the solid background (a heading set in var(--bg)): wrong whatever else is behind it.
+if(!bg){var sb=solid(e);if(!sb||ratio(c,sb)>=1.25)return;bg=sb}
+else{if(ratio(c,bg)>=1.9)return;if(ratio(c,bg)>=1.25&&overPicture(e))return}
+var to=ratio(light,bg)>=ratio(dark,bg)?light:dark;var v="rgb("+to.join(",")+")";
+e.style.setProperty("color",v,"important");e.style.setProperty("-webkit-text-fill-color",v,"important");e.setAttribute("data-fg-readable","")})}
+function go(){setTimeout(run,700);setTimeout(run,2600);setTimeout(run,6000)}if(document.readyState==="complete")go();else addEventListener("load",go);
+new MutationObserver(function(){setTimeout(run,60)}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]})})();
+
+// The first screen's words sit above its pictures: a headline block that runs into the photo card beside it
+// (a breakout or split hero whose columns overlap) is lifted over the card, so no line is cut by it.
+(function(){function run(){var h=document.querySelector("main h1");if(!h)return;var sec=h.closest("section")||h.parentElement;if(!sec)return;
+var pics=[].filter.call(sec.querySelectorAll("img,video,canvas"),function(m){var q=m.getBoundingClientRect();return q.width>160&&q.height>120&&!m.closest("[aria-hidden=true]")||m.closest(".hero-motion,[class*=subject i],[class*=card i],[class*=frame i]")});
+var col=h;while(col.parentElement&&col.parentElement!==sec&&!pics.some(function(m){return col.parentElement.contains(m)}))col=col.parentElement;
+var r=col.getBoundingClientRect();var hit=pics.some(function(m){if(col.contains(m))return false;var q=m.getBoundingClientRect();var full=q.width>innerWidth*.85&&q.height>innerHeight*.6;return !full&&q.left<r.right-8&&q.right>r.left+8&&q.top<r.bottom-8&&q.bottom>r.top+8});
+if(!hit)return;if(getComputedStyle(col).position==="static")col.style.position="relative";col.style.zIndex="40";col.setAttribute("data-fg-lifted","")}
+if(document.readyState==="complete")setTimeout(run,500);else addEventListener("load",function(){setTimeout(run,500)})})();
+
 // Phones: a box set to full width plus side padding, in a design with no border-box rule, is wider than the
 // screen and pushes its words and pictures off the right edge. Such boxes are measured with their padding inside.
 (function(){function fix(){if(innerWidth>=700)return;[].forEach.call(document.querySelectorAll("main *,footer *,header *"),function(e){
