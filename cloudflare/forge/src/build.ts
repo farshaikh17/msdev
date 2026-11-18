@@ -286,7 +286,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       // components, hero and look), suited to the trade and unlike the bases its recent sites used; its own
       // DNA then gives it new colours and type. Claude-level design at lean cost.
       let master: { slug: string; version: string; concept: string; hero: string; theme: string } | undefined;
-      if (studio && !intake.reuseFrom && !intake.concept && !intake.hero && (await leanMode(env))) {
+      if (studio && !intake.reuseFrom && !conceptById(intake.concept) && !heroById(intake.hero) && (await leanMode(env))) {
         const masters = await studioMasters(env, demo.tenantId, slug).catch(() => []);
         const used = dnaRecent.slice(0, 6).map((r) => r.base).filter(Boolean);
         const usedLooks = dnaRecent.slice(0, 2).map((r) => r.look).filter(Boolean);

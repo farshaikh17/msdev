@@ -25,7 +25,14 @@ export async function maintenanceRebuild(env: Env): Promise<string[]> {
     await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").bind(MAINTENANCE_KEY, list.join("\n")).run();
     const demo = await getDemo(env, slug);
     const tenant = demo ? await getTenant(env, demo.tenantId) : null;
-    if (!demo || !tenant || demo.buildStatus === "building") continue;
+    if (!demo || !tenant) continue;
+    // Still building (from an earlier start): back of the list, for a later tick.
+    if (demo.buildStatus === "building") {
+      list.push(slug);
+      await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").bind(MAINTENANCE_KEY, list.join("\n")).run();
+      if (list.every((s) => s === slug)) break;
+      continue;
+    }
     const r = await redesignDemo(env, tenant, null, demo, null).catch((e) => `error: ${e instanceof Error ? e.message : String(e)}`);
     console.log("maintenance rebuild", slug, r);
     started.push(slug);
