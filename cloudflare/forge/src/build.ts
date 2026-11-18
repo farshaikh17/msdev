@@ -288,12 +288,19 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       let master: { slug: string; version: string; concept: string; hero: string; theme: string } | undefined;
       if (studio && !intake.reuseFrom && !conceptById(intake.concept) && !heroById(intake.hero) && (await leanMode(env))) {
         const masters = await studioMasters(env, demo.tenantId, slug).catch(() => []);
-        const used = dnaRecent.slice(0, 6).map((r) => r.base).filter(Boolean);
+        // Every base the account's live sites stand on, and how often: the least used come first, and the
+        // ones its latest builds used are passed over.
+        const all = await recentDna(env, demo.tenantId, slug, 60).catch(() => []);
+        const uses = (m: string) => all.filter((r) => r.base === m).length;
+        masters.sort((a, b) => uses(a.slug) - uses(b.slug));
+        const used = all.slice(0, 8).map((r) => r.base).filter(Boolean);
         const usedLooks = dnaRecent.slice(0, 2).map((r) => r.look).filter(Boolean);
         const suits = lookShortlist({ ...intake, services: intake.services || plan?.services.join(" ") });
         const fresh = masters.filter((m) => !used.includes(m.slug));
         const tiers = [fresh.filter((m) => suits.includes(m.concept) && !usedLooks.includes(m.concept)), fresh.filter((m) => !usedLooks.includes(m.concept)), fresh, masters];
-        const pool = tiers.find((t) => t.length) ?? [];
+        const tier = tiers.find((t) => t.length) ?? [];
+        const least = tier.length ? Math.min(...tier.map((m) => uses(m.slug))) : 0;
+        const pool = tier.filter((m) => uses(m.slug) === least);
         let h = 0;
         for (const ch of slug) h = (Math.imul(h, 31) + ch.charCodeAt(0)) >>> 0;
         // Builds running at the same moment can't see each other's choice yet: each claims its base for an hour.

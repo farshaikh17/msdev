@@ -664,13 +664,13 @@ export async function studioMasters(env: Env, tenantId: number, notSlug: string)
   return results;
 }
 
-/** The account's latest sites (any edition): the design DNA, accent and mode each was built with, newest first. */
+/** The account's latest builds (any edition, by when they were built): the DNA, accent, mode and base of each, newest first. */
 export async function recentDna(env: Env, tenantId: number, notSlug: string, limit = 12): Promise<{ print: string; accent: string; theme: string; look: string; style: string; base: string }[]> {
   const { results } = await env.DB.prepare(
     `SELECT json_extract(v.kit, '$.dna.print') print, json_extract(v.kit, '$.accent') accent, json_extract(v.kit, '$.theme') theme, json_extract(v.kit, '$.reuse.slug') base,
             coalesce(json_extract(v.kit, '$.dna.look'), json_extract(v.kit, '$.concept')) look, coalesce(json_extract(v.kit, '$.style'), 'standard') style
        FROM demos d JOIN site_versions v ON v.slug = d.slug AND v.version = d.live_version
-      WHERE d.tenant_id = ? AND d.slug != ? ORDER BY d.created_at DESC LIMIT ?`,
+      WHERE d.tenant_id = ? AND d.slug != ? ORDER BY v.created_at DESC LIMIT ?`,
   )
     .bind(tenantId, notSlug, limit)
     .all<{ print: string | null; accent: string | null; theme: string | null; look: string | null; style: string; base: string | null }>();
