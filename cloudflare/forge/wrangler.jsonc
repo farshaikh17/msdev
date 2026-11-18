@@ -12,7 +12,7 @@
   "observability": { "enabled": true },
   // FORGE_ART_PASS: the art director's revision after the quality check, off to save about $0.60 a Studio
   // site until a blind test shows people prefer what it makes ("on" brings it back).
-  "vars": { "SITES_ORIGIN": "https://forge-sites.dev1-024.workers.dev", "FORGE_ART_PASS": "off", "CF_PAID_AI_USD_MONTH": "10", "FORGE_LEAN": "on" },
+  "vars": { "SITES_ORIGIN": "https://forge-sites.dev1-024.workers.dev", "FORGE_ART_PASS": "off", "CF_PAID_AI_USD_MONTH": "10", "FORGE_LEAN": "on", "MAINTENANCE_AT_ONCE": "6" },
   // Workers AI makes the preview photos (free allocation: 10,000 neurons a day).
   "ai": { "binding": "AI" },
   // Browser Run: screenshots for the automatic review after each build (capped in code at half the
@@ -23,7 +23,7 @@
   "images": { "binding": "IMAGES" },
   "media": { "binding": "MEDIA" },
   // Hourly: copy new hero videos from the team's Google Drive folder.
-  "triggers": { "crons": ["23 * * * *"] },
+  "triggers": { "crons": ["*/2 * * * *"] },
   // Background builds: the app queues a job, the same Worker consumes it (each may run up to
   // 15 minutes). A few run at once so a site's inner pages are written side by side. Jobs are
   // only retried when Claude turned the request away (busy), so a failure never bills twice.

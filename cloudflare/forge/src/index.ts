@@ -25,6 +25,22 @@ import { importClip, serveVideo, syncFolder } from "./drive";
 import type { BuildJob, Ctx, Env, MessageBatch, VideoJob } from "./env";
 import { serveDraft, CORS, serveImage, servePitch, serveSite, takeLead, text } from "./serve";
 import { isOwnAddress, slugForHost } from "./domains";
+import { carryDetails, galleryPage, ownDetails, personalise, sampleBar, sampleById, SAMPLES, swapsFor } from "./samples";
+import { getDemo, imageNames } from "./db";
+
+/** The gallery's index, each sample shown by its first photo. */
+async function serveGallery(req: Request, env: Env): Promise<Response> {
+  const shots: Record<string, string> = {};
+  for (const s of SAMPLES) {
+    const demo = await getDemo(env, s.slug).catch(() => null);
+    if (!demo?.liveVersion) continue;
+    const names = await imageNames(env, s.slug, demo.liveVersion).catch(() => [] as string[]);
+    // The site's own first photo (a screenshot would show the real business's name).
+    const first = names.find((n) => /^photo-\d+\.jpg$/.test(n));
+    if (first) shots[s.id] = `/examples/${s.id}/_img/${demo.liveVersion}/${first}`;
+  }
+  return new Response(galleryPage(shots), { headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "public, max-age=300" } });
+}
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)) || "Something went wrong.";
 
@@ -64,6 +80,30 @@ async function handleSites(req: Request, env: Env, ctx: Ctx): Promise<Response> 
   m = path.match(IMAGE_PATH);
   if (m && read) return serveImage(req, env, ctx, m[1], m[2], m[3]);
   if (path === "/favicon.ico" && read) return new Response(null, { status: 204, headers: { "cache-control": "public, max-age=86400" } });
+  // The sample gallery: finished designs under made-up names (or the visitor's own).
+  if (path === "/examples" && read) return serveGallery(req, env);
+  m = path.match(/^\/examples\/([a-z0-9-]{2,40})(\/_lead|\/_img\/([a-z0-9]{6,40})\/([a-z0-9.-]{3,40})|(?:\/[a-z0-9-]+){1,2})?$/);
+  if (m) {
+    const sample = sampleById(m[1]!);
+    if (!sample) return Response.redirect(new URL("/examples", req.url).toString(), 302);
+    // A sample's form keeps nothing.
+    if (m[2] === "/_lead" && req.method === "POST") return Response.json({ ok: true }, { headers: CORS });
+    if (!read) return text("Not found", 404);
+    // Screenshots (og, shot-*, old-*) show the real business: never on a sample address.
+    if (m[4] && /^(og|shot-|old-)/.test(m[4])) return text("Not found", 404);
+    if (m[3] && m[4]) {
+      const img = `/${sample.slug}/_img/${m[3]}/${m[4]}`.match(IMAGE_PATH);
+      return img ? serveImage(req, env, ctx, img[1]!, img[2]!, img[3]!) : text("Not found", 404);
+    }
+    const prefix = `/examples/${sample.id}`;
+    const own = ownDetails(url);
+    return serveSite(req, env, ctx, sample.slug, m[2] ?? "", prefix, false, {
+      transform: (html, intake) => {
+        const out = carryDetails(personalise(html, swapsFor(sample, intake, own)), prefix, own).replace(/(\/_img\/[a-z0-9]+\/)og\.jpg/g, "$1photo-1.jpg");
+        return out.replace(/<\/body>/i, `${sampleBar(sample, own)}</body>`);
+      },
+    });
+  }
   m = path.match(/^\/([a-z0-9-]{3,64})\/_pitch$/);
   if (m && read) return servePitch(req, env, m[1], `/${m[1]}`);
   m = path.match(/^\/([a-z0-9-]{3,64})\/_draft\/([a-z0-9]{6,40})$/);

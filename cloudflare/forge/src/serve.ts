@@ -100,19 +100,25 @@ function expiredPage(businessName: string): Response {
   );
 }
 
+/** A gallery sample: the page is served under another name (see samples.ts). */
+export interface SampleView {
+  transform(html: string, intake: Stored["intake"]): string;
+}
+
 /** A demo website page. `prefix` is the demo's address on this origin ("/<slug>" or "/s/<slug>"); `sub` the page path ("" for home). */
-export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, sub: string, prefix: string, sandbox: boolean): Promise<Response> {
+export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, sub: string, prefix: string, sandbox: boolean, sample?: SampleView): Promise<Response> {
   const cache = (caches as unknown as { default: Cache }).default;
   const hit = await fromCache(cache, req);
   if (hit) {
-    trackView(req, env, ctx, slug);
+    if (!sample) trackView(req, env, ctx, slug);
     return hit;
   }
   const found = await publicDemo(env, slug, true);
   if (!found) return text("This demo isn't available.", 404);
-  if (found.expired) return expiredPage(found.demo.intake.businessName);
+  // A sample in the gallery never expires (and its visits aren't the business's).
+  if (found.expired && !sample) return expiredPage(found.demo.intake.businessName);
   const { demo, tenant } = found;
-  trackView(req, env, ctx, slug);
+  if (!sample) trackView(req, env, ctx, slug);
   const pageUrl = new URL(req.url);
   pageUrl.search = "";
   let html: string;
@@ -171,7 +177,8 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
     og: { title: ogTitle, description: ogDesc, url: pageUrl.toString(), image: ogImage },
   });
   // The page is finished first and the cache gets its own copy, so a slow cache can never hold the visitor's copy back.
-  const body = await res.text();
+  let body = await res.text();
+  if (sample) body = sample.transform(body, demo.intake);
   ctx.waitUntil(cache.put(req, new Response(body, res)).catch(() => undefined));
   return new Response(body, res);
 }
