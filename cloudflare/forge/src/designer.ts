@@ -786,6 +786,12 @@ export const systemFor = (style: Style, concept?: string, heroId?: string, idea?
   return base.replace("Keep motion restrained: no custom cursors, WebGL or heavy effects.", "Motion comes from our Studio motion engine (below): use its attributes generously and tastefully.").replace("## Copy rules", `${studio}\n\n## Copy rules`);
 };
 
+/** A site's service (or menu-item) pages, in order: the first is written in full, the rest from it. */
+export function siblingItems(pages: PageSpec[]): PageSpec[] {
+  const index = pages.some((p) => p.role === "index");
+  return pages.filter((p) => p.kind === "ai" && (index ? p.role === "item" : p.path.startsWith("/services/")));
+}
+
 const sitemapText = (pages: PageSpec[]) => pages.map((p) => `${p.path} — ${p.name}`).join("\n");
 
 function kitTask(pages: PageSpec[], style: Style = "standard"): string {
@@ -1273,6 +1279,8 @@ export interface PageRevision {
   current?: PageDraft;
   /** The same page from a finished sister site: keep its layout and style, write all-new content. */
   adaptFrom?: PageDraft;
+  /** The site's first service page, already written: this one keeps its layout and CSS with its own copy. */
+  sibling?: PageDraft;
   /** A small repair, not a design decision: use the mid-priced model even for the home page. */
   cheap?: boolean;
   /** Write only the home page's first screen (Studio builds look at it in a browser before going on). */
@@ -1436,6 +1444,9 @@ ${PAGE_TASK}`;
   const adapt = rev.adaptFrom
     ? `\n\n## The same page on a finished sister site (same design system)\nCSS:\n${rev.adaptFrom.css || "(none)"}\n\nMAIN:\n${rev.adaptFrom.body}\n\nWrite THIS business's page with the same layout, sections, components, spacing, motion and visual style as the sister page above, but with entirely new copy, facts, numbers, names and photos taken only from the business facts and photos given earlier. Never carry over the sister site's business name, phone, address, reviews, photo links or any claim; use only this business's own.`
     : "";
+  const twin = rev.sibling
+    ? `\n\n## The site's first page of this kind (already written; this page is its twin)\nMAIN:\n${rev.sibling.body}\n\nWrite THIS page with exactly the same sections, order, components and class names as the page above, so the pages read as one set, but with its own copy written for "${page.name}": its own headline, sentences, list items, steps and questions, and different photos from the list where the photos fit it better. Never copy a sentence from the page above. Its CSS already exists and is shared: leave the CSS part empty unless this page needs a rule the other doesn't have.`
+    : "";
   const first = rev.hero
     ? `\n\n## The first screen (already built, checked in a browser on desktop and phone, and approved)\nCSS:\n${rev.hero.css || "(none)"}\n\nMAIN:\n${rev.hero.body}\n\nKeep that first section exactly as it is, as the first thing inside <main>, and include its CSS unchanged in your CSS part. Write everything that comes after it.`
     : "";
@@ -1443,7 +1454,7 @@ ${PAGE_TASK}`;
     ? `\n\n## For now, write ONLY the first screen\nReply with a <main> that contains just the first section described above (the first screen) and nothing after it, with the CSS it needs. The rest of the page is written once this first screen has been looked at in a browser. It must be complete and finished on its own: the headline, its one sentence, the actions and the picture, fitting one screen at 1440×900 and at 390×844.`
     : "";
   const task = `## ${rev.instruction ? "Change" : rev.notes?.length ? "Improve" : "Write"} this page: ${page.name} (${page.path})
-${page.brief}${current}${notes}${change}${adapt}${first}${only}${edit ? `\n\n## How to reply\n${EDIT_FORMAT}` : ""}`;
+${page.brief}${current}${notes}${change}${adapt}${twin}${first}${only}${edit ? `\n\n## How to reply\n${EDIT_FORMAT}` : ""}`;
   // The home page is the showcase, so it gets the design model; the rest follow the kit on the cheaper one.
   const home = page.path === "/";
   const studio = kit.style === "studio";
@@ -1468,7 +1479,7 @@ ${page.brief}${current}${notes}${change}${adapt}${first}${only}${edit ? `\n\n## 
     model,
     fallback,
     // Edits carry their own instructions (the notes or the change), so they need little thinking first.
-    effort: edit ? "low" : studio ? "medium" : home ? effortOf(env, "low") : "medium",
+    effort: edit || rev.sibling ? "low" : studio ? "medium" : home ? effortOf(env, "low") : "medium",
     system: systemFor(studio ? "studio" : "standard", kit.concept, kit.hero, kit.idea),
   };
 }

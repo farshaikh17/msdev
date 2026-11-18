@@ -37,7 +37,7 @@ import {
 } from "./db";
 import type { Kit } from "./designer";
 import { lintSite, repairNote, type QaIssue, type QaResult } from "./qa";
-import { adaptKit, holdKitToDna, leanMode, refineTrade, thinServices, fixChrome, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, studioHome, TryLater, type Plan } from "./designer";
+import { adaptKit, holdKitToDna, siblingItems, tidyCss, leanMode, refineTrade, thinServices, fixChrome, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, studioHome, TryLater, type Plan } from "./designer";
 import type { BuildJob, Env } from "./env";
 import { heroPair, beforeAfterImages, imagesRoom, objectImage, previewImages } from "./images";
 import { studioMedia, type StudioMedia } from "./media";
@@ -469,9 +469,11 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       // home page is written; the inner pages don't wait for that.
       const heroFirst = intake.style === "studio" && !base && !!env.BROWSER;
       if (heroFirst) await env.BUILDS.send({ slug, version, stage: "hero" });
+      // The service (or menu-item) pages after the first are written from the first one, once it is done.
+      const later = siblingItems(pages).slice(1).map((p) => p.path);
       await Promise.all(
         pages
-          .filter((p) => p.kind === "ai" && !(heroFirst && p.path === "/"))
+          .filter((p) => p.kind === "ai" && !(heroFirst && p.path === "/") && !later.includes(p.path))
           .map((p, n) => env.BUILDS.send({ slug, version, stage: "page", path: p.path }, n <= 1 ? undefined : { delaySeconds: 30 })),
       );
       return "done";
@@ -510,9 +512,19 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       // The home page of a reused design follows the sister site's home page.
       const adaptFrom = kit.reuse && spec.path === "/" ? await getPage(env, kit.reuse.slug, kit.reuse.version, "/") : null;
       const hero = spec.path === "/" ? await getPage(env, slug, version, HERO_DRAFT) : null;
-      const { page, usage } = await designSitePage(env, kit, spec, adaptFrom ? { adaptFrom } : hero ? { hero } : {});
+      // A service page after the first follows the first one's layout and CSS, with its own copy and photos.
+      const items = siblingItems(pagesOf(kit));
+      const first = items[0];
+      const sibling = first && first.path !== spec.path && items.some((p) => p.path === spec.path) ? await getPage(env, slug, version, first.path) : null;
+      let { page, usage } = await designSitePage(env, kit, spec, adaptFrom ? { adaptFrom } : hero ? { hero } : sibling ? { sibling } : {});
+      if (sibling) page = { ...page, css: tidyCss(`${sibling.css ?? ""}\n${page.css ?? ""}`, kit.style === "studio" ? 24_000 : 16_000) };
       await savePage(env, slug, version, spec.path, page, usage);
       await touchBuild(env, slug, version, "pages");
+      // The first service page is the template: the others start once it is saved.
+      if (first?.path === spec.path) {
+        const done = await pagesDone(env, slug, version);
+        await Promise.all(items.slice(1).filter((p) => !done.includes(p.path)).map((p, n) => env.BUILDS.send({ slug, version, stage: "page", path: p.path }, n ? { delaySeconds: Math.min(60, n * 5) } : undefined)));
+      }
     }
     const done = await pagesDone(env, slug, version);
     if (pagesOf(kit).every((p) => done.includes(p.path))) await finishBuild(env, slug, version);
