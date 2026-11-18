@@ -492,6 +492,8 @@ var CTA=/quote|book|reserve|enquir|contact|call|visit|appointment|estimate|order
 function isCta(el){if(!el)return false;var r=el.getBoundingClientRect();if(r.height<250)return false;var as=[].filter.call(el.querySelectorAll("a,button"),function(a){return CTA.test(a.textContent||"")||CTA.test(a.getAttribute("href")||"")});var t=(el.innerText||"").trim().length;return as.length>0&&t<600&&!el.querySelector("form,nav,ul li a[href] ~ a")}
 var last=main.lastElementChild;while(last&&(last.offsetHeight===0||/^(SCRIPT|STYLE)$/.test(last.tagName)))last=last.previousElementSibling;
 var first=ft.firstElementChild;if(!first||first.querySelector("nav,ul"))return;
+/* Never the block that holds the footer itself (its legal links, credit or several link columns). */
+if(first.querySelector('a[href*="privacy"],a[href*="terms"],a[href*="mianro"]')||first.querySelectorAll("a").length>4)return;
 if(isCta(last)&&isCta(first))first.style.display="none"})();
 
 // Desktop footers: a column that collides with another and drops to a row of its own while the right of the
