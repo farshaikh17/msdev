@@ -236,7 +236,7 @@ export async function handleWeb(req: Request, env: Env, path: string, signedIn: 
   if (path === "/") {
     if (signedIn) return null; // signed-in people see their dashboard here
     const plans = await getPlans(env);
-    return page("Forge: premium websites for local businesses, designed in minutes", "Forge designs a complete, multi-page website for any local business from just its name. See yours free before you pay, or resell Forge under your own brand.", homePage(plans, await showcase(env, origin)), { jsonld: homeLd(origin, plans) });
+    return page("Forge: premium websites for local businesses, designed in minutes", "Forge designs a complete, multi-page website for any local business from just its name. See yours free before you pay, or resell Forge under your own brand.", homePage(plans, await showcase(env, origin), `${sitesBase(env.SITES_ORIGIN, origin).replace(/\/+$/, "")}/examples`), { jsonld: homeLd(origin, plans) });
   }
   if (path === "/how-it-works") return page("How Forge works", "Type a business name and Forge designs a complete multi-page website in minutes: services, photos, forms and a map.", howPage());
   if (path === "/pricing") {

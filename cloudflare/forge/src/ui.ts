@@ -106,6 +106,91 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 .design-pic.look{position:relative;font-size:16px}.design-pic.look u{text-decoration:none}
 .score{font:800 2.2rem var(--display);color:var(--steel);line-height:1}.score small{font-size:1rem;color:var(--muted)}
 .mono{font:.8rem var(--mono)}
+/* ---- motion: everything arrives, responds and settles (all of it off under reduced motion) ---- */
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+@keyframes shimmer{from{background-position:-200% 0}to{background-position:200% 0}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(217,96,31,.45)}50%{box-shadow:0 0 0 7px rgba(217,96,31,0)}}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes letter{from{opacity:0;transform:translateY(.6em) rotate(6deg)}to{opacity:1;transform:none}}
+@keyframes slide{from{transform:translateX(-30%)}to{transform:translateX(30%)}}
+@keyframes orbit{to{transform:rotate(360deg)}}
+@keyframes conf{0%{transform:translate(0,0) rotate(0);opacity:1}100%{transform:translate(var(--x),var(--y)) rotate(var(--r));opacity:0}}
+.main>*{animation:rise .55s cubic-bezier(.2,.7,.2,1) both}.main>*:nth-child(2){animation-delay:.06s}.main>*:nth-child(3){animation-delay:.12s}.main>*:nth-child(4){animation-delay:.18s}.main>*:nth-child(n+5){animation-delay:.24s}
+.btn{transition:transform .18s,filter .18s,box-shadow .25s}.btn:not(:disabled):hover{transform:translateY(-1px)}.btn:not(:disabled):active{transform:translateY(1px) scale(.98)}
+.btn.ember{box-shadow:0 10px 26px -14px var(--ember)}.btn.ember:not(:disabled):hover{box-shadow:0 16px 34px -14px var(--ember)}
+.nav a{position:relative;transition:color .2s}.nav a:after{content:"";position:absolute;left:0;right:0;bottom:-4px;height:2px;background:var(--steel);transform:scaleX(0);transition:transform .25s;transform-origin:left}.nav a:hover:after,.nav a.on:after{transform:scaleX(1)}
+.card{transition:box-shadow .3s,border-color .3s}
+input,textarea,select{transition:border-color .2s,box-shadow .2s,background .2s}input:focus,textarea:focus,select:focus{box-shadow:0 0 0 4px var(--steel-soft)}
+.design{transition:transform .22s,box-shadow .22s,border-color .22s}.design:hover{transform:translateY(-3px);box-shadow:0 14px 30px -20px rgba(0,0,0,.45)}
+.design-pic.look>span{transition:transform .5s cubic-bezier(.2,.7,.2,1)}.design:hover .design-pic.look>span{transform:scale(1.08) rotate(-1deg)}
+.design:has(input:checked) .design-pic{animation:none}.design:has(input:checked):after{content:"✓";position:absolute;top:12px;right:12px;width:22px;height:22px;border-radius:50%;background:var(--steel);color:#fff;font:700 .75rem/22px var(--body);text-align:center;animation:pop .35s both}
+/* site cards */
+.cards .site-card{animation:rise .5s cubic-bezier(.2,.7,.2,1) both;transition:transform .25s,box-shadow .25s}.cards .site-card:hover{transform:translateY(-4px);box-shadow:0 22px 40px -28px rgba(0,0,0,.5)}
+${[1,2,3,4,5,6,7,8,9,10,11,12].map(n=>`.cards .site-card:nth-child(${n}){animation-delay:${(n*0.04).toFixed(2)}s}`).join("")}
+.thumb img{transition:transform .8s cubic-bezier(.2,.7,.2,1)}.site-card:hover .thumb img{transform:scale(1.04)}
+.site-card.is-building .thumb:after{content:"";position:absolute;inset:auto 0 0 0;height:4px;background:linear-gradient(90deg,transparent,var(--ember),transparent);background-size:200% 100%;animation:shimmer 1.4s linear infinite}
+.tag.live{display:inline-flex;align-items:center;gap:6px}.tag.live:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ember);animation:pulse 1.6s infinite}
+.hint{font-size:.8rem;color:var(--muted);display:flex;gap:6px;align-items:center}.hint b{color:var(--ink)}
+/* the builder */
+.builder{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:30px;align-items:start}
+@media (max-width:920px){.builder{grid-template-columns:minmax(0,1fr)}.live{display:none}}
+.bsteps{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 4px}.bsteps span{display:inline-flex;align-items:center;gap:7px;font:600 .8rem var(--body);color:var(--muted);padding:5px 11px 5px 6px;border-radius:999px;border:1px solid var(--line);transition:all .3s}
+.bsteps span i{width:20px;height:20px;border-radius:50%;background:var(--chrome);display:inline-grid;place-items:center;font:700 .7rem var(--body);font-style:normal;transition:all .3s}
+.bsteps span.done{color:var(--ink);border-color:var(--ok)}.bsteps span.done i{background:var(--ok);color:#fff}.bsteps span.now{color:var(--ink);border-color:var(--ember)}.bsteps span.now i{background:var(--ember);color:#fff}
+.bstep{display:grid;gap:14px}.bstep legend{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}.bstep-h{display:flex;align-items:baseline;gap:10px;font:700 1.02rem var(--display)}.bstep-h small{font:400 .85rem var(--body);color:var(--muted)}
+.editions{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.edition{position:relative;display:grid;grid-template-rows:auto 1fr;border:1.5px solid var(--line);border-radius:16px;overflow:hidden;cursor:pointer;background:var(--surface);font-weight:400;transition:transform .25s,box-shadow .3s,border-color .25s}
+.edition input{position:absolute;opacity:0;pointer-events:none}.edition:hover{transform:translateY(-3px);box-shadow:0 20px 40px -28px rgba(0,0,0,.55)}
+.edition:has(input:checked){border-color:var(--ember);box-shadow:0 0 0 4px var(--ember-soft),0 24px 44px -30px var(--ember)}.edition:has(input:focus-visible){outline:2px solid var(--steel);outline-offset:2px}
+.ed-check{position:absolute;top:12px;right:12px;width:26px;height:26px;border-radius:50%;background:var(--ember);color:#fff;display:none;place-items:center;font:700 .8rem var(--body);font-style:normal;z-index:2}.edition:has(input:checked) .ed-check{display:grid;animation:pop .35s both}
+.ed-body{display:grid;gap:4px;padding:14px 16px 16px}.ed-body b{font:800 1.15rem var(--display);display:flex;align-items:center;gap:8px}.ed-cost{font:600 .72rem var(--body);padding:3px 8px;border-radius:999px;background:var(--chrome);color:var(--muted)}.edition:has(input:checked) .ed-cost{background:var(--ember-soft);color:var(--ember)}.ed-body small{color:var(--muted);font-size:.85rem;line-height:1.45}
+.ed-art{position:relative;height:130px;overflow:hidden}
+.std-art{background:linear-gradient(#f7f5f0,#efece4);padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center}
+.std-art .l{display:grid;gap:6px}.std-art .l i{display:block;height:7px;border-radius:4px;background:#2c2b27;opacity:.85;transform-origin:left;animation:rise .7s both}.std-art .l i:nth-child(2){width:70%;opacity:.5;animation-delay:.1s}.std-art .l i:nth-child(3){width:45%;height:14px;border-radius:6px;background:#c4572a;opacity:1;margin-top:4px;animation-delay:.2s}
+.std-art .ph{height:96px;border-radius:6px;background:linear-gradient(135deg,#9db4a7,#6f8f80 45%,#d8c7a7);position:relative;overflow:hidden}.std-art .ph:after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.45) 50%,transparent 70%);background-size:220% 100%;animation:shimmer 3.2s linear infinite}
+.edition:hover .std-art .ph{transform:scale(1.03);transition:transform .6s}
+.studio-art{background:radial-gradient(120% 120% at 80% 0%,#3b2a63,#0e0b16 60%);color:#fff;display:grid;align-content:center;padding:0 16px}
+.studio-art .w{font:400 2.6rem/.9 'Anton',Impact,sans-serif;text-transform:uppercase;letter-spacing:.01em;white-space:nowrap}.studio-art .w span{display:inline-block;animation:letter .6s cubic-bezier(.2,.7,.2,1) both}
+.studio-art .orb{position:absolute;right:22px;top:22px;width:62px;height:62px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffb38a,#ff5a1f 55%,#7a1d00);box-shadow:0 0 40px rgba(255,110,50,.55);animation:floaty 3.2s ease-in-out infinite}
+.studio-art .ring{position:absolute;right:9px;top:9px;width:88px;height:88px;border-radius:50%;border:1px dashed rgba(255,255,255,.35);animation:orbit 14s linear infinite}.studio-art .ring:before{content:"";position:absolute;top:-4px;left:50%;width:8px;height:8px;border-radius:50%;background:#7ee3ff}
+.studio-art .band{position:absolute;left:0;right:0;bottom:12px;height:2px;background:linear-gradient(90deg,transparent,#ff6a2b,transparent);animation:slide 2.4s ease-in-out infinite alternate}
+.studio-only{display:grid;grid-template-rows:0fr;opacity:0;visibility:hidden;transition:grid-template-rows .45s cubic-bezier(.2,.7,.2,1),opacity .35s,visibility 0s .45s;gap:0}.studio-only>div{overflow:hidden;min-height:0;display:grid;gap:14px}
+form:has(input[name=style][value=studio]:checked) .studio-only{grid-template-rows:1fr;opacity:1;visibility:visible;transition:grid-template-rows .45s cubic-bezier(.2,.7,.2,1),opacity .35s,visibility 0s}
+.live{position:sticky;top:18px;display:grid;gap:10px}
+.live-frame{border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#fff;box-shadow:0 28px 60px -36px rgba(0,0,0,.55);transition:transform .4s;transform:perspective(900px) rotateY(-4deg)}.live-frame:hover{transform:none}
+.lf-bar{display:flex;align-items:center;gap:5px;padding:7px 9px;background:#ececec;font:.62rem var(--mono);color:#666}.lf-bar i{width:7px;height:7px;border-radius:50%;background:#d0d0d0}.lf-bar span{margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lf-site{--bg:#f6f4ef;--ink:#1c1c1a;--acc:#c4572a;--disp:'Fraunces',Georgia,serif;background:var(--bg);color:var(--ink);transition:background .5s,color .5s;min-height:330px;display:grid;align-content:start}
+.lf-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;font:700 .7rem var(--body)}.lf-logo{font-family:var(--disp);font-size:.85rem;max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lf-call{font:600 .58rem var(--body);background:var(--acc);color:#fff;padding:4px 8px;border-radius:5px;transition:background .5s;white-space:nowrap}
+.lf-hero{padding:6px 12px 12px;display:grid;gap:8px}.lf-photo{height:96px;border-radius:7px;background:linear-gradient(135deg,#9db4a7,#6f8f80 45%,#d8c7a7);transition:all .5s;position:relative;overflow:hidden}
+.lf-h1{font:600 1.35rem/1.05 var(--disp);margin:0;letter-spacing:-.01em;transition:font .3s;min-height:2.1em}.lf-h1 span{display:inline-block}
+.lf-sub{font-size:.68rem;opacity:.7;margin:0;line-height:1.4}.lf-btn{justify-self:start;font:700 .62rem var(--body);background:var(--acc);color:#fff;padding:7px 11px;border-radius:6px;transition:background .5s}
+.lf-rows{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 12px 14px}.lf-rows i{height:34px;border-radius:5px;background:color-mix(in srgb,var(--ink) 9%,transparent)}
+.live-frame[data-ed=studio] .lf-site{--bg:#0f0d17;--ink:#f4efe6;--acc:#ff5a1f;--disp:'Anton',Impact,sans-serif}
+.live-frame[data-ed=studio] .lf-h1{font-size:1.9rem;text-transform:uppercase;font-weight:400;line-height:.92}
+.live-frame[data-ed=studio] .lf-photo{height:70px;background:radial-gradient(120% 120% at 80% 0%,#3b2a63,#0e0b16 60%)}.live-frame[data-ed=studio] .lf-photo:after{content:"";position:absolute;right:14px;top:12px;width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffb38a,#ff5a1f 55%,#7a1d00);animation:floaty 3s ease-in-out infinite}
+.lf-h1 .ch{animation:letter .5s cubic-bezier(.2,.7,.2,1) both}
+.live-meta{display:flex;justify-content:space-between;gap:8px;font:600 .78rem var(--body);color:var(--muted)}.live-meta b{color:var(--ink)}
+.live-note{font-size:.78rem;color:var(--muted);text-align:center}
+.main>.launch,.launch{animation:none}.launch{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .3s}.launch.on{opacity:1;pointer-events:auto}
+.launch-in{display:grid;gap:14px;justify-items:center;text-align:center;padding:24px}.launch-orb{width:84px;height:84px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffc29e,var(--ember) 55%,#7a2a00);box-shadow:0 0 60px var(--ember);animation:floaty 1.6s ease-in-out infinite}
+.launch b{font:800 1.4rem var(--display)}.launch span{color:var(--muted);min-height:1.5em}
+/* the build in progress */
+.buildbox{display:grid;gap:16px;padding:20px;border-radius:14px;background:var(--surface);border:1px solid var(--line);position:relative;overflow:hidden}
+.buildbox:before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,transparent,var(--ember),transparent);background-size:200% 100%;animation:shimmer 1.6s linear infinite}
+.bb-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.bb-top b{font:800 1.15rem var(--display)}
+.bb-bar{height:10px;border-radius:999px;background:var(--chrome);overflow:hidden}.bb-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--ember),#f7a072);transition:width 1.2s cubic-bezier(.2,.7,.2,1);position:relative}.bb-bar i:after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%);background-size:220% 100%;animation:shimmer 1.8s linear infinite}
+.bb-steps{list-style:none;margin:0;padding:0;display:grid;gap:10px}.bb-steps li{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:.92rem;transition:color .3s}
+.bb-steps li i{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);flex:none;display:grid;place-items:center;font:700 .7rem var(--body);font-style:normal}
+.bb-steps li.done{color:var(--ink)}.bb-steps li.done i{background:var(--ok);border-color:var(--ok);color:#fff;animation:pop .35s both}
+.bb-steps li.now{color:var(--ink);font-weight:600}.bb-steps li.now i{border-color:var(--ember);border-top-color:transparent;animation:orbit .9s linear infinite}
+/* preview devices */
+.devices{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;gap:3px;background:var(--bg)}.devices button{border:0;background:none;font:600 .8rem var(--body);color:var(--muted);padding:6px 12px;border-radius:999px;cursor:pointer;transition:all .25s}.devices button.on{background:var(--surface);color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.preview-wrap{display:grid;justify-items:center;background:var(--chrome);border-radius:14px;padding:12px;transition:padding .4s}.preview{transition:width .55s cubic-bezier(.2,.7,.2,1),height .55s cubic-bezier(.2,.7,.2,1);max-width:100%}.preview-wrap.phone .preview{width:390px;height:720px;border-radius:26px;border:8px solid #111}
+.confetti{position:fixed;left:50%;top:38%;width:0;height:0;z-index:60;pointer-events:none}.confetti i{position:absolute;width:9px;height:14px;border-radius:2px;animation:conf 1.4s cubic-bezier(.15,.6,.3,1) forwards}
+.next{animation:rise .5s both}
+@media (prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}.live-frame{transform:none}}
 `;
 
 const COPY_JS = `if(/[?&](ok|error)=/.test(location.search))history.replaceState(null,"",location.pathname);
@@ -224,7 +309,7 @@ export interface ReuseChoice {
   studio?: boolean;
 }
 
-export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = []): string {
+export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = [], steps = false): string {
   const t = (name: keyof Intake, label: string, ph: string, required = false, type = "text") =>
     `<label for="f-${name}">${label}<input id="f-${name}" name="${name}" ${type === "url" ? 'type="text" inputmode="url" autocomplete="off"' : `type="${type}"`} value="${esc((v?.[name] as string) ?? "")}" placeholder="${esc(ph)}"${required ? " required" : ""}></label>`;
   const a = (name: keyof Intake, label: string, ph: string) =>
@@ -236,13 +321,16 @@ export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = []): string {
     `<label class="choice"><input type="radio" name="${name}" value="${esc(value)}"${checked ? " checked" : ""}><span>${label}</span></label>`;
   const style = v?.style ?? "standard";
   // Standard or Studio is the biggest choice on the form, so it sits in the open; the Studio pickers appear under it when Studio is chosen.
-  const tier = `<fieldset class="look tier" style="border:0;padding:0;margin:0"><legend class="note" style="font-weight:600;margin-bottom:8px">Style</legend>
-<div class="look-row">${radio("style", "standard", style !== "studio", "Standard · 1 credit")}${radio("style", "studio", style === "studio", `Studio · ${STUDIO_CREDITS} credits: motion, flying or turning objects, premium design`)}</div>
-<div class="studio-only">
-<div><div class="note" style="font-weight:600;margin-bottom:8px">Studio look</div><div class="designs concepts">${conceptPick("auto", (v?.concept ?? "auto") === "auto" || !CONCEPTS.some((c) => c.id === v?.concept), "Let Forge choose", "The best fit for the trade, different each time")}${CONCEPTS.map((c) => conceptPick(c.id, v?.concept === c.id, c.name, c.blurb)).join("")}</div></div>
-<div><div class="note" style="font-weight:600;margin-bottom:8px">Studio first screen</div><div class="designs heroes">${[{ id: "auto", name: "Let Forge choose", blurb: "Video scenes when we have clips for the trade, otherwise a different one each time (with a moving hero, a flying or turning object, or the subject in front of the headline)" }, ...HEROES].map((h) => `<label class="design"><input type="radio" name="hero" value="${esc(h.id)}"${(v?.hero ?? "auto") === h.id || (h.id === "auto" && !HEROES.some((x) => x.id === v?.hero)) ? " checked" : ""}><b>${esc(h.name)}</b><small>${esc(h.blurb)}</small></label>`).join("")}</div></div>
+  const studioWord = "Studio".split("").map((c, i) => `<span style="animation-delay:${(0.08 * i).toFixed(2)}s">${c}</span>`).join("");
+  const tier = `<fieldset class="look tier" style="border:0;padding:0;margin:0"><legend class="note" style="font-weight:600;margin-bottom:8px">Which kind of website?</legend>
+<div class="editions">
+<label class="edition"><input type="radio" name="style" value="standard"${style !== "studio" ? " checked" : ""}><span class="ed-art std-art" aria-hidden="true"><span class="l"><i></i><i></i><i></i></span><span class="ph"></span></span><span class="ed-body"><b>Standard <span class="ed-cost">1 credit</span></b><small>Calm and photo-led on a clean grid: every page they need, the map, forms and a call button. Ready in about 10 minutes.</small></span><i class="ed-check">✓</i></label>
+<label class="edition"><input type="radio" name="style" value="studio"${style === "studio" ? " checked" : ""}><span class="ed-art studio-art" aria-hidden="true"><span class="ring"></span><span class="orb"></span><span class="w">${studioWord}</span><span class="band"></span></span><span class="ed-body"><b>Studio <span class="ed-cost">${STUDIO_CREDITS} credits</span></b><small>Art-directed and moving: a signature first screen, a scene that holds still as you scroll, words that light up, in one of ten looks. Ready in about 20 minutes.</small></span><i class="ed-check">✓</i></label>
 </div>
-<p class="note" style="margin:0"><b>Standard</b>: a polished, fast multi-page site. <b>Studio</b>: an award-style, art-directed site with kinetic type, smooth scrolling, WebGL backgrounds, a custom cursor and page transitions, held to one of nine distinct looks (pick one below, or let Forge choose). It takes longer and uses the larger models.</p></fieldset>`;
+<div class="studio-only"><div>
+<div><div class="note" style="font-weight:600;margin:14px 0 8px">Studio look</div><div class="designs concepts">${conceptPick("auto", (v?.concept ?? "auto") === "auto" || !CONCEPTS.some((c) => c.id === v?.concept), "Let Forge choose", "The best fit for the trade, different each time")}${CONCEPTS.map((c) => conceptPick(c.id, v?.concept === c.id, c.name, c.blurb)).join("")}</div></div>
+<div><div class="note" style="font-weight:600;margin-bottom:8px">Studio first screen</div><div class="designs heroes">${[{ id: "auto", name: "Let Forge choose", blurb: "Video scenes when we have clips for the trade, otherwise a different one each time (with a moving hero, a flying or turning object, or the subject in front of the headline)" }, ...HEROES].map((h) => `<label class="design"><input type="radio" name="hero" value="${esc(h.id)}"${(v?.hero ?? "auto") === h.id || (h.id === "auto" && !HEROES.some((x) => x.id === v?.hero)) ? " checked" : ""}><b>${esc(h.name)}</b><small>${esc(h.blurb)}</small></label>`).join("")}</div></div>
+</div></div></fieldset>`;
   const pick = (value: string, checked: boolean, inner: string) => `<label class="design"><input type="radio" name="reuseFrom" value="${esc(value)}"${checked ? " checked" : ""}>${inner}</label>`;
   const reuseSel = reuse.length
     ? `<fieldset class="look" style="border:0;padding:0;margin:0"><legend class="note" style="font-weight:600;margin-bottom:8px">Design</legend>
@@ -264,12 +352,11 @@ export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = []): string {
   ).join("")}${radio("primaryColor", "custom", custom, `<i class="dot" style="background:${custom ? esc(color) : "#fff"}"></i>Custom`)}
 <input name="customColor" type="color" value="${custom ? esc(color) : "#2f5fd0"}" aria-label="Custom colour" style="width:44px;height:36px;padding:2px"></div>
 <p class="note" style="margin:0">Every site gets a light/dark switch; this sets which one it opens in.</p></fieldset>`;
-  return `<div class="grid"><label class="full big-field" for="f-businessName">Business name or Google Maps link<input id="f-businessName" name="businessName" value="${esc(v?.businessName ?? "")}" placeholder="e.g. Vanguard Pipe & Water   or   https://maps.app.goo.gl/…" required autocomplete="off"></label>
+  const who = `<div class="grid"><label class="full big-field" for="f-businessName">Business name or Google Maps link<input id="f-businessName" name="businessName" value="${esc(v?.businessName ?? "")}" placeholder="e.g. Vanguard Pipe & Water   or   https://maps.app.goo.gl/…" required autocomplete="off"></label>
 ${t("phone", "Phone (gives the site a call button)", "e.g. (646) 594-9379", false, "tel")}${t("city", "City (optional; a Maps link fills it in)", "e.g. Myrtle Beach, SC")}${t("industry", "What they do (optional)", "e.g. Plumbing, Roofing, Hair salon")}
 <label class="full" for="f-saw">What you saw (one line; Studio needs this or their website)<input id="f-saw" name="saw" value="${esc(v?.saw ?? "")}" placeholder="e.g. Red trucks with a 24/7 number; banner on the high school field; on Main St since 1984" maxlength="600"></label>
-<label class="full" for="f-websiteUrl">Their website or Facebook page (optional; we read it for facts, logo, colours and photos)<input id="f-websiteUrl" name="websiteUrl" inputmode="url" autocomplete="off" value="${esc(v?.websiteUrl ?? "")}" placeholder="e.g. joesplumbing.com"></label></div>
-${tier}
-<details><summary>More options</summary><div style="display:grid;gap:16px;margin-top:12px">
+<label class="full" for="f-websiteUrl">Their website or Facebook page (optional; we read it for facts, logo, colours and photos)<input id="f-websiteUrl" name="websiteUrl" inputmode="url" autocomplete="off" value="${esc(v?.websiteUrl ?? "")}" placeholder="e.g. joesplumbing.com"></label></div>`;
+  const more = `<details><summary>More options</summary><div style="display:grid;gap:16px;margin-top:12px">
 <p class="note" style="margin:0">Everything here is optional. Left alone, Forge picks what suits the business.</p>
 ${reuseSel}${look}
 <div class="grid">${t("googleUrl", "Google Maps link", "https://maps.app.goo.gl/…", false, "url")}
@@ -282,6 +369,10 @@ ${a("photoUrls", "Photo links (one per line)", "Links to photos of their work, t
 ${t("logoUrl", "Their logo (image link)", "https://…", false, "url")}${t("heroImageUrl", "Storefront, van or team photo (image link)", "https://…", false, "url")}
 ${t("chatWidget", "Chat widget (GoHighLevel)", "Empty: the account's widget. Or paste a widget ID / embed code, or type off")}
 </div></div></details>`;
+  if (!steps) return `${who}\n${tier}\n${more}`;
+  return `<section class="bstep" data-bstep="1"><div class="bstep-h">1 · The business <small>only the name is needed</small></div>${who}</section>
+<section class="bstep" data-bstep="2"><div class="bstep-h">2 · The kind of website</div>${tier}</section>
+<section class="bstep" data-bstep="3"><div class="bstep-h">3 · Make it theirs <small>optional: colours, a design you liked, services, reviews</small></div>${more}</section>`;
 }
 
 const stat = (label: string, value: string | number) => `<div class="card" style="gap:2px;padding:16px"><span class="note">${esc(label)}</span><b style="font:800 1.6rem var(--display)">${esc(String(value))}</b></div>`;
@@ -370,7 +461,7 @@ function expiryNote(d: Stored): string {
 function siteCard(d: Listed, url: string): string {
   const state =
     d.buildStatus === "building"
-      ? `<span class="tag">Building…</span>`
+      ? `<span class="tag live">Building</span>`
       : d.buildStatus === "queued"
         ? `<span class="tag dim">Waiting its turn</span>`
         : d.buildStatus === "failed"
@@ -378,7 +469,7 @@ function siteCard(d: Listed, url: string): string {
           : isExpired(d)
             ? `<span class="tag bad" title="The link no longer works. Open it and extend it to bring it back.">Expired</span>`
           : d.noPhone
-            ? `<span class="tag dim" title="Add their phone number before sending it">Ready · add phone</span>`
+            ? `<span class="tag dim" title="Add their phone number before sending it">Ready</span>`
             : `<span class="tag ok">Ready</span>`;
   // The review's screenshot; until there is one, the site's first preview photo (the letter if that fails too).
   const letter = `<span>${esc(d.businessName.slice(0, 1).toUpperCase())}</span>`;
@@ -387,10 +478,61 @@ function siteCard(d: Listed, url: string): string {
     : d.liveVersion && d.buildStatus === "ready"
       ? `<img loading="lazy" src="${esc(url)}/_img/${esc(d.liveVersion)}/photo-1.jpg" alt="" onerror="this.remove()">${letter}`
       : letter;
-  return `<article class="site-card"><a class="thumb" href="/demos/${esc(d.slug)}" aria-label="${esc(d.businessName)}">${thumb}</a>
-<div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><div style="min-width:0"><a class="site-name" href="/demos/${esc(d.slug)}">${esc(d.businessName)}</a><div class="note">${esc([d.city, d.createdAt.slice(0, 10)].filter(Boolean).join(" · "))}</div></div>${state}</div>
+  const hint =
+    d.buildStatus !== "ready" || isExpired(d)
+      ? ""
+      : d.noPhone
+        ? "Next: add their phone"
+        : d.leadStatus === "new"
+          ? "Next: send them the link"
+          : d.leadStatus === "sent"
+            ? "Waiting to hear back"
+            : d.leadStatus === "replied"
+              ? "Next: put their photos and edits in"
+              : "";
+  return `<article class="site-card${d.buildStatus === "building" ? " is-building" : ""}"><a class="thumb" href="/demos/${esc(d.slug)}" aria-label="${esc(d.businessName)}">${thumb}</a>
+<div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><div style="min-width:0"><a class="site-name" href="/demos/${esc(d.slug)}">${esc(d.businessName)}</a><div class="note">${esc([d.city, d.createdAt.slice(0, 10)].filter(Boolean).join(" · "))}</div>${hint ? `<div class="hint">→ <b>${esc(hint)}</b></div>` : ""}</div>${state}</div>
 <div class="row" style="justify-content:space-between"><div class="row"><a class="btn ghost" href="/demos/${esc(d.slug)}">Open</a><a class="btn ghost" href="${esc(url)}" target="_blank" rel="noopener">Open link</a></div>${d.buildStatus === "ready" || d.leadStatus !== "new" ? leadPill(d.leadStatus) : ""}</div></article>`;
 }
+
+/** The builder: a live preview that fills in as the form is typed, the step chips, and the launch. */
+const BUILDER_JS = `(function(){var f=document.getElementById("build");var frame=document.querySelector(".live-frame");if(!f||!frame)return;
+var LOOK={editorial:["#f4efe6","#1b1b1b","#1b1b1b","'Instrument Serif',Georgia,serif"],kinetic:["#ff4d00","#111","#111","'Anton',Impact,sans-serif"],cinematic:["#0b0f14","#e9e3d6","#c9a46a","'Syne',sans-serif"],brutalist:["#f2f2ee","#000","#111","'Archivo Black',sans-serif"],swiss:["#ffffff","#111","#e10600","'Inter Tight',Helvetica,sans-serif"],organic:["#ebe5d5","#2f3a2c","#6f8a5c","'Fraunces',Georgia,serif"],americana:["#f3e7cf","#7a1f1f","#7a1f1f","'Alfa Slab One',Georgia,serif"],playful:["#6c3bff","#ffffff","#ff7ac0","'Fredoka',system-ui,sans-serif"],luxe:["#0e0e0e","#d9c7a3","#9c7c3c","'Cormorant Garamond',Georgia,serif"]};
+var all=function(k){return [].slice.call(document.querySelectorAll('[data-live="'+k+'"]'))};
+var val=function(n){var e=f.elements[n];return e&&e.value!==undefined?String(e.value).trim():""};
+var radio=function(n){var e=f.querySelector('input[name="'+n+'"]:checked');return e?e.value:""};
+var site=frame.querySelector(".lf-site"),h1=frame.querySelector(".lf-h1"),last="";
+function render(){
+var name=val("businessName"),isUrl=/^https?:|maps[.]|goo[.]gl/i.test(name),shown=isUrl?"From the Maps link":(name||"Your business");
+all("name").forEach(function(e){e.textContent=shown});
+var slug=(isUrl?"business":(name||"your-business")).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,36)||"your-business";
+all("slug").forEach(function(e){e.textContent=slug});
+var ph=val("phone");all("phone").forEach(function(e){e.textContent=ph?"Call "+ph:"Call now"});
+var trade=val("industry"),city=val("city").split(",")[0];
+var head=(trade||"Local service")+(city?" in "+city:"");
+var ed=radio("style")||"standard";frame.setAttribute("data-ed",ed);
+var look=ed==="studio"?radio("concept"):"",L=LOOK[look];
+["--bg","--ink","--acc","--disp"].forEach(function(k){site.style.removeProperty(k)});
+if(L){site.style.setProperty("--bg",L[0]);site.style.setProperty("--ink",L[1]);site.style.setProperty("--acc",L[2]);site.style.setProperty("--disp",L[3])}
+var col=radio("primaryColor");if(col&&col!=="custom")site.style.setProperty("--acc",col);
+all("edition").forEach(function(e){e.innerHTML=ed==="studio"?"<b>Studio</b> · "+frame.getAttribute("data-studio-credits")+" credits":"<b>Standard</b> · 1 credit"});
+all("eta").forEach(function(e){e.textContent=ed==="studio"?"ready in about 20 min":"ready in about 10 min"});
+var key=head+"|"+ed+"|"+look;
+if(key!==last){last=key;h1.innerHTML="";head.split("").forEach(function(c,i){var s=document.createElement("span");if(ed==="studio"){s.className="ch";s.style.animationDelay=(i*0.03)+"s"}s.textContent=c===" "?String.fromCharCode(160):c;h1.appendChild(s)})}
+var chips=document.querySelectorAll(".bsteps span");
+if(chips.length===3){var two=!!f.getAttribute("data-t2"),three=!!f.getAttribute("data-t3");
+chips[0].className=name?"done":"now";chips[1].className=!name?"":two?"done":"now";chips[2].className=three?"done":(name&&two?"now":"")}
+}
+f.addEventListener("input",render);
+f.addEventListener("change",function(e){var t=e.target;if(t.closest('[data-bstep="2"]'))f.setAttribute("data-t2","1");if(t.closest('[data-bstep="3"]'))f.setAttribute("data-t3","1");render()});
+f.addEventListener("focusin",function(e){if(e.target.closest('[data-bstep="2"]'))f.setAttribute("data-t2","1");render()});
+var det=f.querySelector('[data-bstep="3"] details');if(det)det.addEventListener("toggle",function(){if(det.open){f.setAttribute("data-t2","1");f.setAttribute("data-t3","1")}render()});
+render();
+f.addEventListener("submit",function(){if(!f.checkValidity())return;var l=document.querySelector(".launch");if(!l)return;var n=val("businessName");
+l.querySelector("b").textContent="Building "+(n&&n.length<60&&!/^https?:/i.test(n)?n:"the website");l.classList.add("on");
+var msgs=["Reading the business…","Planning the pages…","Picking the photos…","Setting up the design…"],k=0,sp=l.querySelector("span");sp.textContent=msgs[0];setInterval(function(){k=(k+1)%msgs.length;sp.textContent=msgs[k]},1100)});
+window.addEventListener("pageshow",function(){var l=document.querySelector(".launch");if(l)l.classList.remove("on")});
+})();`;
 
 export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string, leadFilter = "", reuseFrom = "", photos = true): Response {
   const out = !s.tenant.unlimited && s.tenant.credits < 1;
@@ -413,16 +555,25 @@ export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) =>
     "Websites",
     `<main class="main">${flash(ok, err)}
 ${out ? `<div class="flash bad" role="alert">You have no builds left. Ask your Forge administrator to add more. The websites you've already built keep working.</div>` : ""}
-<form method="post" action="/demos" class="card hero-form" id="build">${chosen ? `<div class="flash ok" role="status" style="margin:0">Building on the design of <b>${esc(chosen.businessName)}</b>: type the new business below. It skips the design step, so it's faster and cheaper.</div>` : ""}<div><h1>Build a website for any business</h1>
-<p class="lead">Type the business name or paste its Google Maps link. That's all we need.${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template.)"}</p></div>
-${fields(chosen ? { reuseFrom: chosen.slug } : undefined, reuse)}
-<div class="row"><button class="btn ember big" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build website</button><span class="note">Ready in about 10–20 minutes. You can close this page; it keeps building.</span></div>${photos ? "" : `<p class="flash bad" role="status" style="margin:12px 0 0">Today&#39;s free photo allowance is used up, so a website built now gets <b>no photos</b>. It resets at midnight UTC (7pm US Eastern): for the best result, wait until then.</p>`}</form>
-<section style="display:grid;gap:14px"><h2>Your websites${demos.length ? ` (${demos.length})` : ""}</h2>${leadsBar(demos, on)}${list}</section>
+<form method="post" action="/demos" class="card hero-form" id="build">${chosen ? `<div class="flash ok" role="status" style="margin:0">Building on the design of <b>${esc(chosen.businessName)}</b>: type the new business below. It skips the design step, so it's faster and cheaper.</div>` : ""}
+<div class="builder"><div style="display:grid;gap:22px;min-width:0"><div><h1>What are we building today?</h1>
+<p class="lead">Type the business name or paste its Google Maps link. Forge reads the rest.${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template.)"}</p>
+<div class="bsteps" aria-hidden="true"><span class="now"><i>1</i>The business</span><span><i>2</i>The kind of website</span><span><i>3</i>Make it theirs</span></div></div>
+${fields(chosen ? { reuseFrom: chosen.slug } : undefined, reuse, true)}
+<div class="row"><button class="btn ember big" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build website</button><span class="note">You can close this page while it builds.</span></div>${photos ? "" : `<p class="flash bad" role="status" style="margin:12px 0 0">Today&#39;s free photo allowance is used up, so a website built now gets <b>no photos</b>. It resets at midnight UTC (7pm US Eastern): for the best result, wait until then.</p>`}</div>
+<aside class="live" aria-hidden="true"><div class="live-frame" data-ed="standard" data-studio-credits="${STUDIO_CREDITS}"><div class="lf-bar"><i></i><i></i><i></i><span>forge-sites/<b data-live="slug">your-business</b></span></div>
+<div class="lf-site"><div class="lf-head"><span class="lf-logo" data-live="name">Your business</span><span class="lf-call" data-live="phone">Call now</span></div>
+<div class="lf-hero"><div class="lf-photo"></div><h3 class="lf-h1">Local service</h3><p class="lf-sub">Every page, real photos, the map and a form, made for <b data-live="name">Your business</b>.</p><span class="lf-btn">Get a quote</span></div>
+<div class="lf-rows"><i></i><i></i><i></i></div></div></div>
+<div class="live-meta"><span data-live="edition"><b>Standard</b> · 1 credit</span><span data-live="eta">ready in about 10 min</span></div>
+<p class="live-note">A sketch of what you're asking for. The real site is designed for the business.</p></aside></div></form>
+<div class="launch" role="status" aria-live="polite"><div class="launch-in"><div class="launch-orb"></div><b>Building…</b><span></span></div></div>
+<section style="display:grid;gap:14px"><div class="row" style="justify-content:space-between"><h2>Your websites${demos.length ? ` (${demos.length})` : ""}</h2><a class="btn ghost" href="${esc(siteUrl("examples"))}" target="_blank" rel="noopener" title="Finished designs under made-up names: a prospect types their name and phone and sees it on every one">Sample gallery to share ↗</a></div>${leadsBar(demos, on)}${list}</section>
 <details class="card"><summary>Have a list? Build several at once</summary><form method="post" action="/demos/bulk" style="display:grid;gap:14px">
 <label for="bulk">One business per line: <b>name | city | website or Facebook link | phone</b> (everything after the name is optional), or a Google Maps link (up to 25). Studio lines without a link are built as Standard.<textarea id="bulk" name="bulk" rows="6" placeholder="Joe's Plumbing | Tampa, FL | https://joesplumbing.com | (813) 555-0142&#10;Bright Smile Dental | Austin, TX | https://facebook.com/brightsmile&#10;https://maps.app.goo.gl/…"></textarea></label>
 <div class="look-row"><label class="choice"><input type="radio" name="style" value="standard" checked><span>Standard · 1 credit each</span></label><label class="choice"><input type="radio" name="style" value="studio"><span>Studio · ${STUDIO_CREDITS} credits each</span></label></div>
 <p class="note" style="margin:0">Three build at a time; the rest wait their turn and start by themselves.</p>
-<div><button class="btn" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build them all</button></div></form></details></main>`,
+<div><button class="btn" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build them all</button></div></form></details></main><script>${BUILDER_JS}</script>`,
     { nav: "demos", session: s },
   );
 }
@@ -503,8 +654,8 @@ function lookStep(d: Stored, r: Review | null | undefined, links: { site: string
     else quality = `<div class="row" style="justify-content:space-between"><div><b>Quality check: on its way</b><div class="note">A few minutes after a build we open the site on a desktop and a phone, score it, and list anything worth fixing.</div></div>${again}</div>`;
   }
   return `<section class="card step"><h2><span class="stepn">1</span>Look at it</h2>
-<iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(d.intake.businessName)}"></iframe>
-<div class="row"><a class="btn" href="${esc(links.site)}" target="_blank" rel="noreferrer">Open the full site ↗</a><span class="note">Check it on your phone too.</span></div>
+<div class="row" style="justify-content:space-between"><span class="devices" role="group" aria-label="Preview size"><button type="button" class="on" data-device="desktop">Desktop</button><button type="button" data-device="phone">Phone</button></span><a class="btn" href="${esc(links.site)}" target="_blank" rel="noreferrer">Open the full site ↗</a></div>
+<div class="preview-wrap"><iframe class="preview" src="${esc(links.site)}" title="Preview of ${esc(d.intake.businessName)}"></iframe></div>
 ${ideaBlock(idea)}${quality}${qaBlock(qa)}</section>`;
 }
 
@@ -574,6 +725,26 @@ function outreachCard(d: Stored, links: { site: string }, qr: string, aiOn: bool
   }<p class="note" style="margin:0">QR code opens ${esc(links.site)}</p></div></div></section>`;
 }
 
+/** A build in progress, as a timeline with a progress bar (the page swaps it in place as the build moves on). */
+function buildTimeline(d: Stored, progress: { done: number; total: number }, hasSite: boolean): string {
+  const at = d.buildStage === "pages" ? 3 : d.buildStage === "kit" ? 2 : 0;
+  const pct = at === 3 && progress.total ? 45 + Math.round((50 * progress.done) / progress.total) : at === 2 ? 28 : 8;
+  const steps = ["Reading the business and its website", "Planning the pages and the photos", "Designing the look", `Writing the pages${at === 3 && progress.total ? `: ${progress.done} of ${progress.total}` : ""}`, "Opening it in a browser to check it"];
+  return `<div id="build-status" data-building="1" class="buildbox" role="status"><div class="bb-top"><b>Building ${esc(d.intake.businessName)}</b><span class="tag live">${pct}%</span></div>
+<div class="bb-bar"><i style="width:${pct}%"></i></div>
+<ol class="bb-steps">${steps.map((t, i) => `<li class="${i < at ? "done" : i === at ? "now" : ""}"><i>${i < at ? "✓" : ""}</i>${esc(t)}</li>`).join("")}</ol>
+<p class="note" style="margin:0">Nothing for you to do: it usually takes 10–20 minutes and this updates by itself. You can close the page and come back.${hasSite ? " The current version stays live until the new one is finished." : ""}</p></div>`;
+}
+
+/** The website page's own script: the build timeline updates in place, a finished build is celebrated once, and the preview switches between desktop and phone. */
+const DEMO_JS = `(function(){var slug=location.pathname.split("/")[2]||"";
+function poll(){var box=document.getElementById("build-status");if(!box)return;setTimeout(function(){fetch(location.href,{credentials:"same-origin"}).then(function(r){return r.text()}).then(function(t){var doc=new DOMParser().parseFromString(t,"text/html");var nb=doc.getElementById("build-status");if(nb&&nb.getAttribute("data-building")){box.replaceWith(nb);poll()}else{try{sessionStorage.setItem("forge-ready",slug)}catch(e){}location.reload()}}).catch(poll)},8000)}
+poll();
+var ready=null;try{ready=sessionStorage.getItem("forge-ready")}catch(e){}
+if(ready===slug&&!matchMedia("(prefers-reduced-motion: reduce)").matches){try{sessionStorage.removeItem("forge-ready")}catch(e){}var c=document.createElement("div");c.className="confetti";var cols=["#d9601f","#1d4f8c","#217a4b","#f2b33d","#e2622b","#7fb0ea"];for(var i=0;i<46;i++){var s=document.createElement("i");var a=Math.random()*Math.PI*2,r=140+Math.random()*260;s.style.cssText="background:"+cols[i%cols.length]+";--x:"+Math.round(Math.cos(a)*r)+"px;--y:"+Math.round(Math.sin(a)*r+120)+"px;--r:"+Math.round(Math.random()*720-360)+"deg;animation-delay:"+(Math.random()*.15)+"s";c.appendChild(s)}document.body.appendChild(c);setTimeout(function(){c.remove()},1800)}
+document.addEventListener("click",function(e){var b=e.target.closest("[data-device]");if(!b)return;var w=document.querySelector(".preview-wrap");if(!w)return;w.classList.toggle("phone",b.getAttribute("data-device")==="phone");[].forEach.call(document.querySelectorAll("[data-device]"),function(x){x.classList.toggle("on",x===b)})});
+})();`;
+
 export function demoPage(
   s: Session,
   d: Stored,
@@ -600,9 +771,9 @@ export function demoPage(
   const cost = buildCost(d.intake);
   // One sentence at the top: where this website is and the single next thing to do.
   const next = busy
-    ? `<div class="status" role="status"><span class="spin"></span><div><b>${d.buildStage === "pages" ? `Writing the pages: ${progress.done} of ${progress.total} done` : "Designing the look…"}</b><br><span class="note">Nothing for you to do. It usually takes 10–20 minutes and this page refreshes itself; you can also close it and come back.${hasSite ? " The current version stays live until the new one is finished." : ""}</span></div></div><script>setTimeout(()=>location.reload(),15000)</script>`
+    ? buildTimeline(d, progress, hasSite)
     : d.buildStatus === "queued"
-      ? `<div class="status" role="status"><span class="spin"></span><div><b>Waiting its turn.</b><br><span class="note">Three websites build at a time. This one starts by itself when one finishes; nothing for you to do.</span></div></div><script>setTimeout(()=>location.reload(),20000)</script>`
+      ? `<div id="build-status" data-building="1" class="buildbox" role="status"><div class="bb-top"><b>Waiting its turn</b><span class="tag live">In the queue</span></div><p class="note" style="margin:0">Three websites build at a time. This one starts by itself when one finishes; nothing for you to do.</p></div>`
       : d.buildStatus === "failed"
         ? `<div class="status bad" role="alert"><div><b>The build stopped before it finished.</b> ${esc(d.buildError)}<br><b>What to do:</b> press Try again. It carries on from the pages already written${s.tenant.unlimited ? "" : `, and your credit${cost === 1 ? " was" : "s were"} refunded (trying again uses ${cost})`}. ${hasSite ? "Meanwhile the link still shows the previous version." : "Meanwhile the link shows a simple placeholder version."} If it fails twice, tell your Forge administrator the message above.</div><form method="post" action="/demos/${esc(d.slug)}/rebuild"><button class="btn" type="submit"${out ? " disabled" : ""}>Try again</button></form></div>`
         : changing(d.changeNote)
@@ -660,7 +831,7 @@ ${row("Sheet row (date · business · trade · city · phone · link)", sheet.re
 <div><button class="btn" type="submit" data-busy="Starting…"${busy || out ? " disabled" : ""}>Redesign the whole site</button>${out ? ` <span class="note">No credits left.</span>` : ""}</div></form>
 <form method="post" action="/demos/${esc(d.slug)}/archive"><button class="btn danger" type="submit">Delete this website (its link stops working)</button></form>
 </div></details>
-</main>`,
+</main><script>${DEMO_JS}</script>`,
     { nav: "demos", session: s },
   );
 }

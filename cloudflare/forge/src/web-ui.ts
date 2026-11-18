@@ -244,6 +244,13 @@ a.card:hover{border-color:var(--ember);transform:translateY(-2px)}.card p{color:
 .grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
 .trade{display:grid;gap:4px;padding:20px 22px;border-radius:16px;background:var(--surface);border:1px solid var(--line);text-decoration:none;color:var(--ink);font-weight:600;transition:.2s}
 .trade small{font-weight:400;color:var(--muted);font-size:.86rem}.trade:hover{border-color:var(--ember);transform:translateY(-2px)}
+.tryform{display:flex;flex-wrap:wrap;gap:10px;max-width:560px}.tryform input{flex:1 1 180px;min-width:0;padding:14px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#fff;font:inherit;transition:border-color .2s,background .2s}.tryform input::placeholder{color:rgba(255,255,255,.55)}.tryform input:focus{outline:none;border-color:#ffb08f;background:rgba(255,255,255,.12)}
+.trymock{border-radius:18px;overflow:hidden;background:#f6f2ea;box-shadow:0 40px 100px -30px #000;transform:perspective(1100px) rotateY(-8deg) rotateX(2deg);transition:transform .6s cubic-bezier(.2,.7,.2,1)}.trymock:hover{transform:none}
+.tm-bar{display:flex;align-items:center;gap:6px;padding:9px 12px;background:#e7e2d8;font:.7rem ui-monospace,Menlo,monospace;color:#6b6457}.tm-bar i{width:9px;height:9px;border-radius:50%;background:#cfc7b8}.tm-bar span{margin-left:8px}
+.tm-site{color:#1d1b17;padding:0 0 18px}.tm-head{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;font-size:.9rem}.tm-call{background:#d9421a;color:#fff;font:600 .72rem var(--sans);padding:6px 10px;border-radius:7px;white-space:nowrap}
+.tm-hero{padding:22px 18px 18px;background:linear-gradient(135deg,#1f2b24,#33493c 55%,#8a6e48);color:#fff;margin:0 12px;border-radius:12px;display:grid;gap:10px}.tm-word{font:600 clamp(1.7rem,3.6vw,2.6rem)/1 var(--serif,Georgia,serif);letter-spacing:-.02em;min-height:1em;overflow-wrap:anywhere}.tm-hero p{margin:0;font-size:.85rem;color:rgba(255,255,255,.8);max-width:34ch}.tm-btn{justify-self:start;background:#fff;color:#1d1b17;font:700 .75rem var(--sans);padding:8px 13px;border-radius:8px}
+.tm-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 12px 0}.tm-grid i{height:52px;border-radius:8px;background:#e5dfd3}
+.tm-word.flash,[data-try].flash{animation:tryflash .5s}@keyframes tryflash{from{opacity:.25;transform:translateY(4px)}to{opacity:1;transform:none}}
 .split{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}@media (max-width:900px){.split{grid-template-columns:1fr}}
 .toc{margin:6px 0 0;padding-left:20px;columns:2;column-gap:28px}@media (max-width:600px){.toc{columns:1}}
 .prose{max-width:720px}.prose h2{margin:44px 0 14px;font-size:1.75rem}.prose p{margin:0 0 18px;font-size:1.07rem;color:var(--ink2)}
@@ -294,6 +301,10 @@ function run(){var item=names[k%names.length],txt=item.name,i=0;field.textConten
 var typer=setInterval(function(){field.textContent=txt.slice(0,++i);if(i>=txt.length){clearInterval(typer);step(0)}},55);
 function step(s){if(s>=items.length){shot.forEach(function(im,j){im.classList.toggle("off",j!==k%names.length)});k++;setTimeout(run,4200);return}items[s].className="now";setTimeout(function(){items[s].className="done";bar.style.width=((s+1)/items.length*100)+"%";step(s+1)},650)}}
 if(io){new IntersectionObserver(function(es,o){if(es[0].isIntersecting&&!started){started=true;o.disconnect();run()}}).observe(demo)}else run()}
+// try it with your business: the mock site takes the typed name and phone
+var tf=document.querySelector(".tryform");
+if(tf){var put=function(k,v){document.querySelectorAll('[data-try="'+k+'"]').forEach(function(e){e.textContent=v;e.classList.remove("flash");void e.offsetWidth;e.classList.add("flash")})};
+tf.addEventListener("input",function(e){var k=e.target.getAttribute("data-try-in");if(!k)return;var v=e.target.value.trim();put(k,v||(k==="name"?"Your Business":"(555) 010-0142"))})}
 // work filter
 var fl=document.querySelector("[data-filter]");
 if(fl){fl.addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;fl.querySelectorAll("button").forEach(function(x){x.setAttribute("aria-pressed",x===b?"true":"false")});var v=b.getAttribute("data-v");document.querySelectorAll("[data-tags]").forEach(function(c){c.hidden=v!=="all"&&c.getAttribute("data-tags").split(" ").indexOf(v)<0})})}
@@ -387,7 +398,7 @@ function showcaseCard(s: Showcase): string {
 
 // ---- Home ------------------------------------------------------------------------------------
 
-export function homePage(plans: Plan[], showcase: Showcase[]): string {
+export function homePage(plans: Plan[], showcase: Showcase[], samplesUrl = ""): string {
   const ai = WORK.filter((w) => w.kind === "instant");
   const half = Math.ceil(WORK.length / 2);
   const row = (list: Work[]) => [...list, ...list].map((w) => `<a href="/work/${w.id}" aria-label="${esc(w.name)}" tabindex="-1"><img src="${img(w.id, "-sm")}" alt="" loading="lazy" decoding="async" width="640" height="400"></a>`).join("");
@@ -412,8 +423,18 @@ export function homePage(plans: Plan[], showcase: Showcase[]): string {
 <div class="prog"><i style="width:100%"></i></div>
 <div class="result" data-shot>${laptop(ai)}</div></div></div></section>
 
+${samplesUrl ? `<section class="band try" style="overflow:hidden"><div class="wrap split"><div class="rv"><span class="eyebrow">Try it on your business</span><h2 style="margin-top:14px;max-width:15ch">Your name. Your number. <em class="x">On every design.</em></h2>
+<p class="lead" style="margin:18px 0 26px">Type a business and a phone number, and every finished sample site shows them: the header, the headline, the call buttons, every page. That's what a Forge preview feels like, before anyone builds a thing.</p>
+<form class="tryform" method="get" action="${esc(samplesUrl)}" target="_blank" rel="noopener"><input name="name" placeholder="Business name" aria-label="Business name" maxlength="60" required data-try-in="name"><input name="phone" placeholder="Phone" aria-label="Phone" inputmode="tel" maxlength="20" data-try-in="phone"><button class="btn hot">Show me ${ic("arrow")}</button></form>
+<p style="margin-top:12px;font-size:.85rem">Opens the sample gallery in a new tab. The samples are made-up businesses.</p></div>
+<div class="trymock rv" aria-hidden="true"><div class="tm-bar"><i></i><i></i><i></i><span>your-business.forge</span></div><div class="tm-site"><div class="tm-head"><b data-try="name">Your Business</b><span class="tm-call">Call <span data-try="phone">(555) 010-0142</span></span></div>
+<div class="tm-hero"><div class="tm-word" data-try="name">Your Business</div><p>Repairs, installs and same-day call-outs, from people who pick up the phone.</p><span class="tm-btn">Get a quote</span></div>
+<div class="tm-grid"><i></i><i></i><i></i></div></div></div></div></section>` : ""}
+
 <section class="alt"><div class="wrap"><div class="head"><div class="rv"><span class="eyebrow">Our work</span><h2 style="margin-top:14px;max-width:16ch">Sites our clients are proud to send</h2><p class="lead">Hover a site to scroll the whole page. Every one is live.</p></div><a class="btn ghost rv" href="/work">All work ${ic("arrow")}</a></div>
 <div class="works">${pick("pollux", "proair", "bobs", "arc", "sterling", "homeshield").map(workCard).join("")}${showcase.slice(0, 3).map(showcaseCard).join("")}</div></div></section>
+
+
 
 <section class="band" style="overflow:hidden"><div class="wrap split"><div class="rv"><span class="eyebrow">New · Forge Studio</span><h2 style="margin-top:14px;max-width:14ch">Want a site people <em class="x">remember?</em></h2><p class="lead" style="margin:18px 0 28px">Our creative tier: art-directed, award-style sites with kinetic type, living WebGL colour, smooth scrolling and page transitions. Still built in an afternoon.</p><div class="cta-row" style="justify-content:flex-start"><a class="btn hot" href="/studio">Explore Studio ${ic("arrow")}</a><a class="btn ghost" style="color:#fff;border-color:rgba(255,255,255,.35)" href="/studio/concept">See a concept site</a></div></div>
 <a class="rv" href="/studio/concept" style="display:block;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.12);box-shadow:0 40px 100px -30px #000"><img src="/studio/concept.webp" alt="A Forge Studio concept site" width="1280" height="800" loading="lazy"></a></div></section>

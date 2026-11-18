@@ -150,11 +150,11 @@ const ok = (c, m) => { if (!c) throw new Error(m); };
     slug = op.url().match(/\/demos\/([a-z0-9-]+)/)[1]; log("      slug " + slug);
   });
   await step("owner can choose Studio, and the demo is labelled Studio", async () => {
-    await op.goto(BASE + "/"); ok(await op.isVisible("text=Studio · 3 credits"), "Studio choice should be in the open"); ok(!(await op.isVisible(".concepts")), "Studio looks should wait for Studio"); await op.click("label.choice:has(input[name=style][value=studio])"); ok(await op.isVisible(".heroes"), "first-screen choice missing"); await op.waitForTimeout(1500); await op.locator(".concepts").screenshot({ path: SHOTS + "/qa-app-looks.png" }); ok((await op.locator(".concepts input[name=concept]").count()) === 10, "ten Studio looks expected");
-    ok((await op.content()).includes("Studio · 3 credits"), "credit wording missing");
+    await op.goto(BASE + "/"); ok(await op.isVisible(".edition:has(input[value=studio])") && await op.isVisible(".ed-cost:has-text('3 credits')"), "Studio choice should be in the open"); ok(!(await op.isVisible(".concepts")), "Studio looks should wait for Studio"); await op.click("label.edition:has(input[name=style][value=studio])"); await op.waitForTimeout(600); ok(await op.isVisible(".heroes"), "first-screen choice missing"); await op.waitForTimeout(1500); await op.locator(".concepts").screenshot({ path: SHOTS + "/qa-app-looks.png" }); ok((await op.locator(".concepts input[name=concept]").count()) === 10, "ten Studio looks expected");
+    ok((await op.content()).includes("3 credits"), "credit wording missing");
     await op.fill("input[name=businessName]", "Dummy Studio Roofing"); await op.fill("input[name=city]", "105 Court St, Cynthiana, KY 41031, United States");
     await op.fill("input[name=saw]", "A two-truck roofing crew working out of a shop on Court Street.");
-    await op.click("label.choice:has(input[name=style][value=studio])"); ok(await op.isChecked("input[name=style][value=studio]"), "Studio not selected");
+    await op.click("label.edition:has(input[name=style][value=studio])"); ok(await op.isChecked("input[name=style][value=studio]"), "Studio not selected");
     await op.locator("button[type=submit]:has-text('Build')").first().click(); await op.waitForURL(/\/demos\/[a-z0-9-]+/);
     ok(await op.isVisible("h1 .pill:has-text('Studio')"), "no Studio label");
     const t = await op.content(); ok(t.includes("Cynthiana, KY") && t.includes("105 Court St"), "address not split from city");
