@@ -8,6 +8,9 @@
  * own lightness (so contrast stays as designed) and its fonts are swapped for the DNA's pair.
  */
 
+import TASTE_PALETTES from "./taste/palettes.json";
+import TASTE_TYPE from "./taste/type.json";
+
 export interface Hues {
   /** Neutral tint (backgrounds, ink, lines): hue in degrees and chroma (OKLCH). */
   n: [number, number];
@@ -21,6 +24,13 @@ interface PaletteDef {
   id: string;
   name: string;
   hues: Hues;
+  /** A curated palette's own colours for its own mode (tasteskill), used exactly. */
+  exact?: { bg: string; surface: string; ink: string; muted: string; accent: string; accentInk: string };
+  /** The trades a curated palette was made for (tasteskill's trade tags). */
+  trades?: string[];
+  tags?: string[];
+  /** How the palette is used (tasteskill's note): where the accent goes, what inverts. */
+  note?: string;
   /** Light, dark, or either. */
   mode: "light" | "dark" | "any";
   /** The looks (concept ids, or "standard") it suits; "*" for all. */
@@ -58,6 +68,98 @@ const PALETTES: PaletteDef[] = [
   { id: "olive-plum", name: "olive with plum", hues: { n: [100, 0.012], a: [330, 0.12], b: [110, 0.08] }, mode: "any", suits: ["editorial", "luxe", "organic", "standard"] },
   { id: "tangerine-slate", name: "tangerine on slate", hues: { n: [240, 0.012], a: [50, 0.17], b: [220, 0.08] }, mode: "light", suits: ["kinetic", "playful", "swiss", "standard"] },
 ];
+
+// ---- the tasteskill library (MIT, src/taste): 64 palettes made for trades, 39 type pairings ------------
+
+/** The tasteskill trade tags a business falls under (what its curated palettes were made for). */
+export function tasteTrades(text: string): string[] {
+  const t = text.toLowerCase();
+  const out = new Set<string>();
+  const add = (re: RegExp, ...tags: string[]) => re.test(t) && tags.forEach((x) => out.add(x));
+  add(/restaurant|grill|\bbar\b|taco|seafood|burger|diner|pizza|bistro|kitchen|steak|sushi|bbq|barbecue|eatery|tavern|pub\b|waffle/, "restaurant");
+  add(/caf[eé]|coffee|yogurt|ice cream|gelato|dessert|juice|tea\b|smoothie|creamery/, "cafe");
+  add(/bakery|bread|pastr|cake|bagel|donut|patisserie/, "bakery");
+  add(/hotel|\binn\b|motel|lodge|b&b|bed and breakfast|resort|guest ?house|hostel/, "hotel");
+  add(/clinic|hospital|dental|dentist|ortho|medical|doctor|pharmacy|veterinar|\bvet\b|physio|chiro|optomet|urgent care/, "clinic");
+  add(/spa\b|salon|beauty|wellness|massage|yoga|gym|fitness|med ?spa|barber|nail|pilates/, "wellness");
+  add(/law|attorney|lawyer|account|tax|insurance|real estate|realty|property|financial|bank|notary/, "law");
+  add(/plumb|hvac|air ?con|heating|electric|roof|towing|tow\b|auto|tire|wheel|mechanic|garage|construction|contractor|landscap|lawn|tree|pest|wildlife|trapp|clean|paint|storage|warehouse|moving|handyman|locksmith|pool|fence|concrete|weld|repair|install/, "workshop");
+  add(/shop|store|thrift|retail|boutique|market|grocer|superette|florist|flower|nursery|hardware store|gift|jewel|fuel|gas station|convenience/, "retail");
+  add(/school|daycare|preschool|museum|gallery|park|church|escape|arcade|casino|theater|theatre|studio|academy|library|club|venue|stadium|ballpark/, "studio");
+  add(/wedding|event|bridal|florist|catering|party/, "wedding");
+  add(/agency|marketing|design|photograph|consult/, "agency");
+  if (!out.size) ["workshop", "studio", "agency"].forEach((x) => out.add(x));
+  return [...out];
+}
+
+interface TastePalette {
+  id: string;
+  name: string;
+  tags: string[];
+  trades: string[];
+  bg: string;
+  surface: string;
+  ink: string;
+  muted: string;
+  accent: string;
+  accentInk: string;
+  fields?: { bg: string; ink: string }[];
+  note?: string;
+}
+
+const tastePalettes: PaletteDef[] = (TASTE_PALETTES as TastePalette[]).flatMap((p) => {
+  const bg = hexToOklch(p.bg), sf = hexToOklch(p.surface), ac = hexToOklch(p.accent), ink = hexToOklch(p.ink);
+  if (!bg || !sf || !ac || !ink) return [];
+  // Never violet or lavender as the page's own colour (the skill's rule).
+  if (ac.c > 0.06 && ac.h > 275 && ac.h < 320) return [];
+  const tint = bg.c >= 0.006 ? bg : sf.c >= 0.006 ? sf : ink;
+  const field = (p.fields ?? []).map((f) => hexToOklch(f.bg)).find((c) => c && c.c > 0.04) ?? null;
+  const mode: "light" | "dark" = bg.l > 0.5 ? "light" : "dark";
+  return [{
+    id: `t-${p.id}`,
+    name: p.name.toLowerCase(),
+    hues: { n: [Math.round(tint.h), Math.min(0.03, Math.max(0.006, tint.c))], a: [Math.round(ac.h), Math.min(0.2, Math.max(0.04, ac.c))], b: field ? [Math.round(field.h), Math.min(0.18, field.c)] : [Math.round(ac.h + 35) % 360, Math.min(0.1, ac.c * 0.6)] },
+    mode,
+    suits: [],
+    exact: { bg: p.bg, surface: p.surface, ink: p.ink, muted: p.muted, accent: p.accent, accentInk: p.accentInk },
+    trades: p.trades,
+    tags: p.tags,
+    ...(p.note ? { note: p.note } : {}),
+  }];
+});
+
+interface TasteType {
+  id: string;
+  class: string;
+  kinds: Record<string, number>;
+  place?: string;
+  display: { family: string; w: unknown };
+  text: { family: string; w: unknown };
+}
+
+const CLASS_LOOKS: Record<string, string[]> = {
+  serif: ["editorial", "luxe", "organic", "cinematic", "standard"],
+  slab: ["americana", "standard", "editorial"],
+  "neo-grotesk": ["swiss", "cinematic", "standard"],
+  geometric: ["playful", "swiss", "standard"],
+  "grotesk-soft": ["playful", "organic", "standard"],
+  soft: ["playful", "organic", "standard"],
+  wide: ["kinetic", "brutalist", "swiss"],
+};
+
+const weights = (w: unknown): number[] => (Array.isArray(w) ? w.map(Number).filter((n) => n > 0) : typeof w === "string" || typeof w === "number" ? String(w).match(/\d{3}/g)?.map(Number) ?? [] : []);
+const gq = (family: string, w: number[]) => `family=${family.replace(/ /g, "+")}:wght@${[...new Set(w.length ? w : [400, 700])].sort((a, b) => a - b).join(";")}`;
+
+const tasteFonts: FontDef[] = (TASTE_TYPE as TasteType[])
+  // Pairings made for services, products or places (not software-only faces).
+  .filter((t) => (t.kinds.service ?? 0) + (t.kinds.product ?? 0) > 0 || t.place)
+  .map((t) => ({
+    id: `t-${t.id}`,
+    display: t.display.family,
+    text: t.text.family,
+    q: t.display.family === t.text.family ? gq(t.display.family, [...weights(t.display.w), ...weights(t.text.w), 700]) : `${gq(t.display.family, [...weights(t.display.w), 700])}&${gq(t.text.family, [...weights(t.text.w), 600])}`,
+    suits: CLASS_LOOKS[t.class] ?? ["standard"],
+  }));
 
 interface FontDef {
   id: string;
@@ -142,6 +244,10 @@ export interface Dna {
   hero?: string;
   heroSpec?: string;
   look?: string;
+  /** The curated palette's own colours, for its own mode (used exactly). */
+  exact?: PaletteDef["exact"];
+  /** How the palette is meant to be used. */
+  paletteNote?: string;
 }
 
 function hash(s: string): number {
@@ -166,10 +272,10 @@ export interface Recent {
  * shapes and accent hues), and not a third dark site in a row. A brand colour from the form or the
  * business's own website leads the accent.
  */
-export function pickDna(look: string, slug: string, recent: Recent[] = [], brand = "", standard = false): Dna {
+export function pickDna(look: string, slug: string, recent: Recent[] = [], brand = "", standard = false, trades: string[] = []): Dna {
   const used = (i: number) => recent.map((r) => r.print.split(":")[i] ?? "");
   const pick = <T extends { id: string; suits: string[] }>(list: T[], idx: number, salt: string, keep = 10): T => {
-    const fit = list.filter((x) => x.suits.includes(look) || x.suits.includes("*"));
+    const fit = list.filter((x) => x.suits.includes(look) || x.suits.includes("*") || (standard && x.suits.includes("standard")));
     const pool = fit.length ? fit : list;
     const avoid = used(idx).slice(0, keep);
     const fresh = pool.filter((x) => !avoid.includes(x.id));
@@ -178,8 +284,12 @@ export function pickDna(look: string, slug: string, recent: Recent[] = [], brand
   };
   // Accent hues of the last four sites (from their saved accent colours) are kept clear of by 40°.
   const recentHues = recent.slice(0, 4).map((r) => hexToOklch(r.accent)).filter((c): c is Oklch => !!c && c.c > 0.04).map((c) => c.h);
-  const fitPal = PALETTES.filter((p) => p.suits.includes(look));
-  const poolPal = fitPal.length >= 4 ? fitPal : PALETTES;
+  // The curated palettes made for this trade lead (a Standard site keeps to light ones, as the skill does
+  // for local businesses); the studio's own palettes for the look fill in when too few fit.
+  const tasteFit = tastePalettes.filter((p) => p.trades!.some((t) => trades.includes(t)) && (!standard || p.mode === "light"));
+  const ownFit = PALETTES.filter((p) => p.suits.includes(look) && (!standard || p.mode !== "dark"));
+  const fitPal = tasteFit.length >= 4 ? tasteFit : [...tasteFit, ...ownFit];
+  const poolPal = fitPal.length >= 4 ? fitPal : [...PALETTES, ...tastePalettes.filter((p) => !standard || p.mode === "light")];
   const avoidPal = used(0).slice(0, 10);
   const darkRun = recent.slice(0, 2).filter((r) => r.theme === "dark").length;
   const lightRun = recent.slice(0, 3).filter((r) => r.theme === "light").length;
@@ -188,7 +298,7 @@ export function pickDna(look: string, slug: string, recent: Recent[] = [], brand
   const clear = (list: PaletteDef[]) => list.filter((p) => !avoidPal.includes(p.id) && okMode(p) && gapOf(p) >= 40);
   // Suited and clear of the recent accents; else any palette clear of them; else the most distant suited one.
   let cands = clear(poolPal);
-  if (!cands.length) cands = clear(PALETTES);
+  if (!cands.length) cands = clear([...tastePalettes, ...PALETTES].filter((p) => !standard || p.mode !== "dark"));
   if (!cands.length) {
     const rest = poolPal.filter((p) => !avoidPal.includes(p.id) && okMode(p));
     const pool2 = rest.length ? rest : poolPal;
@@ -202,8 +312,8 @@ export function pickDna(look: string, slug: string, recent: Recent[] = [], brand
   if (b && b.c > 0.05) {
     hues = { ...pal.hues, a: [Math.round(b.h), Math.max(0.08, Math.min(0.2, b.c))] };
   }
-  const mode: "light" | "dark" = pal.mode !== "any" ? pal.mode : darkRun >= 1 ? "light" : lightRun >= 2 ? "dark" : hash(`${slug}:mode`) % 3 === 0 ? "dark" : "light";
-  const font = pick(FONTS, 1, "font");
+  const mode: "light" | "dark" = standard ? "light" : pal.mode !== "any" ? pal.mode : darkRun >= 1 ? "light" : lightRun >= 2 ? "dark" : hash(`${slug}:mode`) % 3 === 0 ? "dark" : "light";
+  const font = pick([...FONTS, ...tasteFonts], 1, "font");
   const shape = pick(SHAPES, 2, "shape", 2);
   let hero: (typeof STANDARD_HEROES)[number] | undefined;
   if (standard) {
@@ -226,11 +336,27 @@ export function pickDna(look: string, slug: string, recent: Recent[] = [], brand
     mode,
     ...(hero ? { hero: hero.id, heroSpec: hero.spec } : {}),
     ...(standard ? { look } : {}),
+    // A curated palette is used to the letter in its own mode (with the business's colour as its accent).
+    ...(pal.note ? { paletteNote: pal.note } : {}),
+    ...(pal.exact && pal.mode === mode ? { exact: b && b.c > 0.05 ? { ...pal.exact, accent: oklchToHex({ l: Math.min(0.62, Math.max(0.42, b.l)), c: Math.min(0.2, b.c), h: b.h }) } : pal.exact } : {}),
   };
 }
 
 /** The palette as concrete tokens for both modes (what the writer is told to use). */
-export function dnaTokens(d: Pick<Dna, "hues">): { light: Record<string, string>; dark: Record<string, string> } {
+export function dnaTokens(d: Pick<Dna, "hues"> & { exact?: Dna["exact"]; mode?: Dna["mode"] }): { light: Record<string, string>; dark: Record<string, string> } {
+  const made = madeTokens(d);
+  const e = d.exact;
+  if (!e || !d.mode) return made;
+  // The curated palette's own mode, exactly; its lines and second surface mixed from its own colours.
+  const mix = (x: string, y: string, k: number) => {
+    const p = hexToOklch(x)!, q = hexToOklch(y)!;
+    return oklchToHex({ l: p.l + (q.l - p.l) * k, c: p.c + (q.c - p.c) * k, h: p.c < 0.01 ? q.h : p.h });
+  };
+  made[d.mode] = { ...made[d.mode], bg: e.bg, surface: e.surface, "surface-2": mix(e.surface, e.ink, 0.06), ink: e.ink, muted: e.muted, line: mix(e.bg, e.ink, 0.14), accent: e.accent, "accent-ink": e.accentInk };
+  return made;
+}
+
+function madeTokens(d: Pick<Dna, "hues">): { light: Record<string, string>; dark: Record<string, string> } {
   const { n, a, b } = d.hues;
   const N = (l: number, k = 1) => oklchToHex({ l, c: n[1] * k, h: n[0] });
   const A = (l: number) => oklchToHex({ l, c: a[1], h: a[0] });
@@ -248,7 +374,7 @@ export function dnaBrief(d: Dna): string {
   const t = dnaTokens(d);
   const list = (o: Record<string, string>) => Object.entries(o).map(([k, v]) => `--${k}: ${v}`).join("; ");
   return `## This site's design DNA (fixed by the studio; it overrides any colour, font or shape named anywhere above)
-- Colour: ${d.paletteName}. Define exactly these tokens and build every colour from them (tints with color-mix are fine; no other hues):
+- Colour: ${d.paletteName}.${d.paletteNote ? ` How it is used: ${d.paletteNote}` : ""} Define exactly these tokens and build every colour from them (tints with color-mix are fine; no other hues):
   light (on :root): ${list(t.light)}
   dark (on [data-theme="dark"]): ${list(t.dark)}
   The default mode is ${d.mode.toUpperCase()}: design it first and best. The accent is for the primary button, links and small marks; the second colour is used sparingly (a tag, a rule, one panel).

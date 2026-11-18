@@ -37,7 +37,7 @@ import {
 } from "./db";
 import type { Kit } from "./designer";
 import { lintSite, repairNote, type QaIssue, type QaResult } from "./qa";
-import { adaptKit, holdKitToDna, leanMode, thinServices, fixChrome, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, studioHome, TryLater, type Plan } from "./designer";
+import { adaptKit, holdKitToDna, leanMode, refineTrade, thinServices, fixChrome, designKit, designSitePage, factsBlock, Fatal, pagesOf, pairsRule, planPairs, profileNote, planSite, sitemapFor, studioHome, TryLater, type Plan } from "./designer";
 import type { BuildJob, Env } from "./env";
 import { heroPair, beforeAfterImages, imagesRoom, objectImage, previewImages } from "./images";
 import { studioMedia, type StudioMedia } from "./media";
@@ -47,7 +47,7 @@ import { CONCEPT_IDS, conceptById, drawFor, lookShortlist, pickConcept } from ".
 import { chooseDesign, firstScreenOf, ideaOf, ownScreen, wants, writeBrief, type Idea } from "./brief";
 import { mergeIntake, reverseGeocode } from "./places";
 import { extrasFor, HERO_IDS, heroById, OBJECT_HEROES, PHOTO_HEROES, pickHero } from "./heroes";
-import { pickDna } from "./dna";
+import { pickDna, tasteTrades } from "./dna";
 import { matchClips } from "./hero";
 import { readWebsite } from "./scrape";
 import { buildCost, chargeBuild, getTenant, recordBuildCost, type Tenant } from "./tenants";
@@ -263,6 +263,14 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       // which Workers AI then generates (free) and the site serves from its own address.
       // Tiny and cheap, but everything after it depends on it (the photos, the trade, the services): tried
       // three times, a few seconds apart, before the site is built without it.
+      // The trade made precise first (the rep's note or their website can say more than the trade field), and
+      // kept, so every later build of this site starts from it.
+      const sharper = await refineTrade(env, intake, site).catch(() => null);
+      if (sharper) {
+        console.log("trade refined", slug, JSON.stringify({ from: intake.industry, to: sharper }));
+        intake.industry = sharper;
+        await updateIntake(env, slug, intake).catch(() => undefined);
+      }
       let plan: Plan | null = null;
       for (let t = 0; t < 3 && !plan; t++) {
         if (t) await new Promise((r) => setTimeout(r, 4000 * t));
@@ -350,7 +358,8 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       // Studio motion), unlike the account's recent Standard sites, so Standard sites stop sharing one template.
       const standardLook = !studio ? pickConcept({ ...intake, concept: undefined }, slug, dnaRecent.filter((r) => r.style !== "studio").map((r) => r.look).filter(Boolean)) : undefined;
       // The design DNA (palette, type, shape, mode; for Standard also the first-screen layout), dealt in code.
-      const dealt = intake.reuseFrom ? undefined : pickDna(concept ?? standardLook!.id, slug, dnaRecent, intake.primaryColor ?? "", !studio);
+      const trades = tasteTrades(`${intake.industry ?? ""} ${intake.businessName} ${intake.services || plan?.services.join(" ") || ""}`);
+      const dealt = intake.reuseFrom ? undefined : pickDna(concept ?? standardLook!.id, slug, dnaRecent, intake.primaryColor ?? "", !studio, trades);
       // A base design keeps the mode it was drawn for (its overlays and glows are made for it).
       const dna = dealt && master ? { ...dealt, mode: master.theme === "dark" ? ("dark" as const) : ("light" as const), print: dealt.print.replace(/:(light|dark):/, `:${master.theme === "dark" ? "dark" : "light"}:`) } : dealt;
       // Which set piece the home page carries beyond its hero: the flying object, the brand moment, or neither.

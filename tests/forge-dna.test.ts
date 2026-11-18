@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dnaBrief, dnaTokens, fontFamilies, pickDna, recolor, recolorHtml, refont, sourceHues, type Recent } from "../cloudflare/forge/src/dna";
+import { dnaBrief, dnaTokens, fontFamilies, pickDna, recolor, recolorHtml, refont, sourceHues, tasteTrades, type Recent } from "../cloudflare/forge/src/dna";
 import { holdKitToDna, holdPageToDna, type Kit } from "../cloudflare/forge/src/designer";
 
 describe("design DNA", () => {
@@ -78,5 +78,27 @@ describe("design DNA", () => {
     expect(page.css).not.toContain("#c98a3e");
     expect(page.css).toContain(`"${d.display}"`);
     expect(page.body).toContain("Suite #200");
+  });
+
+  it("deals tasteskill's curated palettes made for the trade, exactly, light for Standard, never violet", () => {
+    expect(tasteTrades("Bakery Madruga Bakery Breads")).toContain("bakery");
+    expect(tasteTrades("Towing Figueroa's Towing")).toContain("workshop");
+    expect(tasteTrades("Baseball park Álex Rodríguez Park")).toContain("studio");
+    const recent: Recent[] = [];
+    for (let i = 0; i < 8; i++) {
+      const d = pickDna("editorial", `bakery-${i}`, recent, "", true, ["bakery", "cafe"]);
+      recent.unshift({ print: d.print, accent: dnaTokens(d).light.accent!, theme: d.mode });
+      expect(d.mode, d.palette).toBe("light");
+      const a = dnaTokens(d).light.accent!;
+      expect(a).toMatch(/^#[0-9a-f]{6}$/);
+      expect(d.fonts).toMatch(/family=[A-Z][\w+]*:wght@\d{3}/);
+      if (d.palette.startsWith("t-")) {
+        expect(d.exact).toBeTruthy();
+        expect(dnaTokens(d).light.bg).toBe(d.exact!.bg);
+        expect(dnaBrief(d)).toContain(d.exact!.accent);
+      }
+    }
+    // Most of a bakery's palettes come from the curated library.
+    expect(recent.filter((r) => r.print.startsWith("t-")).length).toBeGreaterThanOrEqual(5);
   });
 });
