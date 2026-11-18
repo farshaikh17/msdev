@@ -664,6 +664,24 @@ export async function studioMasters(env: Env, tenantId: number, notSlug: string)
   return results;
 }
 
+/**
+ * The account's Claude-written Standard designs made on the Standard edition's current rules (their first
+ * screen is one of its layouts): the bases a lean Standard build is designed on.
+ */
+export async function standardMasters(env: Env, tenantId: number, notSlug: string): Promise<{ slug: string; version: string; concept: string; hero: string; theme: string }[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT v.slug, v.version, json_extract(v.kit, '$.dna.look') concept, json_extract(v.kit, '$.dna.hero') hero, json_extract(v.kit, '$.theme') theme
+       FROM demos d JOIN site_versions v ON v.slug = d.slug AND v.version = d.live_version
+      WHERE d.tenant_id = ? AND d.slug != ? AND coalesce(json_extract(v.kit, '$.style'), 'standard') = 'standard' AND json_extract(v.kit, '$.reuse') IS NULL
+        AND json_extract(v.kit, '$.dna.hero') IN ('place-band', 'letterbox', 'split', 'subject-stage', 'calm-side', 'oversized', 'triptych')
+        AND coalesce(json_extract(v.usage, '$.neurons'), 0) = 0 AND coalesce(json_extract(v.usage, '$.cost_usd'), 0) >= 0.3
+      ORDER BY v.created_at`,
+  )
+    .bind(tenantId, notSlug)
+    .all<{ slug: string; version: string; concept: string; hero: string; theme: string }>();
+  return results;
+}
+
 /** The account's latest builds (any edition, by when they were built): the DNA, accent, mode and base of each, newest first. */
 export async function recentDna(env: Env, tenantId: number, notSlug: string, limit = 12): Promise<{ print: string; accent: string; theme: string; look: string; style: string; base: string }[]> {
   const { results } = await env.DB.prepare(
