@@ -229,6 +229,10 @@ export const conceptById = (id: string | undefined | null) =>
 /** Which concepts suit a trade (best first). Anything not matched can use any of them. */
 const SUITS: [RegExp, string[]][] = [
   [
+    /baseball|ballpark|ball park|stadium|softball|little league|sports? (field|complex|club|park)|athletic|soccer|football|batting cage/i,
+    ["americana", "kinetic", "swiss", "brutalist"],
+  ],
+  [
     /landscap|lawn|garden|tree|yard|nursery|irrigat/i,
     ["organic", "editorial", "cinematic", "americana"],
   ],

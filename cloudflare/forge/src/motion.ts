@@ -381,6 +381,16 @@ mm0.add("(min-width: 900px)",function(){
     blocks.sort(function(a,b){return a.at-b.at});
     blocks.forEach(function(b,i){var nx=blocks[i+1];if(i===0)b.at=Math.min(b.at,0);if(b.until!==null&&nx&&b.until<nx.at)b.until=nx.at;if(!nx)b.until=null});
     var screens=Math.max(1,Math.min(3,num(sec.dataset.pin,3),blocks.length*.75+.5));
+    // Blocks on screen at the same time never sit on each other (a label laid over a paragraph): a later one that
+    // would overlap an earlier one moves down below it.
+    blocks.forEach(function(b){b.dy=0});
+    blocks.forEach(function(b,i){for(var j=0;j<i;j++){var a=blocks[j];var aEnd=a.until===null?1:a.until,bEnd=b.until===null?1:b.until;if(b.at>=aEnd||a.at>=bEnd)continue;
+      var A=a.el.getBoundingClientRect(),R=b.el.getBoundingClientRect();A={left:A.left,right:A.right,top:A.top+a.dy,bottom:A.bottom+a.dy};R={left:R.left,right:R.right,top:R.top+b.dy,bottom:R.bottom+b.dy};
+      if(A.right>R.left+4&&R.right>A.left+4&&A.bottom>R.top+4&&R.bottom>A.top+4)b.dy+=A.bottom-R.top+16}});
+    // Small labels drawn into the stage's background layer give way to the story's words where they collide.
+    var rects=blocks.map(function(b){var q=b.el.getBoundingClientRect();return {l:q.left,r:q.right,t:q.top+b.dy,b:q.bottom+b.dy}}).concat(all("h1,h2,h3,h4,p",stage).filter(function(t){return !t.closest("[data-at],[data-pin-zoom]")}).map(function(t){var q=t.getBoundingClientRect();return {l:q.left,r:q.right,t:q.top,b:q.bottom}}));
+    all("*",stage).forEach(function(lab){if(lab.closest("[data-at]")||/^(H[1-4]|P)$/.test(lab.tagName)&&!lab.closest("[data-pin-zoom]")||!/\S/.test(lab.textContent||"")||lab.children.length>2)return;var q=lab.getBoundingClientRect();if(q.width>420||q.height>90||!q.width)return;
+      if(rects.some(function(r){return r.l<q.right-2&&q.left<r.r-2&&r.t<q.bottom-2&&q.top<r.b-2}))lab.style.visibility="hidden"});
     // A stage with no picture of its own gets one of the site's photos, faded behind its words.
     if(!stage.querySelector("img,video,canvas,picture,.m-spin,[data-pin-zoom]")&&getComputedStyle(stage).backgroundImage==="none"){
       var ph=all("main img").filter(function(im){return !stage.contains(im)&&/\/_img\/[^/]+\/photo-/.test(im.getAttribute("src")||"")})[0];
@@ -393,7 +403,7 @@ mm0.add("(min-width: 900px)",function(){
       blocks.forEach(function(b){
         var k=cl((p-b.at)/.1),o=b.until===null?0:cl((p-b.until)/.08);
         b.el.style.opacity=k*(1-o);b.el.style.visibility=k*(1-o)<=0?"hidden":"visible";
-        b.el.style.transform=b.base+"translate3d(0,"+((1-k)*30-o*40)+"px,0)";
+        b.el.style.transform=b.base+"translate3d(0,"+((1-k)*30-o*40+(b.dy||0))+"px,0)";
         b.el.style.filter=k<1||o>0?"blur("+((1-k)*10+o*10)+"px)":"";
         if(b.words){var span=(b.until===null?1:b.until)-b.at,n=b.words.length;b.words.forEach(function(wd,i){var q=cl(((p-b.at)/(span*.6))*1.6-i/n*1.1);wd.style.opacity=.15+.85*q})}
         if(b.count){var q2=cl((p-b.at)/Math.max(.12,((b.until===null?1:b.until)-b.at)*.6));b.count.textContent=(b.count.dataset.prefix||"")+Math.round(b.end*q2).toLocaleString()+(b.count.dataset.suffix||"")}
