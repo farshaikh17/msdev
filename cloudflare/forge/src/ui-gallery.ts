@@ -98,7 +98,7 @@ ${i.idea ? `<p class="g-idea">“${esc(i.idea.length > 170 ? `${i.idea.slice(0, 
   };
   return page(
     "Gallery",
-    `${CSS}<main class="main"><div><h1>Gallery</h1><p class="lead">Every finished website, to look across and choose a direction. Filter by niche, look or first screen; tick two or three to compare them side by side; or start a new site on a design you like.</p></div>
+    `${CSS}<main class="main"><div><h1>Gallery</h1><p class="lead">Every finished website, to look across and choose a direction. Filter by niche, look or first screen; tick two or three to compare them side by side; or start a new site on a design you like.</p><p class="note" style="margin:0">To share with any prospect: <a href="${esc(siteUrl("examples"))}" target="_blank" rel="noopener">the sample gallery ↗</a>, finished designs under made-up names, where a prospect can type their own business name and phone to see it on every design.</p></div>
 ${bar}
 <form id="cmp" action="/gallery/compare" method="get" class="row" style="gap:10px"><button class="btn" type="submit">Compare the ticked sites</button><span class="note">${shown.length} of ${items.length} website${items.length === 1 ? "" : "s"}</span><input type="hidden" name="view" value="${phone ? "phone" : "desktop"}"></form>
 ${shown.length ? `<div class="g-grid">${shown.map(card).join("")}</div>` : `<div class="card empty">No websites match these filters. <a href="/gallery">Show all</a></div>`}</main>`,

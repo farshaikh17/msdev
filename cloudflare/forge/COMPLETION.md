@@ -153,3 +153,12 @@ are free (roughly one build). About $4.76 of the paid cap was used by 18 Nov (th
 - Planning reads the trade field: a vague trade ("Public Park" for a ballpark) gives generic services.
 - No phone is read from a Google Maps link; a site without a phone has no call button.
 - Cloud Peak and Little Havana carry made-up 555 numbers (portfolio sites).
+
+## Update, 2026-11-18 (later): better designs at lower cost, scroll check, sample gallery
+
+- **taste-skill (MIT, `src/taste/`)**: its 64 trade-tagged palettes and 39 type pairings join the design DNA. Standard sites now follow its local-business rules (`STANDARD` in `designer.ts`): pictures lead, one idea per screen, a 12-column grid with equal edges, 13 named section layouts instead of card grids, no captions or scrims on photos, flat grounds, hover micro-animations. Seven first-screen layouts are dealt by kind of business (places people visit vs. businesses that come to you).
+- **Standard on bases**: a lean Standard build is designed on one of the account's Claude-made Standard bases (`standardMasters`), as lean Studio builds already were. A base is made by setting `claude-build:<slug>` in settings and rebuilding that site: only that build skips lean mode.
+- **Service pages from one template**: the first service page is written in full; the others follow its layout and CSS with their own copy (low effort, shared CSS).
+- **Trade refinement**: a vague trade ("Park") is sharpened from the rep's note or the business's website before building ("Baseball park").
+- **Scroll check in the worker** (`src/scrollscan.ts`, same detectors as `qa/sitecheck.mjs`): after every build the home page is scrolled at desktop and phone width; a finding the page causes gets one cheap repair, checked again and kept only if it leaves fewer problems (`FORGE_SCAN_FIX=off` stops the repair). Detectors skip tilted cards, words under an opaque layer and background videos, and look twice before reporting an overlap.
+- **Sample gallery** (`/examples` on forge-sites, `src/samples.ts`): finished sites served under made-up names, reserved 555-01xx numbers and no street address; a prospect can type their own business name and phone and see it on every design. Free to run (no builds), forms keep nothing, views aren't counted on the real demo, samples don't expire, and screenshots of the real business are never served there. Add a sample by adding a line to `SAMPLES` (check its pages for other spellings of the source's name).
