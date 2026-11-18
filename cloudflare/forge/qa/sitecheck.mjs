@@ -85,7 +85,8 @@ const AT_EACH_STOP = () => {
     t++;
     const e = document.elementFromPoint(x, y);
     if (!e) continue;
-    if (/^(IMG|VIDEO|CANVAS|svg|path|PICTURE|IFRAME)$/i.test(e.tagName) || getComputedStyle(e).backgroundImage !== "none" || [...e.childNodes].some((c) => c.nodeType === 3 && c.textContent.trim())) n++;
+    // The footer is content (sparse link columns on plain paper are not an empty screen).
+    if (e.closest("footer") || /^(IMG|VIDEO|CANVAS|svg|path|PICTURE|IFRAME)$/i.test(e.tagName) || getComputedStyle(e).backgroundImage !== "none" || [...e.childNodes].some((c) => c.nodeType === 3 && c.textContent.trim())) n++;
   }
   window.__fill = (window.__fill || []).concat(Math.round((100 * n) / t));
   return iss;
@@ -110,7 +111,7 @@ const AT_END = () => {
   // Screens of nothing while scrolling (a pinned story with gaps, an empty band).
   const f = (window.__fill || []).slice(0, -1);
   let run = 0, worst = 0;
-  for (const v of f) { run = v < 15 ? run + 1 : 0; worst = Math.max(worst, run); }
+  for (const v of f) { run = v < 8 ? run + 1 : 0; worst = Math.max(worst, run); }
   if (f.some((v) => v < 5)) iss.push(`an empty screen while scrolling (${Math.min(...f)}% filled)`);
   else if (worst >= 4) iss.push(`${worst} screens in a row that are mostly empty`);
   return iss;

@@ -374,10 +374,10 @@ mm0.add("(min-width: 900px)",function(){
       return {el:el,base:t0&&t0!=="none"?t0+" ":"",at:num(el.dataset.at,0),until:el.hasAttribute("data-until")?num(el.dataset.until,1):null,words:words,count:c,end:c?num(c.dataset.pinCount,0):0};
     });
     // Never an empty moment: the beats are taken in order, the first is there from the start, and each one
-    // stays until the next has arrived. The scroll is about three-quarters of a screen per beat (3 at most),
+    // stays until the next starts to arrive (a crossfade, never two at full strength). The scroll is about three-quarters of a screen per beat (3 at most),
     // so a story never turns into screens of nothing.
     blocks.sort(function(a,b){return a.at-b.at});
-    blocks.forEach(function(b,i){var nx=blocks[i+1];if(i===0)b.at=Math.min(b.at,0);if(b.until!==null&&nx&&b.until<nx.at+.06)b.until=nx.at+.06;if(!nx)b.until=null});
+    blocks.forEach(function(b,i){var nx=blocks[i+1];if(i===0)b.at=Math.min(b.at,0);if(b.until!==null&&nx&&b.until<nx.at)b.until=nx.at;if(!nx)b.until=null});
     var screens=Math.max(1,Math.min(3,num(sec.dataset.pin,3),blocks.length*.75+.5));
     // A stage with no picture of its own gets one of the site's photos, faded behind its words.
     if(!stage.querySelector("img,video,canvas,picture,.m-spin,[data-pin-zoom]")&&getComputedStyle(stage).backgroundImage==="none"){
