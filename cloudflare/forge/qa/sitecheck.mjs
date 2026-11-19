@@ -72,6 +72,15 @@ const AT_EACH_STOP = () => {
       if (ia >= 0 && ib >= 0 && !between) iss.push(`text over text: "${leaf[a].innerText.trim().slice(0, 30)}" / "${leaf[b].innerText.trim().slice(0, 30)}"`);
     }
   }
+  // A picture covering words (a photo placed over the start of a heading or paragraph).
+  for (const e of leaf) {
+    const r = e.getBoundingClientRect(); let hit = 0;
+    for (const fx of [0.08, 0.5]) {
+      const top = document.elementFromPoint(r.left + r.width * fx, r.top + r.height / 2);
+      if (top && !e.contains(top) && !top.contains(e) && top.closest("img,picture,video,figure") && !(top.closest("a,button") && top.closest("a,button").contains(e))) hit++;
+    }
+    if (hit) { iss.push(`picture over text: "${(e.innerText || "").trim().slice(0, 40)}"`); break; }
+  }
   // A big part of the screen darkened by a filter (the stacked-card black flash).
   for (const e of document.querySelectorAll("main *")) {
     const f = getComputedStyle(e).filter; const m = f.match(/brightness\(([\d.]+)/);

@@ -29,6 +29,15 @@ export const STOP_JS = `(() => {{
       if (ia >= 0 && ib >= 0 && !between) iss.push(\`text over text: "\${leaf[a].innerText.trim().slice(0, 30)}" / "\${leaf[b].innerText.trim().slice(0, 30)}"\`);
     }
   }
+  // A picture covering words (a photo placed over the start of a heading or paragraph).
+  for (const e of leaf) {
+    const r = e.getBoundingClientRect(); let hit = 0;
+    for (const fx of [0.08, 0.5]) {
+      const top = document.elementFromPoint(r.left + r.width * fx, r.top + r.height / 2);
+      if (top && !e.contains(top) && !top.contains(e) && top.closest("img,picture,video,figure") && !(top.closest("a,button") && top.closest("a,button").contains(e))) hit++;
+    }
+    if (hit) { iss.push(\`picture over text: "\${(e.innerText || "").trim().slice(0, 40)}"\`); break; }
+  }
   // A big part of the screen darkened by a filter (the stacked-card black flash).
   for (const e of document.querySelectorAll("main *")) {
     const f = getComputedStyle(e).filter; const m = f.match(/brightness\\(([\\d.]+)/);
@@ -105,7 +114,7 @@ export async function scrollScan(page: BrowserPage, sleep: (ms: number) => Promi
     // Look again a moment later: a finding mid-animation (words passing as they move in) is not one.
     await sleep(settle * 2);
     const again = new Set(list(await page.evaluate<string[]>(STOP_JS)));
-    for (const m of first) if (again.has(m) || !/^text over text|^darkened/.test(m)) found.add(m);
+    for (const m of first) if (again.has(m) || !/^text over text|^picture over text|^darkened/.test(m)) found.add(m);
   }
   if (H) for (const m of list(await page.evaluate<string[]>(END_JS))) found.add(m);
   await page.evaluate("window.scrollTo(0, 0)");
@@ -118,6 +127,7 @@ export const pageFixable = (m: string) => !/"Made with" credits|header blinks|ad
 /** A finding as a note for the page writer. */
 export function scanNote(m: string): string {
   if (m.startsWith("text over text")) return `Two pieces of text sit on top of each other while scrolling (${m.slice(16)}): give each its own space (in a pinned scene only one beat shows at a time; push the lower block down) so words never cover other words.`;
+  if (m.startsWith("picture over text")) return `A picture covers words while scrolling (${m.slice(18)}): keep every photo beside or under the words it belongs to, never on top of them; let the text column and the photo column sit side by side without overlapping.`;
   if (m.startsWith("darkened block")) return `A large block goes dark while scrolling (${m}): don't dim stacked cards or panels with a brightness filter.`;
   if (m.startsWith("off the phone screen")) return `On a phone some words run past the screen's edge (${m.slice(22)}): let them wrap and keep 20px from each edge.`;
   if (/empty screen|mostly empty/.test(m)) return `While scrolling, the page shows a screen with almost nothing on it (${m}): shorten the tall or pinned section that causes it, or fill it with its picture and words.`;
