@@ -834,7 +834,9 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
 
     // The scroll check found something the home page itself causes: one cheap repair of just that
     // (sent as edits), looked at again, and kept only if it leaves fewer problems. Once per version.
-    const fixable = scan.filter((m) => pageFixable(m.replace(/^phone: /, "")));
+    // (A 555 number that is the business's own, as entered, is a fact to fix in its details, not in the page.)
+    const own555 = /55501\d\d/.test((demo.intake.phone ?? "").replace(/\D/g, ""));
+    const fixable = scan.filter((m) => pageFixable(m.replace(/^phone: /, "")) && !(own555 && m.includes("555")));
     if (fixable.length && !prev?.scanFixed && env.FORGE_SCAN_FIX !== "off") {
       const spec = pagesOf(kit).find((p) => p.path === "/");
       const current = await getPage(env, slug, version, "/");
