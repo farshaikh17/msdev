@@ -34,6 +34,19 @@ export const HERO_ART: Record<string, string> = {
   orbit: `<b class="ha-word mid">NAME</b><span class="ha-ring"><i class="ha-obj"></i></span>`,
 };
 
+/** The Standard first-screen layouts as small animated wireframes (pieces arrive in the order a visitor reads them). */
+export const LAYOUT_ART: Record<string, string> = {
+  auto: `<i class="ha-pic"></i><i class="ha-q">?</i><b class="ha-cap">Chosen for the kind of business</b>`,
+  "place-band": `<i class="wf-ph band"></i><i class="wf-h l"></i><i class="wf-t r"></i><i class="wf-b r2"></i>`,
+  letterbox: `<i class="wf-ph box"></i><i class="wf-h l"></i><i class="wf-t r"></i><i class="wf-b r2"></i>`,
+  split: `<i class="wf-h sl"></i><i class="wf-t sl2"></i><i class="wf-b sl3"></i><i class="wf-ph right"></i>`,
+  "subject-stage": `<i class="wf-h top"></i><i class="wf-t topr"></i><i class="wf-ph stage"></i>`,
+  "calm-side": `<i class="wf-ph full"></i><i class="wf-h ov"></i><i class="wf-t ov2"></i><i class="wf-b ov3"></i>`,
+  oversized: `<i class="wf-h big"></i><i class="wf-h big2"></i><i class="wf-t lo"></i><i class="wf-ph lor"></i>`,
+  triptych: `<i class="wf-h tri"></i><i class="wf-b tri2"></i><i class="wf-ph t1"></i><i class="wf-ph t2"></i><i class="wf-ph t3"></i>`,
+};
+export const layoutArt = (id: string) => `<span class="hart lart lart-${id}" aria-hidden="true">${LAYOUT_ART[id] ?? LAYOUT_ART.auto}</span>`;
+
 export const heroArt = (id: string) => `<span class="hart hart-${id}" aria-hidden="true">${HERO_ART[id] ?? HERO_ART.auto}</span>`;
 
 export const STUDIO_PICK_CSS = `
@@ -118,4 +131,17 @@ export const STUDIO_PICK_CSS = `
 .live-frame[data-look=playful] .lf-btn{border-radius:999px;background:#ffd84d;color:#2a1570;transform:rotate(-4deg)}.live-frame[data-look=playful] .lf-photo{border-radius:22px}
 .live-frame[data-look=luxe] .lfd-a{display:block;inset:8px;border:1px solid rgba(217,199,163,.55)}.live-frame[data-look=luxe] .lf-h1{font-weight:300;letter-spacing:.22em;text-transform:uppercase;font-size:1rem;text-align:center}.live-frame[data-look=luxe] .lf-btn{background:none;border:1px solid var(--acc);color:var(--ink);justify-self:center}
 .live-hero{font:600 .72rem var(--body);color:var(--muted);text-align:center;min-height:1.2em}
+/* Standard layouts: light wireframes, each piece rising in the order it is read */
+.lart{background:#f4f1ea}.lart i{animation:wfin 4s cubic-bezier(.2,.7,.2,1) infinite}
+.wf-ph{background:linear-gradient(135deg,#9db4a7,#6f8f80 45%,#d8c7a7);border-radius:3px}.wf-h{height:9%;background:#22231f;border-radius:2px}.wf-t{height:5%;background:#8d8a82;border-radius:2px}.wf-b{height:9%;width:16%;background:#c4572a;border-radius:3px}
+@keyframes wfin{0%{opacity:0;transform:translateY(8px)}18%,88%{opacity:1;transform:none}100%{opacity:0}}
+.lart i:nth-child(2){animation-delay:.15s}.lart i:nth-child(3){animation-delay:.3s}.lart i:nth-child(4){animation-delay:.45s}.lart i:nth-child(5){animation-delay:.6s}
+.wf-ph.band{left:0;right:0;top:0;height:52%;border-radius:0}.wf-ph.box{left:8%;right:8%;top:8%;height:46%}
+.wf-h.l{left:8%;top:64%;width:38%}.wf-t.r{left:54%;top:64%;width:36%}.wf-b.r2{left:54%;top:76%}
+.wf-h.sl{left:8%;top:22%;width:36%;height:12%}.wf-t.sl2{left:8%;top:42%;width:30%}.wf-b.sl3{left:8%;top:54%}.wf-ph.right{left:52%;right:6%;top:12%;bottom:12%}
+.wf-h.top{left:8%;top:10%;width:46%;height:14%}.wf-t.topr{left:62%;top:14%;width:28%}.wf-ph.stage{left:8%;right:8%;top:34%;bottom:6%;border-radius:0}
+.wf-ph.full{inset:0;border-radius:0;background:linear-gradient(90deg,#2d3c35 0%,#566f63 45%,#a99a7a)}.lart-calm-side .wf-h{background:#fff}.wf-h.ov{left:7%;top:30%;width:40%;height:13%}.wf-t.ov2{left:7%;top:50%;width:32%;background:rgba(255,255,255,.7)}.wf-b.ov3{left:7%;top:62%}
+.wf-h.big{left:8%;top:10%;width:76%;height:16%}.wf-h.big2{left:8%;top:30%;width:52%;height:16%}.wf-t.lo{left:8%;top:58%;width:34%}.wf-ph.lor{left:52%;right:8%;top:56%;bottom:6%}
+.wf-h.tri{left:6%;top:22%;width:22%;height:20%}.wf-b.tri2{left:6%;top:50%;width:18%}.wf-ph.t1{left:34%;top:10%;width:34%;bottom:10%}.wf-ph.t2{left:71%;top:10%;width:23%;height:38%}.wf-ph.t3{left:71%;top:52%;width:23%;bottom:10%}
+
 `;

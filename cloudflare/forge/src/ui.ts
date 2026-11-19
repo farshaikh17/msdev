@@ -12,7 +12,8 @@ import type { Domain } from "./domains";
 import { HEROES } from "./heroes";
 import type { Idea } from "./brief";
 import { ic } from "./web-ui";
-import { LOOK_MOVES, STUDIO_PICK_CSS, heroArt } from "./ui-studio";
+import { LOOK_MOVES, STUDIO_PICK_CSS, heroArt, layoutArt } from "./ui-studio";
+import { STANDARD_LAYOUTS } from "./dna";
 
 const THEME_BOOT = `(function(){var d=document.documentElement,t;try{t=localStorage.getItem("forge-theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";d.setAttribute("data-theme",t)})()`;
 const THEME_JS = `document.addEventListener("click",function(e){var b=e.target.closest("[data-theme-toggle]");if(!b)return;var d=document.documentElement,t=d.getAttribute("data-theme")==="dark"?"light":"dark";d.setAttribute("data-theme",t);try{localStorage.setItem("forge-theme",t)}catch(x){}});`;
@@ -66,7 +67,9 @@ pre{font:.78rem/1.5 var(--mono);background:var(--steel-soft);border-radius:10px;
 .pill{font:600 .72rem var(--body);letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:var(--ember-soft);color:var(--ember)}
 .login{max-width:380px;margin:12vh auto;padding-inline:16px}
 .empty{color:var(--muted);text-align:center;padding:28px}
-.look{display:grid;gap:14px}.studio-only{display:none;gap:14px}form:has(input[name=style][value=studio]:checked) .studio-only{display:grid}.look-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.look{display:grid;gap:14px}.studio-only{display:none;gap:14px}.standard-only{display:grid;grid-template-rows:0fr;opacity:0;visibility:hidden;transition:grid-template-rows .45s cubic-bezier(.2,.7,.2,1),opacity .35s,visibility 0s .45s}.standard-only>div{overflow:hidden;min-height:0;display:grid;gap:14px}
+form:has(input[name=style][value=standard]:checked) .standard-only{grid-template-rows:1fr;opacity:1;visibility:visible;transition:grid-template-rows .45s cubic-bezier(.2,.7,.2,1),opacity .35s,visibility 0s}
+form:has(input[name=style][value=studio]:checked) .studio-only{display:grid}.look-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .choice{position:relative;display:inline-flex}.choice input{position:absolute;opacity:0;pointer-events:none}
 .choice span{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-weight:600;font-size:.88rem;cursor:pointer;background:var(--surface)}
 .choice input:checked+span{border-color:var(--steel);box-shadow:0 0 0 2px var(--steel-soft);color:var(--steel)}
@@ -294,9 +297,21 @@ const LOOKS: Record<string, { box: string; head: string; word: string; extra?: s
   playful: { box: "background:#6c3bff;color:#fff;align-content:center", head: "font:700 1.5rem/1 'Fredoka',system-ui,sans-serif;background:#ffd84d;color:#2a1570;padding:6px 14px;border-radius:999px;transform:rotate(-4deg)", word: "Hello!", extra: `<u style="position:absolute;left:12px;top:10px;width:22px;height:22px;background:#ff7ac0;border-radius:50%"></u><u style="position:absolute;right:14px;bottom:10px;width:30px;height:16px;background:#3be0b0;border-radius:999px"></u>` },
   luxe: { box: "background:#0e0e0e;color:#d9c7a3;align-content:center", head: "font:300 1.35rem 'Cormorant Garamond',Georgia,serif;letter-spacing:.3em;text-transform:uppercase", word: "Maison", extra: `<u style="position:absolute;inset:9px;border:1px solid rgba(217,199,163,.55)"></u>` },
 };
-const conceptPick = (id: string, checked: boolean, name: string, blurb: string) => {
+const conceptPick = (id: string, checked: boolean, name: string, blurb: string, field = "concept") => {
   const l = LOOKS[id] ?? LOOKS.auto!;
-  return `<label class="design"><input type="radio" name="concept" value="${esc(id)}"${checked ? " checked" : ""}><span class="design-pic look la la-${esc(id)}" style="${l.box}">${l.extra ?? ""}<span style="position:relative;${l.head}">${l.word}</span></span><b>${esc(name)}</b>${LOOK_MOVES[id] ? `<span class="moves">${esc(LOOK_MOVES[id])}</span>` : ""}<small>${esc(blurb)}</small></label>`;
+  const moves = field === "concept" ? LOOK_MOVES[id] : "";
+  return `<label class="design"><input type="radio" name="${field}" value="${esc(id)}"${checked ? " checked" : ""}><span class="design-pic look la la-${esc(id)}" style="${l.box}">${l.extra ?? ""}<span style="position:relative;${l.head}">${l.word}</span></span><b>${esc(name)}</b>${moves ? `<span class="moves">${esc(moves)}</span>` : ""}<small>${esc(blurb)}</small></label>`;
+};
+
+/** What each Standard first screen is, in plain words. */
+const LAYOUT_BLURB: Record<string, string> = {
+  "place-band": "A wide photo band across the top; the headline and the button sit under it. Made for places people visit.",
+  letterbox: "The photo in a wide frame inside the page, words below. Calm and tidy, good for shops and rooms.",
+  split: "Words on the left, a tall photo on the right. Works for almost any business.",
+  "subject-stage": "Headline and button in one row, then a big stage photo of the work below.",
+  "calm-side": "A full-screen photo with the words on its calm side. Strong for trades that come to you.",
+  oversized: "The headline set huge, with the words and a photo underneath. Bold and confident.",
+  triptych: "A short headline beside a collage of three photos. Shows the work at a glance.",
 };
 
 export interface ReuseChoice {
@@ -330,9 +345,15 @@ export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = [], steps = f
 <label class="edition"><input type="radio" name="style" value="standard"${style !== "studio" ? " checked" : ""}><span class="ed-art std-art" aria-hidden="true"><span class="l"><i></i><i></i><i></i></span><span class="ph"></span></span><span class="ed-body"><b>Standard <span class="ed-cost">1 credit</span></b><small>Calm and photo-led on a clean grid: every page they need, the map, forms and a call button. Ready in about 10 minutes.</small></span><i class="ed-check">✓</i></label>
 <label class="edition"><input type="radio" name="style" value="studio"${style === "studio" ? " checked" : ""}><span class="ed-art studio-art" aria-hidden="true"><span class="ring"></span><span class="orb"></span><span class="w">${studioWord}</span><span class="band"></span></span><span class="ed-body"><b>Studio <span class="ed-cost">${STUDIO_CREDITS} credits</span></b><small>Art-directed and moving: a signature first screen, a scene that holds still as you scroll, words that light up, in one of ten looks. Ready in about 20 minutes.</small></span><i class="ed-check">✓</i></label>
 </div>
+<div class="standard-only"><div style="padding-top:16px">
+<div class="spanel"><div class="spanel-h"><span class="spanel-k">A</span><b>The look</b><small>its type, colours and layout language (Standard keeps motion calm)</small></div><div class="designs concepts">${conceptPick("auto", (v?.standardLook ?? "auto") === "auto" || !CONCEPTS.some((c) => c.id === v?.standardLook), "Let Forge choose", "The best fit for the trade, different each time", "standardLook")}${CONCEPTS.map((c) => conceptPick(c.id, v?.standardLook === c.id, c.name, c.blurb, "standardLook")).join("")}</div></div>
+<div class="spanel"><div class="spanel-h"><span class="spanel-k">B</span><b>The first screen</b><small>what visitors see the moment the site opens</small></div><div class="designs heroes">${[{ id: "auto", name: "Let Forge choose" }, ...STANDARD_LAYOUTS].map((h) => `<label class="design"><input type="radio" name="standardHero" value="${esc(h.id)}" data-name="${esc(h.name)}"${(v?.standardHero ?? "auto") === h.id || (h.id === "auto" && !STANDARD_LAYOUTS.some((x) => x.id === v?.standardHero)) ? " checked" : ""}>${layoutArt(h.id)}<b>${esc(h.name)}</b><small>${esc(LAYOUT_BLURB[h.id] ?? "Chosen for the kind of business, different each time")}</small></label>`).join("")}</div></div>
+<p class="note" style="margin:0">Tip: leave at least one of the two on “Let Forge choose” and Forge builds on one of its best hand-made designs.</p>
+</div></div>
 <div class="studio-only"><div style="padding-top:16px">
 <div class="spanel"><div class="spanel-h"><span class="spanel-k">A</span><b>The look</b><small>its colours, type and how the whole site moves</small></div><div class="designs concepts">${conceptPick("auto", (v?.concept ?? "auto") === "auto" || !CONCEPTS.some((c) => c.id === v?.concept), "Let Forge choose", "The best fit for the trade, different each time")}${CONCEPTS.map((c) => conceptPick(c.id, v?.concept === c.id, c.name, c.blurb)).join("")}</div></div>
 <div class="spanel"><div class="spanel-h"><span class="spanel-k">B</span><b>The first screen</b><small>what visitors see the moment the site opens</small></div><div class="designs heroes">${[{ id: "auto", name: "Let Forge choose", blurb: "Video scenes when we have clips for the trade, otherwise one that suits the business, different each time" }, ...HEROES].map((h) => `<label class="design"><input type="radio" name="hero" value="${esc(h.id)}" data-name="${esc(h.name)}"${(v?.hero ?? "auto") === h.id || (h.id === "auto" && !HEROES.some((x) => x.id === v?.hero)) ? " checked" : ""}>${heroArt(h.id)}<b>${esc(h.name)}</b><small>${esc(h.blurb)}</small></label>`).join("")}</div></div>
+<p class="note" style="margin:0">Tip: leave at least one of the two on “Let Forge choose” and Forge builds on one of its best hand-made Studio designs in that style. Choosing both designs a new site to that exact spec.</p>
 </div></div></fieldset>`;
   const pick = (value: string, checked: boolean, inner: string) => `<label class="design"><input type="radio" name="reuseFrom" value="${esc(value)}"${checked ? " checked" : ""}>${inner}</label>`;
   const reuseSel = reuse.length
@@ -514,16 +535,16 @@ var ph=val("phone");all("phone").forEach(function(e){e.textContent=ph?"Call "+ph
 var trade=val("industry"),city=val("city").split(",")[0];
 var head=(trade||"Local service")+(city?" in "+city:"");
 var ed=radio("style")||"standard";frame.setAttribute("data-ed",ed);
-var look=ed==="studio"?radio("concept"):"",L=LOOK[look];
+var look=ed==="studio"?radio("concept"):radio("standardLook"),L=ed==="studio"?LOOK[look]:null;
 ["--bg","--ink","--acc","--disp"].forEach(function(k){site.style.removeProperty(k)});
-if(L){site.style.setProperty("--bg",L[0]);site.style.setProperty("--ink",L[1]);site.style.setProperty("--acc",L[2]);site.style.setProperty("--disp",L[3])}
+if(L){site.style.setProperty("--bg",L[0]);site.style.setProperty("--ink",L[1]);site.style.setProperty("--acc",L[2]);site.style.setProperty("--disp",L[3])}else if(LOOK[look]){site.style.setProperty("--disp",LOOK[look][3])}
 var col=radio("primaryColor");if(col&&col!=="custom")site.style.setProperty("--acc",col);
 all("edition").forEach(function(e){e.innerHTML=ed==="studio"?"<b>Studio</b> · "+frame.getAttribute("data-studio-credits")+" credits":"<b>Standard</b> · 1 credit"});
 all("eta").forEach(function(e){e.textContent=ed==="studio"?"ready in about 20 min":"ready in about 10 min"});
 frame.setAttribute("data-look",look||"");
-var hero=ed==="studio"?radio("hero"):"",photo=frame.querySelector(".lf-photo"),cur=photo.getAttribute("data-hero")||"";
-if(hero!==cur){photo.setAttribute("data-hero",hero);var tile=hero&&hero!=="auto"?f.querySelector('input[name="hero"][value="'+hero+'"]'):null,art=tile?tile.parentNode.querySelector(".hart"):null;photo.innerHTML=art?art.outerHTML:""}
-var hin=hero?f.querySelector('input[name="hero"]:checked'):null;all("hero").forEach(function(e){e.textContent=ed!=="studio"?"":hero&&hero!=="auto"&&hin?"First screen: "+hin.getAttribute("data-name"):"First screen: Forge chooses"});
+var hname=ed==="studio"?"hero":"standardHero",hero=radio(hname),photo=frame.querySelector(".lf-photo"),cur=photo.getAttribute("data-hero")||"",hk=ed+":"+hero;
+if(hk!==cur){photo.setAttribute("data-hero",hk);var tile=hero&&hero!=="auto"?f.querySelector('input[name="'+hname+'"][value="'+hero+'"]'):null,art=tile?tile.parentNode.querySelector(".hart"):null;photo.innerHTML=art?art.outerHTML:""}
+var hin=f.querySelector('input[name="'+hname+'"]:checked');all("hero").forEach(function(e){e.textContent=hero&&hero!=="auto"&&hin?"First screen: "+hin.getAttribute("data-name"):"First screen: Forge chooses"});
 var key=head+"|"+ed+"|"+look;
 if(key!==last){last=key;h1.innerHTML="";head.split("").forEach(function(c,i){var s=document.createElement("span");if(ed==="studio"){s.className="ch";s.style.animationDelay=(i*0.03)+"s"}s.textContent=c===" "?String.fromCharCode(160):c;h1.appendChild(s)})}
 var chips=document.querySelectorAll(".bsteps span");

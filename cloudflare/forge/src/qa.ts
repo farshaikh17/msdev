@@ -372,6 +372,18 @@ var cs=getComputedStyle(e);if(cs.position==="fixed")return;var r=e.getBoundingCl
 e.style.setProperty("width","auto","important");e.style.setProperty("max-width","100%","important");e.style.setProperty("min-width","0","important");if(cs.position==="absolute"){e.style.left="0";e.style.right="0"}})}
 if(document.readyState==="complete")fix();else addEventListener("load",fix);setTimeout(fix,600);addEventListener("resize",fix)})();
 
+// Wider screens: a block of words that starts at the very left edge of the screen (a full-width wrapper that
+// lost its side padding) gets the gutter back on that wrapper, so headline, words and buttons line up with the page.
+(function(){function gut(){if(innerWidth<700)return;var W=innerWidth,done=[];
+document.querySelectorAll("main h1,main h2,main h3,main p,main a[class*=btn],main a[class*=button]").forEach(function(e){
+if(e.closest("[data-horizontal-track],[data-marquee],[aria-hidden=true],[class*=marquee i],[class*=ticker i]"))return;
+var r=e.getBoundingClientRect();if(!r.width||r.left>=12||!(e.textContent||"").trim())return;
+var w=e.parentElement;while(w&&w!==document.body){var b=w.getBoundingClientRect();if(b.left<=1&&b.width>=W-4)break;w=w.parentElement}
+if(!w||w===document.body||w.tagName==="MAIN"||done.indexOf(w)>=0)return;done.push(w);
+var cs=getComputedStyle(w),g=Math.round(Math.min(80,Math.max(24,W*0.05)));w.style.boxSizing="border-box";
+if((parseFloat(cs.paddingLeft)||0)<g)w.style.paddingLeft=g+"px";if((parseFloat(cs.paddingRight)||0)<g)w.style.paddingRight=g+"px"})}
+if(document.readyState==="complete")gut();else addEventListener("load",gut)})();
+
 // Phones: text that touches or runs past the screen's edge gets room at the sides, and a heading wider
 // than the screen is set smaller until it fits (never below 60% of its size). Free, on every site.
 (function(){function fit(){if(innerWidth>=700)return;var W=innerWidth;

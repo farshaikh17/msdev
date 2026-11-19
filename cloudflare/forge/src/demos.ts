@@ -1,3 +1,4 @@
+import { STANDARD_LAYOUTS } from "./dna";
 /**
  * Creating and changing demos for an account. The dashboard form and the API both come through
  * here, so they check, charge and queue in exactly the same way.
@@ -137,6 +138,8 @@ export async function prepareIntake(raw: Record<string, string>): Promise<Intake
     style: g("style") === "studio" || (!g("style") && (conceptById(g("concept")) || heroById(g("hero")))) ? "studio" : "standard",
     concept: conceptById(g("concept")) ? g("concept") : "auto",
     hero: heroById(g("hero")) ? g("hero") : "auto",
+    standardLook: conceptById(g("standardLook")) ? g("standardLook") : "auto",
+    standardHero: STANDARD_LAYOUTS.some((l) => l.id === g("standardHero")) ? g("standardHero") : "auto",
     reuseFrom: g("reuseFrom"),
     websiteUrl: g("websiteUrl"),
     photoUrls: g("photoUrls"),

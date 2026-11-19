@@ -1218,7 +1218,8 @@ export function holdKitToDna(kit: Kit, dna: Dna): Kit {
     theme: dna.mode,
     accent: dnaTokens(dna).light.accent!,
     fonts: dna.fonts,
-    css: hold(kit.css),
+    // A face asked for in a weight it doesn't have is never thickened by the browser (faux bold looks cheap).
+    css: `${hold(kit.css)}\nhtml{font-synthesis-weight:none}`,
     header: recolorHtml(kit.header, dna, src),
     footer: recolorHtml(kit.footer, dna, src),
     dna: { ...dna, src, roles },

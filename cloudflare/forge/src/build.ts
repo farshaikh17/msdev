@@ -299,8 +299,13 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       // components, hero and look), suited to the trade and unlike the bases its recent sites used; its own
       // DNA then gives it new colours and type. Claude-level design at lean cost.
       let master: { slug: string; version: string; concept: string; hero: string; theme: string } | undefined;
-      if (!intake.reuseFrom && (!studio || (!conceptById(intake.concept) && !heroById(intake.hero))) && (await leanMode(env))) {
-        const masters = await (studio ? studioMasters(env, demo.tenantId, slug) : standardMasters(env, demo.tenantId, slug)).catch(() => []);
+      // A look or first screen the rep picked narrows the bases to ones that match it; with both picked and no
+      // base matching both, the site is designed fresh to that exact spec.
+      const askedLook = studio ? conceptById(intake.concept)?.id : conceptById(intake.standardLook)?.id;
+      const askedHero = studio ? heroById(intake.hero)?.id : intake.standardHero && intake.standardHero !== "auto" ? intake.standardHero : undefined;
+      if (!intake.reuseFrom && (await leanMode(env))) {
+        const all0 = await (studio ? studioMasters(env, demo.tenantId, slug) : standardMasters(env, demo.tenantId, slug)).catch(() => []);
+        const masters = all0.filter((m) => (!askedLook || m.concept === askedLook) && (!askedHero || m.hero === askedHero));
         // Every base the account's live sites stand on, and how often: the least used come first, and the
         // ones its latest builds used are passed over.
         const all = await recentDna(env, demo.tenantId, slug, 60).catch(() => []);
@@ -308,7 +313,7 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
         masters.sort((a, b) => uses(a.slug) - uses(b.slug));
         const used = all.slice(0, 8).map((r) => r.base).filter(Boolean);
         const usedLooks = dnaRecent.slice(0, 2).map((r) => r.look).filter(Boolean);
-        const suits = studio ? lookShortlist({ ...intake, services: intake.services || plan?.services.join(" ") }) : masters.map((m) => m.concept);
+        const suits = studio && !askedLook ? lookShortlist({ ...intake, services: intake.services || plan?.services.join(" ") }) : masters.map((m) => m.concept);
         const fresh = masters.filter((m) => !used.includes(m.slug));
         const tiers = [fresh.filter((m) => suits.includes(m.concept) && !usedLooks.includes(m.concept)), fresh.filter((m) => !usedLooks.includes(m.concept)), fresh, masters];
         const tier = tiers.find((t) => t.length) ?? [];
@@ -361,10 +366,10 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       const concept = look?.id;
       // A Standard site borrows an art direction too (its type, colour logic and layout language, not the
       // Studio motion), unlike the account's recent Standard sites, so Standard sites stop sharing one template.
-      const standardLook = !studio ? (master ? conceptById(master.concept) : undefined) ?? pickConcept({ ...intake, concept: undefined }, slug, dnaRecent.filter((r) => r.style !== "studio").map((r) => r.look).filter(Boolean)) : undefined;
+      const standardLook = !studio ? (master ? conceptById(master.concept) : undefined) ?? (askedLook ? conceptById(askedLook) : undefined) ?? pickConcept({ ...intake, concept: undefined }, slug, dnaRecent.filter((r) => r.style !== "studio").map((r) => r.look).filter(Boolean)) : undefined;
       // The design DNA (palette, type, shape, mode; for Standard also the first-screen layout), dealt in code.
       const trades = tasteTrades(`${intake.industry ?? ""} ${intake.businessName} ${intake.services || plan?.services.join(" ") || ""}`);
-      const dealt = intake.reuseFrom ? undefined : pickDna(concept ?? standardLook!.id, slug, dnaRecent, intake.primaryColor ?? "", !studio, trades);
+      const dealt = intake.reuseFrom ? undefined : pickDna(concept ?? standardLook!.id, slug, dnaRecent, intake.primaryColor ?? "", !studio, trades, !studio ? askedHero : undefined);
       // A base design keeps the mode it was drawn for (its overlays and glows are made for it).
       // (A Standard base keeps its own first-screen layout too: its kit is built around it.)
       const baseMode = master?.theme === "dark" ? ("dark" as const) : ("light" as const);

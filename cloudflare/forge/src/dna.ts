@@ -133,7 +133,7 @@ interface TasteType {
   class: string;
   kinds: Record<string, number>;
   place?: string;
-  display: { family: string; w: unknown };
+  display: { family: string; w: unknown; tech?: number };
   text: { family: string; w: unknown };
 }
 
@@ -157,7 +157,10 @@ const tasteFonts: FontDef[] = (TASTE_TYPE as TasteType[])
     id: `t-${t.id}`,
     display: t.display.family,
     text: t.text.family,
-    q: t.display.family === t.text.family ? gq(t.display.family, [...weights(t.display.w), ...weights(t.text.w), 700]) : `${gq(t.display.family, [...weights(t.display.w), 700])}&${gq(t.text.family, [...weights(t.text.w), 600])}`,
+    // Only the weights each face is drawn in (a display serif made for 400 is never asked for in bold).
+    q: t.display.family === t.text.family ? gq(t.display.family, [...weights(t.display.w), ...weights(t.text.w), t.display.tech ?? 400, 600]) : `${gq(t.display.family, weights(t.display.w).length ? weights(t.display.w) : [t.display.tech ?? 400])}&${gq(t.text.family, [...weights(t.text.w), 600])}`,
+    weight: t.display.tech ?? 400,
+    pair: t.display.family !== t.text.family,
     suits: CLASS_LOOKS[t.class] ?? ["standard"],
   }));
 
@@ -167,6 +170,10 @@ interface FontDef {
   text: string;
   /** The Google Fonts css2 query for both families. */
   q: string;
+  /** The weight headlines are set in (the display face is drawn for it). */
+  weight?: number;
+  /** A display face and a different text face (not one family for everything). */
+  pair?: boolean;
   suits: string[];
 }
 
@@ -230,6 +237,9 @@ const STANDARD_HEROES: { id: string; fits: "place" | "service" | "any"; spec: st
   { id: "triptych", fits: "any", spec: "TRIPTYCH: the h1 (about 52px) on the left three columns with the sentence and one large button; on the remaining columns a still collage of three pictures at one ratio family (one large, two smaller, edges on the column lines, never overlapping text). The .hero-motion layer fills the large one; the other two are photos from the list." },
 ];
 
+/** The Standard first screens, for the builder's picker. */
+export const STANDARD_LAYOUTS = STANDARD_HEROES.map((h) => ({ id: h.id, fits: h.fits, name: h.spec.split(":")[0]!.toLowerCase().replace(/^./, (c) => c.toUpperCase()) }));
+
 export interface Dna {
   /** What two sites are compared by: "palette:font:shape:mode:hero". */
   print: string;
@@ -239,6 +249,8 @@ export interface Dna {
   font: string;
   display: string;
   text: string;
+  /** The weight headlines are set in, when the display face is drawn for one weight. */
+  displayWeight?: number;
   fonts: string;
   shape: string;
   shapeSpec: string;
@@ -275,7 +287,7 @@ export interface Recent {
  * shapes and accent hues), and not a third dark site in a row. A brand colour from the form or the
  * business's own website leads the accent.
  */
-export function pickDna(look: string, slug: string, recent: Recent[] = [], brand = "", standard = false, trades: string[] = []): Dna {
+export function pickDna(look: string, slug: string, recent: Recent[] = [], brand = "", standard = false, trades: string[] = [], askedHero?: string): Dna {
   const used = (i: number) => recent.map((r) => r.print.split(":")[i] ?? "");
   const pick = <T extends { id: string; suits: string[] }>(list: T[], idx: number, salt: string, keep = 10): T => {
     const fit = list.filter((x) => x.suits.includes(look) || x.suits.includes("*") || (standard && x.suits.includes("standard")));
@@ -316,7 +328,9 @@ export function pickDna(look: string, slug: string, recent: Recent[] = [], brand
     hues = { ...pal.hues, a: [Math.round(b.h), Math.max(0.08, Math.min(0.2, b.c))] };
   }
   const mode: "light" | "dark" = standard ? "light" : pal.mode !== "any" ? pal.mode : darkRun >= 1 ? "light" : lightRun >= 2 ? "dark" : hash(`${slug}:mode`) % 3 === 0 ? "dark" : "light";
-  const font = pick([...FONTS, ...tasteFonts], 1, "font");
+  // A Standard site gets a real display + text pair (one plain family everywhere reads as a template).
+  const fontPool = [...FONTS, ...tasteFonts].filter((f) => !standard || f.pair !== false);
+  const font = pick(fontPool, 1, "font");
   const shape = pick(SHAPES, 2, "shape", 2);
   let hero: (typeof STANDARD_HEROES)[number] | undefined;
   if (standard) {
@@ -327,7 +341,7 @@ export function pickDna(look: string, slug: string, recent: Recent[] = [], brand
     const suited = STANDARD_HEROES.filter((h) => kind === "any" || h.fits === "any" || h.fits === kind);
     const fresh = suited.filter((h) => !avoid.includes(h.id));
     const from = fresh.length ? fresh : suited;
-    hero = from[hash(`${slug}:hero`) % from.length]!;
+    hero = STANDARD_HEROES.find((h) => h.id === askedHero) ?? from[hash(`${slug}:hero`) % from.length]!;
   }
   return {
     print: `${pal.id}:${font.id}:${shape.id}:${mode}:${hero?.id ?? ""}`,
@@ -337,6 +351,7 @@ export function pickDna(look: string, slug: string, recent: Recent[] = [], brand
     font: font.id,
     display: font.display,
     text: font.text,
+    ...((font.weight ?? (font.q.match(new RegExp(`family=${font.display.replace(/ /g, "\\+")}(:[^&]*)?`))?.[1]?.includes("wght") ? 0 : 400)) ? { displayWeight: font.weight ?? 400 } : {}),
     fonts: `<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="https://fonts.googleapis.com/css2?${font.q}&display=swap" rel="stylesheet">`,
     shape: shape.id,
     shapeSpec: shape.spec,
@@ -385,7 +400,7 @@ export function dnaBrief(d: Dna): string {
   light (on :root): ${list(t.light)}
   dark (on [data-theme="dark"]): ${list(t.dark)}
   The default mode is ${d.mode.toUpperCase()}: design it first and best. The accent is for the primary button, links and small marks; the second colour is used sparingly (a tag, a rule, one panel).
-- Type: "${d.display}" for display (headlines, big numbers, the wordmark) and "${d.text}" for everything else. Use exactly this Google Fonts link and no other fonts:
+- Type: "${d.display}" for display (headlines, big numbers, the wordmark)${d.displayWeight ? ` at weight ${d.displayWeight} (it is drawn for that weight; never bold it, size and tight tracking carry it)` : ""} and "${d.text}" for everything else. Use exactly this Google Fonts link and no other fonts:
 ${d.fonts}
 - Shape language: ${d.shapeSpec}${d.heroSpec ? `\n- First screen layout: ${d.heroSpec}` : ""}`;
 }
