@@ -12,6 +12,7 @@ import type { Domain } from "./domains";
 import { HEROES } from "./heroes";
 import type { Idea } from "./brief";
 import { ic } from "./web-ui";
+import { LOOK_MOVES, STUDIO_PICK_CSS, heroArt } from "./ui-studio";
 
 const THEME_BOOT = `(function(){var d=document.documentElement,t;try{t=localStorage.getItem("forge-theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";d.setAttribute("data-theme",t)})()`;
 const THEME_JS = `document.addEventListener("click",function(e){var b=e.target.closest("[data-theme-toggle]");if(!b)return;var d=document.documentElement,t=d.getAttribute("data-theme")==="dark"?"light":"dark";d.setAttribute("data-theme",t);try{localStorage.setItem("forge-theme",t)}catch(x){}});`;
@@ -190,6 +191,8 @@ form:has(input[name=style][value=studio]:checked) .studio-only{grid-template-row
 .preview-wrap{display:grid;justify-items:center;background:var(--chrome);border-radius:14px;padding:12px;transition:padding .4s}.preview{transition:width .55s cubic-bezier(.2,.7,.2,1),height .55s cubic-bezier(.2,.7,.2,1);max-width:100%}.preview-wrap.phone .preview{width:390px;height:720px;border-radius:26px;border:8px solid #111}
 .confetti{position:fixed;left:50%;top:38%;width:0;height:0;z-index:60;pointer-events:none}.confetti i{position:absolute;width:9px;height:14px;border-radius:2px;animation:conf 1.4s cubic-bezier(.15,.6,.3,1) forwards}
 .next{animation:rise .5s both}
+${STUDIO_PICK_CSS}
+.live-frame[data-ed=studio]:not([data-look=cinematic]) .lf-photo:has(.hart):after{content:none}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}.live-frame{transform:none}}
 `;
 
@@ -293,7 +296,7 @@ const LOOKS: Record<string, { box: string; head: string; word: string; extra?: s
 };
 const conceptPick = (id: string, checked: boolean, name: string, blurb: string) => {
   const l = LOOKS[id] ?? LOOKS.auto!;
-  return `<label class="design"><input type="radio" name="concept" value="${esc(id)}"${checked ? " checked" : ""}><span class="design-pic look" style="${l.box}">${l.extra ?? ""}<span style="position:relative;${l.head}">${l.word}</span></span><b>${esc(name)}</b><small>${esc(blurb)}</small></label>`;
+  return `<label class="design"><input type="radio" name="concept" value="${esc(id)}"${checked ? " checked" : ""}><span class="design-pic look la la-${esc(id)}" style="${l.box}">${l.extra ?? ""}<span style="position:relative;${l.head}">${l.word}</span></span><b>${esc(name)}</b>${LOOK_MOVES[id] ? `<span class="moves">${esc(LOOK_MOVES[id])}</span>` : ""}<small>${esc(blurb)}</small></label>`;
 };
 
 export interface ReuseChoice {
@@ -327,9 +330,9 @@ export function fields(v?: Partial<Intake>, reuse: ReuseChoice[] = [], steps = f
 <label class="edition"><input type="radio" name="style" value="standard"${style !== "studio" ? " checked" : ""}><span class="ed-art std-art" aria-hidden="true"><span class="l"><i></i><i></i><i></i></span><span class="ph"></span></span><span class="ed-body"><b>Standard <span class="ed-cost">1 credit</span></b><small>Calm and photo-led on a clean grid: every page they need, the map, forms and a call button. Ready in about 10 minutes.</small></span><i class="ed-check">✓</i></label>
 <label class="edition"><input type="radio" name="style" value="studio"${style === "studio" ? " checked" : ""}><span class="ed-art studio-art" aria-hidden="true"><span class="ring"></span><span class="orb"></span><span class="w">${studioWord}</span><span class="band"></span></span><span class="ed-body"><b>Studio <span class="ed-cost">${STUDIO_CREDITS} credits</span></b><small>Art-directed and moving: a signature first screen, a scene that holds still as you scroll, words that light up, in one of ten looks. Ready in about 20 minutes.</small></span><i class="ed-check">✓</i></label>
 </div>
-<div class="studio-only"><div>
-<div><div class="note" style="font-weight:600;margin:14px 0 8px">Studio look</div><div class="designs concepts">${conceptPick("auto", (v?.concept ?? "auto") === "auto" || !CONCEPTS.some((c) => c.id === v?.concept), "Let Forge choose", "The best fit for the trade, different each time")}${CONCEPTS.map((c) => conceptPick(c.id, v?.concept === c.id, c.name, c.blurb)).join("")}</div></div>
-<div><div class="note" style="font-weight:600;margin-bottom:8px">Studio first screen</div><div class="designs heroes">${[{ id: "auto", name: "Let Forge choose", blurb: "Video scenes when we have clips for the trade, otherwise a different one each time (with a moving hero, a flying or turning object, or the subject in front of the headline)" }, ...HEROES].map((h) => `<label class="design"><input type="radio" name="hero" value="${esc(h.id)}"${(v?.hero ?? "auto") === h.id || (h.id === "auto" && !HEROES.some((x) => x.id === v?.hero)) ? " checked" : ""}><b>${esc(h.name)}</b><small>${esc(h.blurb)}</small></label>`).join("")}</div></div>
+<div class="studio-only"><div style="padding-top:16px">
+<div class="spanel"><div class="spanel-h"><span class="spanel-k">A</span><b>The look</b><small>its colours, type and how the whole site moves</small></div><div class="designs concepts">${conceptPick("auto", (v?.concept ?? "auto") === "auto" || !CONCEPTS.some((c) => c.id === v?.concept), "Let Forge choose", "The best fit for the trade, different each time")}${CONCEPTS.map((c) => conceptPick(c.id, v?.concept === c.id, c.name, c.blurb)).join("")}</div></div>
+<div class="spanel"><div class="spanel-h"><span class="spanel-k">B</span><b>The first screen</b><small>what visitors see the moment the site opens</small></div><div class="designs heroes">${[{ id: "auto", name: "Let Forge choose", blurb: "Video scenes when we have clips for the trade, otherwise one that suits the business, different each time" }, ...HEROES].map((h) => `<label class="design"><input type="radio" name="hero" value="${esc(h.id)}" data-name="${esc(h.name)}"${(v?.hero ?? "auto") === h.id || (h.id === "auto" && !HEROES.some((x) => x.id === v?.hero)) ? " checked" : ""}>${heroArt(h.id)}<b>${esc(h.name)}</b><small>${esc(h.blurb)}</small></label>`).join("")}</div></div>
 </div></div></fieldset>`;
   const pick = (value: string, checked: boolean, inner: string) => `<label class="design"><input type="radio" name="reuseFrom" value="${esc(value)}"${checked ? " checked" : ""}>${inner}</label>`;
   const reuseSel = reuse.length
@@ -517,6 +520,10 @@ if(L){site.style.setProperty("--bg",L[0]);site.style.setProperty("--ink",L[1]);s
 var col=radio("primaryColor");if(col&&col!=="custom")site.style.setProperty("--acc",col);
 all("edition").forEach(function(e){e.innerHTML=ed==="studio"?"<b>Studio</b> · "+frame.getAttribute("data-studio-credits")+" credits":"<b>Standard</b> · 1 credit"});
 all("eta").forEach(function(e){e.textContent=ed==="studio"?"ready in about 20 min":"ready in about 10 min"});
+frame.setAttribute("data-look",look||"");
+var hero=ed==="studio"?radio("hero"):"",photo=frame.querySelector(".lf-photo"),cur=photo.getAttribute("data-hero")||"";
+if(hero!==cur){photo.setAttribute("data-hero",hero);var tile=hero&&hero!=="auto"?f.querySelector('input[name="hero"][value="'+hero+'"]'):null,art=tile?tile.parentNode.querySelector(".hart"):null;photo.innerHTML=art?art.outerHTML:""}
+var hin=hero?f.querySelector('input[name="hero"]:checked'):null;all("hero").forEach(function(e){e.textContent=ed!=="studio"?"":hero&&hero!=="auto"&&hin?"First screen: "+hin.getAttribute("data-name"):"First screen: Forge chooses"});
 var key=head+"|"+ed+"|"+look;
 if(key!==last){last=key;h1.innerHTML="";head.split("").forEach(function(c,i){var s=document.createElement("span");if(ed==="studio"){s.className="ch";s.style.animationDelay=(i*0.03)+"s"}s.textContent=c===" "?String.fromCharCode(160):c;h1.appendChild(s)})}
 var chips=document.querySelectorAll(".bsteps span");
@@ -562,9 +569,10 @@ ${out ? `<div class="flash bad" role="alert">You have no builds left. Ask your F
 ${fields(chosen ? { reuseFrom: chosen.slug } : undefined, reuse, true)}
 <div class="row"><button class="btn ember big" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build website</button><span class="note">You can close this page while it builds.</span></div>${photos ? "" : `<p class="flash bad" role="status" style="margin:12px 0 0">Today&#39;s free photo allowance is used up, so a website built now gets <b>no photos</b>. It resets at midnight UTC (7pm US Eastern): for the best result, wait until then.</p>`}</div>
 <aside class="live" aria-hidden="true"><div class="live-frame" data-ed="standard" data-studio-credits="${STUDIO_CREDITS}"><div class="lf-bar"><i></i><i></i><i></i><span>forge-sites/<b data-live="slug">your-business</b></span></div>
-<div class="lf-site"><div class="lf-head"><span class="lf-logo" data-live="name">Your business</span><span class="lf-call" data-live="phone">Call now</span></div>
+<div class="lf-site"><i class="lfd lfd-a"></i><i class="lfd lfd-b"></i><i class="lfd lfd-c"></i><div class="lf-head"><span class="lf-logo" data-live="name">Your business</span><span class="lf-call" data-live="phone">Call now</span></div>
 <div class="lf-hero"><div class="lf-photo"></div><h3 class="lf-h1">Local service</h3><p class="lf-sub">Every page, real photos, the map and a form, made for <b data-live="name">Your business</b>.</p><span class="lf-btn">Get a quote</span></div>
 <div class="lf-rows"><i></i><i></i><i></i></div></div></div>
+<div class="live-hero" data-live="hero"></div>
 <div class="live-meta"><span data-live="edition"><b>Standard</b> · 1 credit</span><span data-live="eta">ready in about 10 min</span></div>
 <p class="live-note">A sketch of what you're asking for. The real site is designed for the business.</p></aside></div></form>
 <div class="launch" role="status" aria-live="polite"><div class="launch-in"><div class="launch-orb"></div><b>Building…</b><span></span></div></div>
