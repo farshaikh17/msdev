@@ -109,7 +109,7 @@ describe("a Studio build, rehearsed end to end at no cost", () => {
     expect(byTask("@@@ PICK")[0]!.model).toBe("claude-opus-5-5");
     expect(byTask("@@@ TRADE")).toHaveLength(1);
     // Inner pages: Workers AI (DeepSeek, thinking off), not Claude.
-    const pageCalls = workersAi.filter((w) => !w.input.multipart);
+    const pageCalls = workersAi.filter((w) => !w.input.multipart && w.model !== "@cf/google/gemma-4-26b-a4b-it");
     // A day's first build writes most of its pages there; what would eat into the photo reserve goes to Claude.
     expect(pageCalls.length).toBeGreaterThanOrEqual(8);
     expect(pageCalls.every((w) => w.model === "@cf/deepseek-ai/deepseek-v4.1-flash-1017" && (w.input.chat_template_kwargs as { thinking: boolean }).thinking === false)).toBe(true);
@@ -142,7 +142,7 @@ describe("a Studio build, rehearsed end to end at no cost", () => {
     const slug = slugOf(await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Beta Plumbing", city: "Grand Island, NE", saw: "A red van", style: "studio" } }));
     await drain(env);
     expect((await getDemo(h.env, slug))!.buildStatus).toBe("ready");
-    expect(workersAi.filter((w) => !w.input.multipart)).toHaveLength(0);
+    expect(workersAi.filter((w) => !w.input.multipart && w.model !== "@cf/google/gemma-4-26b-a4b-it")).toHaveLength(0);
     expect(claude.filter((q) => /## Write this page: /.test(textOf(q))).length).toBeGreaterThanOrEqual(10);
     // Photos stop at the same line: 9,000 + 12 × 78 = 9,936.
     expect(workersAi.filter((w) => w.input.multipart).length).toBeLessThanOrEqual(12);
@@ -159,7 +159,7 @@ describe("a Studio build, rehearsed end to end at no cost", () => {
     const slug = slugOf(await call(h, "/demos", { cookie: b.cookie, form: { businessName: "Beta Plumbing", city: "Grand Island, NE", saw: "A red van", style: "studio" } }));
     await drain(env);
     expect((await getDemo(h.env, slug))!.buildStatus).toBe("ready");
-    const pages = workersAi.filter((w) => !w.input.multipart);
+    const pages = workersAi.filter((w) => !w.input.multipart && w.model !== "@cf/google/gemma-4-26b-a4b-it");
     expect(pages.length).toBeGreaterThanOrEqual(1);
     const used = (k: string) => Number((h.db.prepare("SELECT value FROM settings WHERE key = ?").get(k) as { value: string } | undefined)?.value ?? 0);
     expect(used(`ai-paid-neurons:${day.slice(0, 7)}`)).toBe(480 * pages.length);
@@ -183,7 +183,7 @@ describe("lean mode (no Claude)", () => {
     expect((await getDemo(h.env, slug))!.buildStatus).toBe("ready");
     expect(claude).toHaveLength(0);
     // The brief, the plan, the design kit and the pages all went to Workers AI.
-    const texts = workersAi.filter((w) => !w.input.multipart).map((w) => JSON.stringify(w.input.messages));
+    const texts = workersAi.filter((w) => !w.input.multipart && w.model !== "@cf/google/gemma-4-26b-a4b-it").map((w) => JSON.stringify(w.input.messages));
     expect(texts.some((t) => t.includes("@@@ TRADE"))).toBe(true);
     expect(texts.some((t) => t.includes("the whole site's stylesheet"))).toBe(true);
   });

@@ -5,6 +5,7 @@
  * About 78 Workers AI neurons each; the free plan includes 10,000 a day (about 20 sites).
  */
 import type { Env } from "./env";
+import { photoFits } from "./vision";
 
 export const IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 const STYLE = "Professional photograph for a local business website, realistic, natural light, sharp focus, no text, no logos, no watermarks.";
@@ -100,13 +101,32 @@ export async function generate(env: Env, description: string, opts: { reference?
 }
 
 /** One image per description, generated side by side; failures are left out. */
-export async function previewImages(env: Env, descriptions: string[]): Promise<PreviewImage[]> {
+export async function previewImages(env: Env, descriptions: string[], trade = ""): Promise<PreviewImage[]> {
   if (!env.AI || !descriptions.length) return [];
   const wanted = descriptions.slice(0, 8);
   // Past today's allowance the site is designed with fewer (or no) photos rather than risk a bill.
   // A picture that fails is tried once more (the generator is sometimes busy); the allowance counts each once.
-  const made = await Promise.all(wanted.map(async (d) => ((await spendImages(env, 1)) ? ((await generate(env, d)) ?? (await generate(env, d))) : null)));
-  return made.flatMap((bytes, n) => (bytes ? [{ name: `photo-${n + 1}.jpg`, description: descriptions[n], bytes }] : []));
+  // Each picture is looked at: one that is off-topic for the business (two men shaking hands in a gym on a
+  // flooring site) is made once more, and left out if it is still off (fewer photos beat a wrong one).
+  const made = await Promise.all(
+    wanted.map(async (d) => {
+      if (!(await spendImages(env, 1))) return null;
+      const first = (await generate(env, d)) ?? (await generate(env, d));
+      if (!first || !trade) return first;
+      const look = await photoFits(env, first, trade);
+      if (!look || look.fits) return first;
+      console.log("photo off-topic, made again", trade, look.saw);
+      const again = (await spendImages(env, 1)) ? await generate(env, d) : null;
+      if (!again) return null;
+      const second = await photoFits(env, again, trade);
+      return !second || second.fits ? again : null;
+    }),
+  );
+  // Numbered in order of the ones that came out, so photo-1 is always the first good picture.
+  return made
+    .map((bytes, n) => ({ bytes, description: descriptions[n]! }))
+    .filter((x): x is { bytes: Uint8Array; description: string } => !!x.bytes)
+    .map((x, n) => ({ name: `photo-${n + 1}.jpg`, description: x.description, bytes: x.bytes }));
 }
 
 /**

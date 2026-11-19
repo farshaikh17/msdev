@@ -59,9 +59,11 @@ export function matchClips(library: LibraryEntry[], i: Intake, siteServices = ""
   let bestScore = 0;
   for (const e of library) {
     let score = 0;
-    for (const k of e.keywords) {
+    // A clip is about its first few keywords; a word further down its list ("flooring" on a kitchen clip)
+    // only counts weakly, so it can't carry the match on its own.
+    for (const [n, k] of e.keywords.entries()) {
       const word = ` ${k.replace(/[^a-z0-9]+/g, " ").trim()} `;
-      if (word.trim() && fields[0].includes(word)) score += 3;
+      if (word.trim() && fields[0].includes(word)) score += n < 4 ? 3 : 1;
       else if (word.trim() && (fields[1].includes(word) || fields[2].includes(word))) score += 1;
     }
     if (!score || !e.urls.length || score < bestScore) continue;
