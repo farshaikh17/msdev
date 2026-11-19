@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { carryDetails, ownDetails, personalise, sampleById, swapsFor } from "../cloudflare/forge/src/samples";
+import { carryDetails, ownDetails, personalise, sampleById, swapsFor, wantLink } from "../cloudflare/forge/src/samples";
 
 describe("sample gallery", () => {
   const towing = sampleById("towing")!;
@@ -23,5 +23,17 @@ describe("sample gallery", () => {
     expect(out).toContain('href="tel:+13054441212"');
     expect(out).toContain('href="/examples/towing/services?name=Joe');
     expect(out).not.toMatch(/Coastline|Figueroa/);
+  });
+});
+
+describe("gallery leads", () => {
+  it("'Want this for real?' opens the free-preview form with the business and the sample filled in", () => {
+    const u = new URL(wantLink("https://app.test/", sampleById("towing")!, { name: "Joe's Tow", phone: "3054441212" }));
+    expect(u.origin + u.pathname).toBe("https://app.test/preview");
+    expect(u.searchParams.get("company")).toBe("Joe's Tow");
+    expect(u.searchParams.get("phone")).toBe("3054441212");
+    expect(u.searchParams.get("tier")).toBe("studio");
+    expect(u.searchParams.get("message")).toContain("towing sample (Studio)");
+    expect(new URL(wantLink("https://app.test", null, null)).searchParams.get("message")).toContain("sample gallery");
   });
 });

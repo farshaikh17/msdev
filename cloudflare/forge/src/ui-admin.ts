@@ -117,7 +117,9 @@ export function adminInquiriesPage(s: Session, rows: Inquiry[], filter: string, 
     const create =
       r.kind === "reseller"
         ? `<a class="btn" href="/admin?${new URLSearchParams({ name: r.company || r.name, email: r.email, credits: "10" }).toString()}#new">Create account</a>`
-        : "";
+        : r.kind === "sample"
+          ? `<a class="btn ember" href="/?${new URLSearchParams({ businessName: r.company || r.website || "", phone: r.phone ?? "", websiteUrl: /^https?:|\.\w{2,}/.test(r.website ?? "") && !/maps\.|goo\.gl/.test(r.website ?? "") ? r.website ?? "" : "", saw: (r.message ?? "").slice(0, 300), ...(r.extra.tier === "studio" ? { style: "studio" } : {}) }).toString()}#build">Build their site</a>`
+          : "";
     return `<div class="card"><div class="row" style="justify-content:space-between"><div><b>${esc(r.name)}</b> · <a href="mailto:${esc(r.email)}">${esc(r.email)}</a><br><span class="note">${esc(KIND[r.kind] ?? r.kind)} · ${when(r.createdAt)}${bits.length ? ` · ${bits.join(" · ")}` : ""}</span></div><span class="tag${r.status === "won" ? " ok" : r.status === "closed" ? " dim" : ""}">${esc(r.status)}</span></div>
 ${r.message ? `<p style="margin:0;white-space:pre-wrap">${esc(r.message)}</p>` : ""}
 <div class="row">${create}${STATUSES.filter((x) => x !== r.status)

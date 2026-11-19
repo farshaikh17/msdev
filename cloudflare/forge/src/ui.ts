@@ -562,7 +562,33 @@ var msgs=["Reading the business…","Planning the pages…","Picking the photos�
 window.addEventListener("pageshow",function(){var l=document.querySelector(".launch");if(l)l.classList.remove("on")});
 })();`;
 
-export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string, leadFilter = "", reuseFrom = "", photos = true): Response {
+/** How long ago, in a few words ("2 h ago"). */
+const ago = (iso: string) => {
+  const m = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60_000));
+  return m < 60 ? `${m} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
+};
+
+/**
+ * Today's calls: sites you've sent that the business opened in the last three days, warmest first. They
+ * stop showing once marked replied, won or lost (one press here).
+ */
+function callsCard(demos: Listed[]): string {
+  const since = Date.now() - 3 * 86_400_000;
+  const warm = demos
+    .filter((d) => d.leadStatus === "sent" && d.views?.lastAt && Date.parse(d.views.lastAt) > since)
+    .sort((a, b) => Date.parse(b.views!.lastAt!) - Date.parse(a.views!.lastAt!))
+    .slice(0, 6);
+  if (!warm.length) return "";
+  return `<section class="card calls"><div class="row" style="justify-content:space-between"><h2>Today's calls <span class="tag live">${warm.length}</span></h2><span class="note">They opened the site you sent. Strike while it's warm.</span></div>
+<div class="share">${warm
+    .map(
+      (d) => `<div class="share-row"><div><b><a href="/demos/${esc(d.slug)}" style="color:inherit">${esc(d.businessName)}</a></b><span>Opened ${d.views!.week} time${d.views!.week === 1 ? "" : "s"} this week · last ${esc(ago(d.views!.lastAt!))}${d.city ? ` · ${esc(d.city)}` : ""}</span></div>
+<form method="post" action="/demos/${esc(d.slug)}/lead" class="row" style="gap:8px"><input type="hidden" name="status" value="replied"><a class="btn ghost" href="/demos/${esc(d.slug)}">Open</a><button class="btn" type="submit">They replied</button></form></div>`,
+    )
+    .join("")}</div></section>`;
+}
+
+export function homePage(s: Session, demos: Listed[], siteUrl: (slug: string) => string, aiOn: boolean, usage: Usage, err?: string, ok?: string, leadFilter = "", reuseFrom = "", photos = true, newRequests = 0, prefill: Partial<Intake> = {}): Response {
   const out = !s.tenant.unlimited && s.tenant.credits < 1;
   // "Use this design" in the gallery: that site's design comes first and is already picked.
   const ready = demos.filter((d) => d.buildStatus === "ready" && d.shot);
@@ -587,7 +613,7 @@ ${out ? `<div class="flash bad" role="alert">You have no builds left. Ask your F
 <div class="builder"><div style="display:grid;gap:22px;min-width:0"><div><h1>What are we building today?</h1>
 <p class="lead">Type the business name or paste its Google Maps link. Forge reads the rest.${aiOn ? "" : " (Custom designs are switched off for now, so sites use the built-in template.)"}</p>
 <div class="bsteps" aria-hidden="true"><span class="now"><i>1</i>The business</span><span><i>2</i>The kind of website</span><span><i>3</i>Make it theirs</span></div></div>
-${fields(chosen ? { reuseFrom: chosen.slug } : undefined, reuse, true)}
+${fields(chosen ? { ...prefill, reuseFrom: chosen.slug } : Object.keys(prefill).length ? prefill : undefined, reuse, true)}
 <div class="row"><button class="btn ember big" type="submit" data-busy="Starting…"${out ? " disabled" : ""}>Build website</button><span class="note">You can close this page while it builds.</span></div>${photos ? "" : `<p class="flash bad" role="status" style="margin:12px 0 0">Today&#39;s free photo allowance is used up, so a website built now gets <b>no photos</b>. It resets at midnight UTC (7pm US Eastern): for the best result, wait until then.</p>`}</div>
 <aside class="live" aria-hidden="true"><div class="live-frame" data-ed="standard" data-studio-credits="${STUDIO_CREDITS}"><div class="lf-bar"><i></i><i></i><i></i><span>forge-sites/<b data-live="slug">your-business</b></span></div>
 <div class="lf-site"><i class="lfd lfd-a"></i><i class="lfd lfd-b"></i><i class="lfd lfd-c"></i><div class="lf-head"><span class="lf-logo" data-live="name">Your business</span><span class="lf-call" data-live="phone">Call now</span></div>
@@ -597,6 +623,8 @@ ${fields(chosen ? { reuseFrom: chosen.slug } : undefined, reuse, true)}
 <div class="live-meta"><span data-live="edition"><b>Standard</b> · 1 credit</span><span data-live="eta">ready in about 10 min</span></div>
 <p class="live-note">A sketch of what you're asking for. The real site is designed for the business.</p></aside></div></form>
 <div class="launch" role="status" aria-live="polite"><div class="launch-in"><div class="launch-orb"></div><b>Building…</b><span></span></div></div>
+${newRequests ? `<a class="next" href="/admin/inquiries" style="text-decoration:none;color:inherit"><div><b>${newRequests} new preview request${newRequests === 1 ? "" : "s"}</b><div class="note">From the sample gallery and the Forge website. Build their site in one go from the request.</div></div><span class="btn ember">See requests</span></a>` : ""}
+${callsCard(demos)}
 <section style="display:grid;gap:14px"><div class="row" style="justify-content:space-between"><h2>Your websites${demos.length ? ` (${demos.length})` : ""}</h2><a class="btn ghost" href="${esc(siteUrl("examples"))}" target="_blank" rel="noopener" title="Finished designs under made-up names: a prospect types their name and phone and sees it on every one">Sample gallery to share ↗</a></div>${leadsBar(demos, on)}${list}</section>
 <details class="card"><summary>Have a list? Build several at once</summary><form method="post" action="/demos/bulk" style="display:grid;gap:14px">
 <label for="bulk">One business per line: <b>name | city | website or Facebook link | phone</b> (everything after the name is optional), or a Google Maps link (up to 25). Studio lines without a link are built as Standard.<textarea id="bulk" name="bulk" rows="6" placeholder="Joe's Plumbing | Tampa, FL | https://joesplumbing.com | (813) 555-0142&#10;Bright Smile Dental | Austin, TX | https://facebook.com/brightsmile&#10;https://maps.app.goo.gl/…"></textarea></label>

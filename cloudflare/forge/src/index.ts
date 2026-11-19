@@ -25,7 +25,7 @@ import { importClip, serveVideo, syncFolder } from "./drive";
 import type { BuildJob, Ctx, Env, MessageBatch, VideoJob } from "./env";
 import { serveDraft, CORS, serveImage, servePitch, serveSite, takeLead, text } from "./serve";
 import { isOwnAddress, slugForHost } from "./domains";
-import { carryDetails, galleryPage, ownDetails, personalise, sampleBar, sampleById, SAMPLES, swapsFor } from "./samples";
+import { carryDetails, galleryPage, ownDetails, personalise, sampleBar, sampleById, SAMPLES, swapsFor, wantLink } from "./samples";
 import { getDemo, imageNames } from "./db";
 
 /** The gallery's index, each sample shown by its first photo. */
@@ -39,7 +39,7 @@ async function serveGallery(req: Request, env: Env): Promise<Response> {
     const first = names.find((n) => /^photo-\d+\.jpg$/.test(n));
     if (first) shots[s.id] = `/examples/${s.id}/_img/${demo.liveVersion}/${first}`;
   }
-  return new Response(galleryPage(shots), { headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "public, max-age=300" } });
+  return new Response(galleryPage(shots, env.APP_ORIGIN ? wantLink(env.APP_ORIGIN, null, null) : ""), { headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "public, max-age=300" } });
 }
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)) || "Something went wrong.";
@@ -100,7 +100,7 @@ async function handleSites(req: Request, env: Env, ctx: Ctx): Promise<Response> 
     return serveSite(req, env, ctx, sample.slug, m[2] ?? "", prefix, false, {
       transform: (html, intake) => {
         const out = carryDetails(personalise(html, swapsFor(sample, intake, own)), prefix, own).replace(/(\/_img\/[a-z0-9]+\/)og\.jpg/g, "$1photo-1.jpg");
-        return out.replace(/<\/body>/i, `${sampleBar(sample, own)}</body>`);
+        return out.replace(/<\/body>/i, `${sampleBar(sample, own, env.APP_ORIGIN ? wantLink(env.APP_ORIGIN, sample, own) : "")}</body>`);
       },
     });
   }

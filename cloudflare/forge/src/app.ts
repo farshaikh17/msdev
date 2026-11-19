@@ -4,6 +4,7 @@
  * Public pages and the API are routed first; everything else needs a session, and everything a
  * session touches is scoped to its own account.
  */
+import type { Intake } from "../../../src/forge/schema";
 import { exportSite } from "./export";
 import { imagesRoom } from "./images";
 import { handleApi } from "./api";
@@ -108,6 +109,15 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 /** Wrap a rendered page so it carries a status code (e.g. 429 for a locked-out sign-in). */
 function withStatus(r: Response, status: number, extra: Record<string, string> = {}): Response {
   return new Response(r.body, { status, headers: { ...Object.fromEntries(r.headers), ...extra } });
+}
+
+/** The builder filled in from a link (a preview request: "Build their site"). Plain text, short. */
+function prefillOf(url: URL): Partial<Intake> {
+  const g = (k: string, max: number) => (url.searchParams.get(k) ?? "").replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, max);
+  const out: Partial<Intake> = {};
+  for (const [k, max] of [["businessName", 200], ["phone", 40], ["city", 120], ["websiteUrl", 300], ["saw", 600]] as const) if (g(k, max)) (out as Record<string, string>)[k] = g(k, max);
+  if (url.searchParams.get("style") === "studio") out.style = "studio";
+  return out;
 }
 
 export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Response> {
@@ -227,7 +237,9 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
   // ---- Dashboard and demos -------------------------------------------------------------------
   if (path === "/" && req.method === "GET") {
     const [demos, views, usage, photos] = await Promise.all([listDemos(env, s.tenant.id), viewStats(env, { tenantId: s.tenant.id }), tenantUsage(env, s.tenant.id), env.AI ? imagesRoom(env, 10).catch(() => true) : Promise.resolve(true)]);
-    return homePage(s, demos.map((d) => ({ ...d, views: views.get(d.slug) })), site, aiOn, usage, q("error"), q("ok"), q("lead") ?? "", q("reuse") ?? "", photos);
+    // Mianro staff see new preview requests (the sample gallery and the Forge website) right here.
+    const newRequests = s.user.role === "admin" ? ((await env.DB.prepare("SELECT COUNT(*) AS n FROM inquiries WHERE status = 'new' AND kind = 'sample'").first<{ n: number }>().catch(() => null))?.n ?? 0) : 0;
+    return homePage(s, demos.map((d) => ({ ...d, views: views.get(d.slug) })), site, aiOn, usage, q("error"), q("ok"), q("lead") ?? "", q("reuse") ?? "", photos, newRequests, prefillOf(url));
   }
   if (path === "/gallery" && req.method === "GET") {
     const f = { niche: q("niche") ?? "", look: q("look") ?? "", first: q("first") ?? "", style: q("style") ?? "", lead: q("lead") ?? "", sort: q("sort") ?? "new", view: q("view") ?? "desktop" };

@@ -90,8 +90,18 @@ export function personalise(html: string, pairs: [string, string][]): string {
   return html;
 }
 
+/** "Want this for real?": the free-preview form on the Forge website, with the business and the sample filled in. */
+export function wantLink(appOrigin: string, sample: Sample | null, own: { name: string; phone: string } | null): string {
+  const q = new URLSearchParams();
+  if (sample?.edition === "Studio") q.set("tier", "studio");
+  if (own?.name) q.set("company", own.name);
+  if (own?.phone) q.set("phone", own.phone);
+  q.set("message", sample ? `I liked the ${sample.trade.toLowerCase()} sample (${sample.edition}) in the gallery and want one like it for ${own?.name || "my business"}.` : `I saw the sample gallery and want a preview for ${own?.name || "my business"}.`);
+  return `${appOrigin.replace(/\/+$/, "")}/preview?${q}`;
+}
+
 /** The bar on every sample page: it says it is a sample and lets the visitor put their own business in. */
-export function sampleBar(sample: Sample, own: { name: string; phone: string } | null): string {
+export function sampleBar(sample: Sample, own: { name: string; phone: string } | null, want = ""): string {
   return `<details id="forge-sample-bar" style="position:fixed;left:12px;bottom:12px;z-index:2147483000;max-width:min(520px,calc(100vw - 100px));background:#111;color:#fff;font:14px/1.35 system-ui,-apple-system,Segoe UI,sans-serif;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.28)">
 <summary style="cursor:pointer;padding:9px 13px;list-style:none;font-weight:600">Sample design · try it with your business</summary>
 <form method="get" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0;padding:0 12px 12px">
@@ -100,7 +110,7 @@ export function sampleBar(sample: Sample, own: { name: string; phone: string } |
 <input name="phone" placeholder="Phone" value="${esc(own?.phone ?? "")}" aria-label="Phone" inputmode="tel" style="flex:1 1 110px;min-width:0;padding:7px 9px;border-radius:8px;border:0;font:inherit;color:#111">
 <button style="padding:7px 12px;border-radius:8px;border:0;background:#fff;color:#111;font:inherit;font-weight:600;cursor:pointer">Show me</button>
 <a href="/examples" style="color:#fff;opacity:.8">All samples</a>
-</form></details>`;
+</form>${want ? `<a href="${esc(want)}" target="_blank" rel="noopener" style="display:block;margin:0 12px 12px;padding:9px 12px;border-radius:8px;background:#e4572e;color:#fff;text-align:center;font-weight:700;text-decoration:none">Want this for real? Get my free preview →</a>` : ""}</details>`;
 }
 
 /** Links inside a sample keep the visitor's own name and phone as they move between pages. */
@@ -111,7 +121,7 @@ export function carryDetails(html: string, prefix: string, own: { name: string; 
 }
 
 /** The gallery's index page. */
-export function galleryPage(shots: Record<string, string>): string {
+export function galleryPage(shots: Record<string, string>, want = ""): string {
   const cards = SAMPLES.map(
     (s) => `<li><a href="/examples/${s.id}">${shots[s.id] ? `<img src="${esc(shots[s.id]!)}" alt="" loading="lazy">` : `<span class="noimg">${esc(s.name)}</span>`}<b>${esc(s.name)}</b><span>${esc(s.trade)} · ${s.edition}</span></a></li>`,
   ).join("");
@@ -124,6 +134,6 @@ ul{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(
 li img,.noimg{display:grid;place-items:center;font-size:24px;font-weight:600;color:var(--mut);width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top;border-radius:8px;background:var(--line)}li b{font-weight:600;padding:6px 6px 0}li span{color:var(--mut);padding:0 6px;font-size:14px}</style></head>
 <body><main><h1>Sample websites</h1><p>Each one is a finished design, shown under a made-up business. Type a business name and phone number below and every sample shows them instead.</p>
 <form method="get" action="/examples" id="own"><input name="name" placeholder="Business name" aria-label="Business name"><input name="phone" placeholder="Phone" inputmode="tel" aria-label="Phone"><button>Show them with my business</button></form>
-<ul>${cards}</ul></main>
-<script>(()=>{const q=new URLSearchParams(location.search);const f=document.getElementById("own");f.name.value=q.get("name")||"";f.phone.value=q.get("phone")||"";if(!q.get("name")&&!q.get("phone"))return;const s=new URLSearchParams();if(q.get("name"))s.set("name",q.get("name"));if(q.get("phone"))s.set("phone",q.get("phone"));document.querySelectorAll("li a").forEach(a=>a.href=a.getAttribute("href")+"?"+s)})()</script></body></html>`;
+<ul>${cards}</ul>${want ? `<p style="margin:44px 0 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap"><a href="${esc(want)}" data-want style="padding:14px 20px;border-radius:12px;background:#e4572e;color:#fff;font-weight:700;text-decoration:none">Want one for real? Get my free preview →</a><span style="color:var(--mut)">A complete website for your business, free to see.</span></p>` : ""}</main>
+<script>(()=>{const q=new URLSearchParams(location.search);const f=document.getElementById("own");f.name.value=q.get("name")||"";f.phone.value=q.get("phone")||"";if(!q.get("name")&&!q.get("phone"))return;const s=new URLSearchParams();if(q.get("name"))s.set("name",q.get("name"));if(q.get("phone"))s.set("phone",q.get("phone"));document.querySelectorAll("li a").forEach(a=>a.href=a.getAttribute("href")+"?"+s);var w=document.querySelector("[data-want]");if(w){var u=new URL(w.href);if(q.get("name"))u.searchParams.set("company",q.get("name"));if(q.get("phone"))u.searchParams.set("phone",q.get("phone"));u.searchParams.set("message","I saw the sample gallery and want a preview for "+(q.get("name")||"my business")+".");w.href=u.toString()}})()</script></body></html>`;
 }

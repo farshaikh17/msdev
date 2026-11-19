@@ -259,7 +259,9 @@ export async function handleWeb(req: Request, env: Env, path: string, signedIn: 
   if (path === "/preview") {
     const trade = url.searchParams.get("trade") ?? "";
     const tier = url.searchParams.get("tier") === "studio" ? "studio" : "";
-    return page(tier ? "Get your free Studio preview · Forge" : "Get your free website preview · Forge", "Tell us your business and we'll build a complete preview of its new website, free.", formPage({ kind: "sample", values: { trade: tradeBySlug(trade) ? trade : "", tier } }));
+    // Arriving from the sample gallery: the business and the design they liked come filled in.
+    const pre = (k: string, max: number) => (url.searchParams.get(k) ?? "").replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, max);
+    return page(tier ? "Get your free Studio preview · Forge" : "Get your free website preview · Forge", "Tell us your business and we'll build a complete preview of its new website, free.", formPage({ kind: "sample", values: { trade: tradeBySlug(trade) ? trade : "", tier, company: pre("company", 100), phone: pre("phone", 40), message: pre("message", 600) } }));
   }
   if (path === "/studio") return page("Forge Studio | award-style websites", "Forge Studio: art-directed, award-style websites with kinetic type, WebGL colour, smooth scrolling and page transitions, designed in an afternoon.", studioPage(), { motion: { css: STUDIO_CSS }, image: "/studio/concept.webp" });
   if (path === "/studio/concept") {
