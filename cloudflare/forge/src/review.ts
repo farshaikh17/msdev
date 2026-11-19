@@ -184,6 +184,18 @@ async function rescore(env: Env, deps: ReviewDeps, url: string, settle: number, 
   }
 }
 
+/** Take the 10-minute lock on reviewing this version; false when another review holds it. */
+async function claimReview(env: Env, slug: string, version: string): Promise<boolean> {
+  const key = `review-lock:${slug}:${version}`;
+  const now = Date.now();
+  const row = await env.DB.prepare("SELECT value FROM settings WHERE key = ?").bind(key).first<{ value: string }>().catch(() => null);
+  if (row && now - Number(row.value) < 10 * 60_000) return false;
+  await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").bind(key, String(now)).run().catch(() => undefined);
+  // Read back: of two that claimed in the same instant, only the one whose stamp stuck goes on.
+  const mine = await env.DB.prepare("SELECT value FROM settings WHERE key = ?").bind(key).first<{ value: string }>().catch(() => null);
+  return !mine || mine.value === String(now);
+}
+
 /** Scroll the home page again on desktop and phone (after a repair) and return what is still found. */
 async function rescan(env: Env, deps: ReviewDeps, url: string, settle: number, sleep: (ms: number) => Promise<void>): Promise<string[] | null> {
   if ((await browserUsed(env)).seconds >= BROWSER_BUDGET_SECONDS) return null;
@@ -709,6 +721,17 @@ export const BEFORE_PAGE = "/_before";
 
 /** Run the review for a version that is live. Never throws: whatever happens is recorded on the version. */
 export async function reviewSite(env: Env, slug: string, version: string, deps: ReviewDeps = realDeps): Promise<Review> {
+  // One review of a version at a time: a second one queued meanwhile (the hourly catch-up sees no saved
+  // review yet) would look and revise the page again on top of the first. The lock is let go at the end.
+  if (!(await claimReview(env, slug, version))) return { at: new Date().toISOString(), skipped: "already being reviewed" };
+  try {
+    return await reviewSiteOnce(env, slug, version, deps);
+  } finally {
+    await env.DB.prepare("DELETE FROM settings WHERE key = ?").bind(`review-lock:${slug}:${version}`).run().catch(() => undefined);
+  }
+}
+
+async function reviewSiteOnce(env: Env, slug: string, version: string, deps: ReviewDeps): Promise<Review> {
   const at = new Date().toISOString();
   const prev = await getReview(env, slug, version);
   const done = async (r: Review) => {
@@ -718,6 +741,7 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
   };
   const demo = await getDemo(env, slug);
   if (!demo || demo.liveVersion !== version) return { at, skipped: "not live" };
+
   if (!env.BROWSER) return done({ at, skipped: "no browser" });
   if (!env.ANTHROPIC_API_KEY) return done({ at, skipped: "no Claude key" });
   const used = await browserUsed(env);
@@ -881,10 +905,11 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
             rescore(env, deps, url, settle, sleep, facts, studio).catch(() => null),
             rescan(env, deps, url, settle, sleep).catch(() => null),
           ]);
-          const worse = !again || again.crit.score < crit.score || (left ?? []).filter((m) => pageFixable(m.replace(/^phone: /, ""))).length > scan.filter((m) => pageFixable(m.replace(/^phone: /, ""))).length;
+          // The vision critic's scores wobble by a point between looks: a revision stays only when it is clearly better.
+          const worse = !again || again.crit.score < crit.score + 1 || (left ?? []).filter((m) => pageFixable(m.replace(/^phone: /, ""))).length > scan.filter((m) => pageFixable(m.replace(/^phone: /, ""))).length;
           if (worse) {
             await savePage(env, slug, version, "/", current, null);
-            review.leanFixError = again ? `A revision scored ${again.crit.score}/10 (before: ${crit.score}/10), so the original was kept.` : "The revision couldn't be looked at, so the original was kept.";
+            review.leanFixError = again ? `A revision scored ${again.crit.score}/10 (before: ${crit.score}/10), not clearly better, so the original was kept.` : "The revision couldn't be looked at, so the original was kept.";
           } else {
             review.before = crit.score;
             review.score = again.crit.score;

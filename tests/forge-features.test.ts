@@ -1151,3 +1151,14 @@ describe("the client portal", () => {
     expect(await html(await call(h, `/demos/${slug}`, { cookie: b.cookie }))).toContain("One more thing");
   });
 });
+
+describe("one review at a time", () => {
+  it("a second review of the same version backs off while one is running", async () => {
+    const { slug, demo } = await liveDemo();
+    h.db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(`review-lock:${slug}:${demo.liveVersion}`, String(Date.now()));
+    const critique = vi.fn<ReviewDeps["critique"]>();
+    const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, slug, demo.liveVersion!, { launch: async () => fakeBrowser(goodFacts([])).browser, critique, sleep: async () => undefined });
+    expect(r.skipped).toBe("already being reviewed");
+    expect(critique).not.toHaveBeenCalled();
+  });
+});
