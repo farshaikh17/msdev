@@ -16,6 +16,8 @@ export interface Env {
   FORGE_AUTO_FIX?: string;
   /** "off" stops the one cheap repair of a home page the scroll check found problems on. */
   FORGE_SCAN_FIX?: string;
+  /** "off" stops lean mode's one revision of a home page the vision model scored under 7. */
+  FORGE_LEAN_FIX?: string;
   /** The Workers AI model for Studio inner pages (default DeepSeek V4.1 Flash), or "claude" for Sonnet. */
   FORGE_INNER_MODEL?: string;
   /** Workers AI: a lower daily ceiling than the free 10,000 neurons (Forge never goes past the free amount). */

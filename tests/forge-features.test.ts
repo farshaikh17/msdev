@@ -864,8 +864,9 @@ describe("the art director's pass (Studio)", () => {
     await drain(h);
     const r = await reviewSite({ ...h.env, BROWSER: {} } as Env, other, (await getDemo(h.env, other))!.liveVersion!, { launch: async () => scrollingBrowser(goodFacts([`/${other}/about`])).browser, critique, artDirect, sleep: async () => undefined });
     expect(artDirect).not.toHaveBeenCalled();
-    expect(critique.mock.calls.at(-1)![1].frames).toBeUndefined();
-    expect(r.blank).toBeUndefined();
+    // A Standard site is looked at a little further down too (for the critique), never given the Studio pass.
+    expect((critique.mock.calls.at(-1)![1].frames ?? []).length).toBeLessThanOrEqual(4);
+    expect(r.blank ?? 0).toBe(0);
   });
 });
 

@@ -18,6 +18,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getDemo, getKit, getPage, getReview, getSetting, saveImage, savePage, saveReview, setSetting, type Stored } from "./db";
 import { costOf, designSitePage, MODEL, pagesOf, parseParts, STUDIO_PAGE_MODEL, type Kit } from "./designer";
 import { pageFixable, scanNote, scrollScan } from "./scrollscan";
+import { lookAt } from "./vision";
 import type { Env } from "./env";
 import { recordBuildCost } from "./tenants";
 
@@ -75,6 +76,11 @@ export interface Review {
   before?: number;
   /** The home page was written again with the notes. */
   fixed?: boolean;
+  /** Who critiqued the screens: Claude (absent) or the Workers AI vision model (lean mode). */
+  critic?: "vision";
+  /** Lean mode's one revision from the vision model's notes (and why it wasn't kept, if it wasn't). */
+  leanFixed?: boolean;
+  leanFixError?: string;
   /** The home page was repaired once for what the scroll check found (and why that didn't stick, if it didn't). */
   scanFixed?: boolean;
   scanFixError?: string;
@@ -398,9 +404,40 @@ One or two sentences: what works and must not change.`),
   return { notes: weakest ? [...notes, `The weakest screens, as the art director saw them: ${weakest.replace(/\s+/g, " ").slice(0, 600)}`] : notes, keep: (p.KEEP ?? "").replace(/\s+/g, " ").trim().slice(0, 400), costUsd: costOf(STUDIO_PAGE_MODEL, res.usage as unknown as Record<string, unknown>) };
 }
 
+/** Parse a critique reply (JSON, or as much of it as can be read). */
+function readCritique(text: string): { score: number; verdict: string; strengths: string[]; issues: Issue[] } | null {
+  const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+  let p: { score?: unknown; verdict?: unknown; strengths?: unknown; issues?: unknown } | null = null;
+  try {
+    p = JSON.parse(json);
+  } catch {
+    const score = /"score"\s*:\s*(\d+(?:\.\d+)?)/.exec(text)?.[1];
+    if (score) p = { score: Number(score), verdict: /"verdict"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text)?.[1] ?? "", strengths: [], issues: [] };
+  }
+  if (!p) return null;
+  const issues = Array.isArray(p.issues)
+    ? (p.issues as Partial<Issue>[]).slice(0, 8).map((i) => ({ what: String(i.what ?? "").slice(0, 300), fix: String(i.fix ?? "").slice(0, 400), severity: i.severity === "high" || i.severity === "low" ? i.severity : ("medium" as const) }))
+    : [];
+  return { score: Math.max(1, Math.min(10, Math.round(Number(p.score) || 5))), verdict: String(p.verdict ?? "").slice(0, 300), strengths: Array.isArray(p.strengths) ? (p.strengths as unknown[]).slice(0, 6).map((x) => String(x).slice(0, 200)) : [], issues };
+}
+
+/** The critique from a Workers AI vision model (lean mode): the same brief as Claude's, on up to four screens. */
+async function visionCritique(env: Env, shots: Shots, facts: string, studio: boolean) {
+  const pics = [shots.desktop, shots.phone, ...(shots.frames ?? []).slice(1, 3)];
+  const order = `The pictures, in order: the first screen on a desktop, the first screen on a phone${pics.length > 2 ? ", then screens further down the page on a desktop" : ""}.`;
+  const brief = `${CRITIQUE_SYSTEM}${studio ? "\n\nThis is a STUDIO-tier site: judge it against an award-winning creative studio's bar; a tidy template is a 5 or 6 at most." : ""}\n\n${order}\n\nFacts measured in the browser (treat as true):\n${facts}`;
+  const text = await lookAt(env, pics, brief, 1200);
+  const c = text ? readCritique(text) : null;
+  return c ? { ...c, costUsd: 0, byVision: true as const } : null;
+}
+
 async function critiqueReal(env: Env, shots: Shots, facts: string, studio = false) {
-  // Lean mode: no Claude, so no critique of the pictures (the measured checks and screenshots still happen).
-  if (await leanMode(env)) return { score: 0, verdict: "", strengths: [] as string[], issues: [] as Issue[], costUsd: 0, lean: true };
+  // Lean mode: no Claude. A Workers AI vision model looks at the screens instead (a fraction of a cent);
+  // only if it can't answer does the review go without a critique.
+  if (await leanMode(env)) {
+    const v = await visionCritique(env, shots, facts, studio);
+    return v ?? { score: 0, verdict: "", strengths: [] as string[], issues: [] as Issue[], costUsd: 0, lean: true };
+  }
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 120_000 });
   const content = [...shotContent(shots), { type: "text" as const, text: `Facts measured in the browser (treat as true):\n${facts}` }];
   const messages: { role: "user" | "assistant"; content: string | typeof content }[] = [{ role: "user", content }];
@@ -717,7 +754,8 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     const scanned = await scrollScan(page, sleep).catch((e) => (console.log("scroll scan failed", slug, e instanceof Error ? e.message : String(e)), [] as string[]));
     // A Studio site: the screens below the first, as a visitor scrolling sees them.
     const studioSite = kit.style === "studio";
-    const down = studioSite ? await scrollFrames(page, sleep, 8, 1000).catch(() => ({ frames: [] as Uint8Array[], blank: 0 })) : { frames: [] as Uint8Array[], blank: 0 };
+    // (A Standard site is looked at further down too, more briefly: the critique needs more than the first screen.)
+    const down = await scrollFrames(page, sleep, studioSite ? 8 : 4, studioSite ? 1000 : 600).catch(() => ({ frames: [] as Uint8Array[], blank: 0 }));
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true });
     await visit(page, siteUrl, settle, sleep);
     const phone = bytesOf(await page.screenshot({ type: "jpeg", quality: 72 }));
@@ -791,7 +829,8 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
     const direction = look ? `\n\nThis site's art direction is "${look.name}". Its first screen should be: ${firstScreenWanted(kit, sig, look)}\nRuled out for it: ${look.never}\nIf the first screen doesn't match that description (for example it is a big headline over a darkened full-bleed photo when the direction says otherwise), say so as a high-severity issue with the fix, and score no higher than 6.` : "";
     const shotSet: Shots = { desktop, phone, ...(down.frames.length ? { frames: down.frames } : {}), ...(phoneDown.frames.length ? { phoneFrames: phoneDown.frames } : {}) };
     const crit = await deps.critique(env, shotSet, facts + direction, studio);
-    review = { at, ...(down.frames.length ? { blank: down.blank } : {}), ...(wide.length ? { wide } : {}), ...("lean" in crit && crit.lean ? { verdict: "Not critiqued: Claude is switched off (lean mode). The measured checks below still ran." } : { score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues }), checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
+    const byVision = "byVision" in crit && !!crit.byVision;
+    review = { at, ...(byVision ? { critic: "vision" as const } : {}), ...(down.frames.length ? { blank: down.blank } : {}), ...(wide.length ? { wide } : {}), ...("lean" in crit && crit.lean ? { verdict: "Not critiqued: Claude is switched off (lean mode). The measured checks below still ran." } : { score: crit.score, verdict: crit.verdict, strengths: crit.strengths, issues: crit.issues }), checks, consoleErrors: consoleErrors.slice(0, 5), old, seconds: Math.round(seconds), costUsd: crit.costUsd, shots };
 
     // The scroll check found something the home page itself causes: one cheap repair of just that
     // (sent as edits), looked at again, and kept only if it leaves fewer problems. Once per version.
@@ -818,6 +857,43 @@ export async function reviewSite(env: Env, slug: string, version: string, deps: 
           }
         } catch (e) {
           review.scanFixError = e instanceof Error ? e.message : String(e);
+        }
+      }
+    }
+
+    // Lean mode's art director: when the vision model scores the page under 7, one cheap revision from its
+    // notes (sent as edits), looked at again, and kept only if it scores at least as well and the scroll check
+    // stays clean. Once per version; FORGE_LEAN_FIX=off stops it.
+    const leanNotes = crit.issues.filter((i) => i.severity !== "low").slice(0, 5);
+    if (byVision && crit.score < 7 && leanNotes.length && !prev?.leanFixed && env.FORGE_LEAN_FIX !== "off") {
+      const spec = pagesOf(kit).find((p) => p.path === "/");
+      const current = await getPage(env, slug, version, "/");
+      if (spec && current) {
+        try {
+          const notes = leanNotes.map((i) => `${i.what} → ${i.fix}${/photo|image|picture/i.test(i.what) ? " (use a different photo from the list given earlier; never invent a photo link)" : ""}`);
+          const { page: revised, usage } = await designSitePage(env, kit, spec, { notes, current, cheap: true });
+          await savePage(env, slug, version, "/", revised, usage);
+          review.leanFixed = true;
+          const url = `${base}${prefix}?r=${version}-lean`;
+          const [again, left] = await Promise.all([
+            rescore(env, deps, url, settle, sleep, facts, studio).catch(() => null),
+            rescan(env, deps, url, settle, sleep).catch(() => null),
+          ]);
+          const worse = !again || again.crit.score < crit.score || (left ?? []).filter((m) => pageFixable(m.replace(/^phone: /, ""))).length > scan.filter((m) => pageFixable(m.replace(/^phone: /, ""))).length;
+          if (worse) {
+            await savePage(env, slug, version, "/", current, null);
+            review.leanFixError = again ? `A revision scored ${again.crit.score}/10 (before: ${crit.score}/10), so the original was kept.` : "The revision couldn't be looked at, so the original was kept.";
+          } else {
+            review.before = crit.score;
+            review.score = again.crit.score;
+            review.verdict = again.crit.verdict;
+            review.strengths = again.crit.strengths;
+            review.issues = again.crit.issues;
+            await saveImage(env, slug, version, "shot-desktop.jpg", "The home page on desktop", again.desktop);
+            await saveImage(env, slug, version, "shot-phone.jpg", "The home page on a phone", again.phone);
+          }
+        } catch (e) {
+          review.leanFixError = e instanceof Error ? e.message : String(e);
         }
       }
     }
