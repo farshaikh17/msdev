@@ -624,6 +624,8 @@ export interface DemoExtra {
   domain?: Domain | null;
   domainTarget?: string;
   domainAuto?: boolean;
+  /** This site's design is in the design library (new builds may be designed on it). */
+  base?: boolean;
 }
 
 const checkList = (checks: { label: string; ok: boolean; detail?: string }[]) =>
@@ -828,6 +830,7 @@ ${!busy && d.liveVersion && (d.leadStatus === "replied" || d.leadStatus === "won
 ${busy ? "" : expiryNote(d)}
 ${!busy && d.liveVersion && extra.domainTarget && (d.leadStatus === "won" || extra.domain) ? domainCard(d, extra.domain ?? null, extra.domainTarget ?? "", !!extra.domainAuto) : ""}
 <details class="card"><summary>More tools</summary><div style="display:grid;gap:16px;margin-top:12px">
+${d.liveVersion && owner ? `<form method="post" action="/demos/${esc(d.slug)}/base" class="card"><h2>Design library ${extra.base ? `<span class="tag ok">In the library</span>` : ""}</h2><p class="note" style="margin:0">${extra.base ? "New sites may be designed on this one: its layout and components, with their own colours, type, words and photos." : "Like how this one came out? Add it to the design library, and new sites can be designed on it (with their own colours, type, words and photos). Best for sites that scored well."}</p><input type="hidden" name="on" value="${extra.base ? "" : "1"}"><div><button class="btn ${extra.base ? "ghost" : ""}" type="submit">${extra.base ? "Stop using it as a base" : "Use as a base for new sites"}</button></div></form>` : ""}
 ${d.liveVersion ? `<section class="card"><h2>Download the site</h2><p class="note">Every page and photo as plain files in one zip, ready for any web host (Netlify, Cloudflare Pages, cPanel…). Forms keep sending messages here.</p><a class="btn ghost" href="/demos/${esc(d.slug)}/download" download>Download (.zip)</a></section>` : ""}
 ${outreachCard(d, links, extra.qr ?? "", true)}
 ${viewsCard(extra.views)}

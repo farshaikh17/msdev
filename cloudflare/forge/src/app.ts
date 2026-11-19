@@ -43,6 +43,7 @@ import {
   setSetting,
   throttled,
   viewStats,
+  setBase,
 } from "./db";
 import { Invalid, NoCredits, asLink, checkWidget, createDemo, noCreditsText, rawFields, redesignDemo, startMessage } from "./demos";
 import { pagesOf, sitemapFor } from "./designer";
@@ -290,7 +291,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     }
   }
 
-  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/fix|\/replace|\/review|\/pairs|\/lead|\/extend|\/handover|\/domain|\/domain-check|\/download)?$/);
+  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/fix|\/replace|\/review|\/pairs|\/lead|\/extend|\/base|\/handover|\/domain|\/domain-check|\/download)?$/);
   if (m) {
     const [, slug, action] = m;
     // Always scoped to this account: another account's demo is simply "not found".
@@ -326,6 +327,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
         domain,
         domainTarget: env.FORGE_DOMAIN_TARGET ?? "",
         domainAuto: !!(env.CF_SAAS_ZONE && env.CF_SAAS_TOKEN),
+        base: demo.liveVersion ? (await getSetting(env, `base:${slug}`).catch(() => null)) === demo.liveVersion : false,
       });
     }
     if (action === "/domain" && post) {
@@ -407,6 +409,14 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
       if (needsAi) await env.BUILDS.send({ slug, version: demo.liveVersion, stage: "handover" });
       const said = [photos.length ? `${photos.length === 1 ? "their photo is" : `${photos.length} of their photos are`} on the site now` : "", needsAi ? "their logo, details and edits are going in (usually 2–5 minutes)" : "", problems.length ? `not used: ${[...new Set(problems)].join("; ")}` : ""].filter(Boolean).join("; ");
       return redirect(withMsg(`/demos/${slug}`, "ok", `${said.charAt(0).toUpperCase()}${said.slice(1)}.`));
+    }
+    // A good site joins the design library: new builds may be designed on it (owners only).
+    if (action === "/base" && post) {
+      if (!isOwner(s)) return redirect(withMsg(`/demos/${slug}`, "error", "Only the account owner can change the design library."));
+      if (!demo.liveVersion) return redirect(withMsg(`/demos/${slug}`, "error", "This site has no finished design yet."));
+      const on = String((await req.formData()).get("on") ?? "") === "1";
+      await setBase(env, slug, on ? demo.liveVersion : null);
+      return redirect(withMsg(`/demos/${slug}`, "ok", on ? "New sites may now be designed on this one (with their own colours, type and words)." : "This site is no longer used as a base."));
     }
     if (action === "/extend" && post) {
       const until = await extendDemo(env, s.tenant.id, slug);

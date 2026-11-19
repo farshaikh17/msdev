@@ -654,15 +654,25 @@ export async function studioMasters(env: Env, tenantId: number, notSlug: string)
   const { results } = await env.DB.prepare(
     `SELECT v.slug, v.version, json_extract(v.kit, '$.concept') concept, json_extract(v.kit, '$.hero') hero, json_extract(v.kit, '$.theme') theme
        FROM demos d JOIN site_versions v ON v.slug = d.slug AND v.version = d.live_version
-      WHERE d.tenant_id = ? AND d.slug != ? AND json_extract(v.kit, '$.style') = 'studio' AND json_extract(v.kit, '$.reuse') IS NULL
-        AND json_extract(v.kit, '$.concept') IS NOT NULL AND json_extract(v.kit, '$.hero') IS NOT NULL AND json_extract(v.kit, '$.dna') IS NULL
-        AND coalesce(json_extract(v.usage, '$.neurons'), 0) = 0 AND coalesce(json_extract(v.usage, '$.cost_usd'), 0) >= 0.5
+      WHERE d.tenant_id = ? AND d.slug != ? AND json_extract(v.kit, '$.style') = 'studio'
+        AND json_extract(v.kit, '$.concept') IS NOT NULL AND json_extract(v.kit, '$.hero') IS NOT NULL
+        AND ((json_extract(v.kit, '$.reuse') IS NULL AND json_extract(v.kit, '$.dna') IS NULL
+          AND coalesce(json_extract(v.usage, '$.neurons'), 0) = 0 AND coalesce(json_extract(v.usage, '$.cost_usd'), 0) >= 0.5) OR ${PROMOTED})
       ORDER BY v.created_at`,
   )
     .bind(tenantId, notSlug)
     .all<{ slug: string; version: string; concept: string; hero: string; theme: string }>();
   return results;
 }
+
+/** Mark a site's design (this version) as a base for new builds, or stop (null). Settings "base:<slug>". */
+export async function setBase(env: Env, slug: string, version: string | null): Promise<void> {
+  if (version) await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").bind(`base:${slug}`, version).run();
+  else await env.DB.prepare("DELETE FROM settings WHERE key = ?").bind(`base:${slug}`).run();
+}
+
+/** Sites promoted to the design library by hand (their version is still the live one). */
+const PROMOTED = `(v.slug IN (SELECT substr(key, 6) FROM settings WHERE key LIKE 'base:%' AND value = v.version))`;
 
 /**
  * The account's Claude-written Standard designs made on the Standard edition's current rules (their first
@@ -672,9 +682,9 @@ export async function standardMasters(env: Env, tenantId: number, notSlug: strin
   const { results } = await env.DB.prepare(
     `SELECT v.slug, v.version, json_extract(v.kit, '$.dna.look') concept, json_extract(v.kit, '$.dna.hero') hero, json_extract(v.kit, '$.theme') theme
        FROM demos d JOIN site_versions v ON v.slug = d.slug AND v.version = d.live_version
-      WHERE d.tenant_id = ? AND d.slug != ? AND coalesce(json_extract(v.kit, '$.style'), 'standard') = 'standard' AND json_extract(v.kit, '$.reuse') IS NULL
+      WHERE d.tenant_id = ? AND d.slug != ? AND coalesce(json_extract(v.kit, '$.style'), 'standard') = 'standard'
         AND json_extract(v.kit, '$.dna.hero') IN ('place-band', 'letterbox', 'split', 'subject-stage', 'calm-side', 'oversized', 'triptych')
-        AND coalesce(json_extract(v.usage, '$.neurons'), 0) = 0 AND coalesce(json_extract(v.usage, '$.cost_usd'), 0) >= 0.3
+        AND ((json_extract(v.kit, '$.reuse') IS NULL AND coalesce(json_extract(v.usage, '$.neurons'), 0) = 0 AND coalesce(json_extract(v.usage, '$.cost_usd'), 0) >= 0.3) OR ${PROMOTED})
       ORDER BY v.created_at`,
   )
     .bind(tenantId, notSlug)
