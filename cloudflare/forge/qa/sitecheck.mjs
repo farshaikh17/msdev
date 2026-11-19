@@ -75,8 +75,8 @@ const AT_EACH_STOP = () => {
   // A picture covering words (a photo placed over the start of a heading or paragraph).
   for (const e of leaf) {
     const r = e.getBoundingClientRect(); let hit = 0;
-    for (const fx of [0.08, 0.5]) {
-      const top = document.elementFromPoint(r.left + r.width * fx, r.top + r.height / 2);
+    for (const x of [r.left + 4, r.left + r.width * 0.08, r.left + r.width * 0.5]) {
+      const top = document.elementFromPoint(x, r.top + r.height / 2);
       if (top && !e.contains(top) && !top.contains(e) && top.closest("img,picture,video,figure") && !(top.closest("a,button") && top.closest("a,button").contains(e))) hit++;
     }
     if (hit) { iss.push(`picture over text: "${(e.innerText || "").trim().slice(0, 40)}"`); break; }

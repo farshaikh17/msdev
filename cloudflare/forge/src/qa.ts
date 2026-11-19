@@ -372,6 +372,21 @@ var cs=getComputedStyle(e);if(cs.position==="fixed")return;var r=e.getBoundingCl
 e.style.setProperty("width","auto","important");e.style.setProperty("max-width","100%","important");e.style.setProperty("min-width","0","important");if(cs.position==="absolute"){e.style.left="0";e.style.right="0"}})}
 if(document.readyState==="complete")fix();else addEventListener("load",fix);setTimeout(fix,600);addEventListener("resize",fix)})();
 
+// A photo that spills out of its column over the words beside it (a tall photo in a two-column row whose
+// frame is wider than its track): the photo's column is held to its own width, so the words show again.
+(function(){var done=[],busy=0;function hold(){busy=0;document.querySelectorAll("main h1,main h2,main h3,main p").forEach(function(e){
+var r=e.getBoundingClientRect();if(!r.width||r.height<8||r.top<0||r.bottom>innerHeight)return;
+[r.left+4,r.left+r.width*0.08].forEach(function(x){if(x<0||x>innerWidth)return;var y=r.top+r.height/2;
+var stack=document.elementsFromPoint(x,y),top=stack[0];if(!top||e.contains(top)||top.contains(e))return;
+var pic=top.closest("img,picture,video,figure");if(!pic||pic.contains(e))return;
+var common=pic.parentElement;while(common&&!common.contains(e))common=common.parentElement;if(!common)return;
+var item=pic;while(item.parentElement&&item.parentElement!==common)item=item.parentElement;if(done.indexOf(item)>=0)return;done.push(item);
+item.style.minWidth="0";item.style.maxWidth="100%";item.style.overflow="hidden";
+[].forEach.call(item.querySelectorAll("img,picture,video,figure"),function(m){m.style.maxWidth="100%"})})})}
+/* Only what is on screen can be hit-tested: looked at again as the page is scrolled. */
+function soon(){if(!busy){busy=1;setTimeout(hold,250)}}
+if(document.readyState==="complete")hold();else addEventListener("load",hold);addEventListener("scroll",soon,{passive:true})})();
+
 // Wider screens: a block of words that starts at the very left edge of the screen (a full-width wrapper that
 // lost its side padding) gets the gutter back on that wrapper, so headline, words and buttons line up with the page.
 (function(){function gut(){if(innerWidth<700)return;var W=innerWidth,done=[];
