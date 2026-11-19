@@ -171,3 +171,10 @@ are free (roughly one build). About $4.76 of the paid cap was used by 18 Nov (th
 - **Gallery leads**: "Want this for real?" on every sample and on the gallery opens the free-preview form pre-filled (business, phone, the sample liked); requests land in Admin → Inquiries with a "Build their site" button that opens the builder filled in. Admins see new requests on the Websites page.
 - **Today's calls**: sent sites the business opened in the last three days, warmest first, with "They replied" in one press.
 - **Gallery**: commercial flooring sample added (10 samples). No moving-company site exists yet to sample.
+
+## Update, 2026-11-19: client portal
+
+- **For the business owner** (`/p/<token>` on the app; `src/portal.ts`, `src/portal-app.ts`, `src/ui-portal.ts`): their details, photos and logo, real reviews, and up to 5 AI changes a month (more go to the rep as requests). Everything goes into a draft (a copy of the live version); they preview it on forge-sites (`/<slug>/_preview/<draft>`), then Publish (the version before is kept for Undo) or Discard. They also see visits, form messages, a go-live checklist and their history.
+- **For the rep**: a "Client access" card on replied/won sites: create the link (optionally with a 6-digit PIN, shown once), see the owner's activity and requests, make a new link, or switch it off.
+- The owner's changes reuse the "They replied" handover pipeline (`src/handover.ts`), run on the draft. A rebuild of the site replaces all versions, including a draft and the Undo copy.
+- No accounts and no email service: the link is the key; PIN tries are limited (5 per 15 minutes).
