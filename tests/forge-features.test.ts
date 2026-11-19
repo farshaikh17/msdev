@@ -1082,3 +1082,72 @@ describe("the quality check's Fix button", () => {
     expect(rev.instruction).toContain("Low contrast");
   });
 });
+
+import { isPortalDraft, portalForSlug } from "../cloudflare/forge/src/portal";
+
+describe("the client portal", () => {
+  const post = (path: string, fields: Record<string, string>, cookie = "") => {
+    const fd = new FormData();
+    for (const [k, v] of Object.entries(fields)) fd.append(k, v);
+    return worker.fetch(new Request(`https://app.test${path}`, { method: "POST", body: fd, headers: { cookie, "cf-connecting-ip": "203.0.113.9" } }), h.env, { waitUntil: () => undefined } as never);
+  };
+  const get = (path: string, cookie = "") => worker.fetch(new Request(`https://app.test${path}`, { headers: { cookie, "cf-connecting-ip": "203.0.113.9" } }), h.env, { waitUntil: () => undefined } as never);
+
+  it("lets the owner change a draft behind a PIN, preview it, publish it and undo it, without touching the live site until then", async () => {
+    const { b, slug, demo } = await liveDemo();
+    const live = demo.liveVersion!;
+    // The rep makes the link, with a PIN shown once.
+    const made = await call(h, `/demos/${slug}/portal`, { cookie: b.cookie, form: { pin: "1" } });
+    const pin = decodeURIComponent(loc(made)).match(/PIN is (\d{6})/)?.[1];
+    expect(pin).toMatch(/^\d{6}$/);
+    const p = (await portalForSlug(h.env, slug))!;
+    expect(await html(await call(h, `/demos/${slug}`, { cookie: b.cookie }))).toContain(`/p/${p.token}`);
+
+    // The PIN: asked for, a wrong one refused, the right one remembered by the browser.
+    expect(await html(await get(`/p/${p.token}`))).toContain("Enter the 6-digit PIN");
+    expect(await html(await post(`/p/${p.token}/pin`, { pin: pin === "111111" ? "222222" : "111111" }))).toContain("That PIN isn");
+    const ok = await post(`/p/${p.token}/pin`, { pin: pin! });
+    const cookie = (ok.headers.get("set-cookie") ?? "").split(";")[0]!;
+    expect(cookie).toMatch(/^fp_/);
+    expect(await html(await get(`/p/${p.token}`, cookie))).toContain("Ask for a change");
+
+    // A change goes into a draft; the live version stays as it was.
+    await post(`/p/${p.token}/update`, { edits: "Add a section about gift cards", editPath: "/" }, cookie);
+    const draft = (await portalForSlug(h.env, slug))!.draft!;
+    expect(draft).toBeTruthy();
+    expect(draft).not.toBe(live);
+    await drain(h);
+    expect((await getPage(h.env, slug, draft, "/"))!.body).toContain("CHANGED");
+    expect((await getPage(h.env, slug, live, "/"))!.body).not.toContain("CHANGED");
+    expect((await getDemo(h.env, slug))!.liveVersion).toBe(live);
+
+    // The draft can be previewed (and only while it is the draft; the page itself is checked live, it needs HTMLRewriter).
+    expect(await isPortalDraft(h.env, slug, draft)).toBe(true);
+    expect(await isPortalDraft(h.env, slug, live)).toBe(false);
+
+    // Publish makes it live and keeps the old one; Undo puts the old one back.
+    await post(`/p/${p.token}/publish`, {}, cookie);
+    expect((await getDemo(h.env, slug))!.liveVersion).toBe(draft);
+    expect(await isPortalDraft(h.env, slug, draft)).toBe(false);
+    await post(`/p/${p.token}/undo`, {}, cookie);
+    expect((await getDemo(h.env, slug))!.liveVersion).toBe(live);
+    expect(await html(await call(h, `/demos/${slug}`, { cookie: b.cookie }))).toContain("Client access");
+
+    // Switched off: the link stops working.
+    await call(h, `/demos/${slug}/portal`, { cookie: b.cookie, form: { do: "close" } });
+    expect((await get(`/p/${p.token}`, cookie)).status).toBe(404);
+  });
+
+  it("past five AI changes a month, a request goes to the rep instead", async () => {
+    const { b, slug } = await liveDemo();
+    await call(h, `/demos/${slug}/portal`, { cookie: b.cookie, form: {} });
+    const p = (await portalForSlug(h.env, slug))!;
+    for (let k = 0; k < 5; k++) {
+      await post(`/p/${p.token}/update`, { edits: `Change ${k}`, editPath: "/" });
+      await drain(h);
+    }
+    const sixth = await post(`/p/${p.token}/update`, { edits: "One more thing", editPath: "/" });
+    expect(decodeURIComponent(loc(sixth))).toContain("Sent to your website contact");
+    expect(await html(await call(h, `/demos/${slug}`, { cookie: b.cookie }))).toContain("One more thing");
+  });
+});

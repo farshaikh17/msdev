@@ -27,6 +27,7 @@ import { serveDraft, CORS, serveImage, servePitch, serveSite, takeLead, text } f
 import { isOwnAddress, slugForHost } from "./domains";
 import { carryDetails, galleryPage, ownDetails, personalise, sampleBar, sampleById, SAMPLES, swapsFor, wantLink } from "./samples";
 import { getDemo, imageNames } from "./db";
+import { isPortalDraft } from "./portal";
 
 /** The gallery's index, each sample shown by its first photo. */
 async function serveGallery(req: Request, env: Env): Promise<Response> {
@@ -103,6 +104,18 @@ async function handleSites(req: Request, env: Env, ctx: Ctx): Promise<Response> 
         return out.replace(/<\/body>/i, `${sampleBar(sample, own, env.APP_ORIGIN ? wantLink(env.APP_ORIGIN, sample, own) : "")}</body>`);
       },
     });
+  }
+  // A client-portal draft, previewed before it is published (only while it is a live portal's draft).
+  m = path.match(/^\/([a-z0-9-]{3,64})\/_preview\/([a-z0-9]{6,40})(\/_img\/.+|\/_lead|(?:\/[a-z0-9-]+){1,2})?$/);
+  if (m) {
+    const [, pslug, pver, rest = ""] = m;
+    if (rest.startsWith("/_img/")) {
+      const img = `/${pslug}${rest}`.match(IMAGE_PATH);
+      return img && read ? serveImage(req, env, ctx, img[1]!, img[2]!, img[3]!) : text("Not found", 404);
+    }
+    if (rest === "/_lead") return Response.json({ ok: true }, { headers: CORS });
+    if (!read || !(await isPortalDraft(env, pslug!, pver!))) return text("This preview has ended: the changes were published or discarded.", 404);
+    return serveSite(req, env, ctx, pslug!, rest, `/${pslug}/_preview/${pver}`, false, { version: pver! });
   }
   m = path.match(/^\/([a-z0-9-]{3,64})\/_pitch$/);
   if (m && read) return servePitch(req, env, m[1], `/${m[1]}`);

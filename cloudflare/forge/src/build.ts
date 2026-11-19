@@ -55,6 +55,7 @@ import { readWebsite } from "./scrape";
 import { buildCost, chargeBuild, getTenant, recordBuildCost, type Tenant } from "./tenants";
 import { deliver } from "./webhook";
 import { reviewHero, reviewSite } from "./review";
+import { isPortalDraft } from "./portal";
 
 /** How often a job retries when Claude is busy (rate limit, overload) before the build fails. */
 const BUSY_TRIES = 4;
@@ -234,7 +235,8 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
     return "done";
   }
   if (job.stage === "handover") {
-    if (demo && demo.liveVersion === job.version) await applyHandover(env, job.slug, job.version, attempts);
+    // The live version (the rep's "They replied"), or the draft the owner is editing in the client portal.
+    if (demo && (demo.liveVersion === job.version || (await isPortalDraft(env, job.slug, job.version)))) await applyHandover(env, job.slug, job.version, attempts);
     return "done";
   }
   // Ignore jobs from a build that has since been replaced, finished or failed.

@@ -102,11 +102,15 @@ function expiredPage(businessName: string): Response {
 
 /** A gallery sample: the page is served under another name (see samples.ts). */
 export interface SampleView {
-  transform(html: string, intake: Stored["intake"]): string;
+  transform?(html: string, intake: Stored["intake"]): string;
+  /** Serve this version instead of the live one (a client-portal draft preview). */
+  version?: string;
 }
 
 /** A demo website page. `prefix` is the demo's address on this origin ("/<slug>" or "/s/<slug>"); `sub` the page path ("" for home). */
 export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, sub: string, prefix: string, sandbox: boolean, sample?: SampleView): Promise<Response> {
+  // A preview of a version that isn't live (the client portal's draft): never counted, never expired.
+  const pinned = sample?.version;
   const cache = (caches as unknown as { default: Cache }).default;
   const hit = await fromCache(cache, req);
   if (hit) {
@@ -129,30 +133,31 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
   let photos: string[] = [];
   let ogTitle = `${demo.intake.businessName}${demo.content.industry ? ` | ${demo.content.industry}` : ""}${demo.intake.city ? ` in ${demo.intake.city}` : ""}`;
   let ogDesc = `A new website for ${demo.intake.businessName}.`;
-  if (demo.liveVersion) {
+  const showing = pinned ?? demo.liveVersion;
+  if (showing) {
     // /_before: the home page as it was before the art director's pass (Studio), for comparing.
     const before = sub === BEFORE_PAGE;
     const path = before ? "/" : sub || "/";
-    const kit = await getKit(env, slug, demo.liveVersion);
+    const kit = await getKit(env, slug, showing);
     if (!kit) return text("This page isn't available.", 404);
     // Every site has its privacy and terms pages (sites from before they were added get them made on the spot).
     const legal = path === "/privacy" ? privacyPage : path === "/terms" ? termsPage : null;
     if (!legal && !pagesOf(kit).some((p) => p.path === path)) return Response.redirect(new URL(prefix || "/", req.url).toString(), 302);
-    const page = (await getPage(env, slug, demo.liveVersion, before ? BEFORE_PAGE : path)) ?? (legal && !before ? legal(demo.intake) : null);
+    const page = (await getPage(env, slug, showing, before ? BEFORE_PAGE : path)) ?? (legal && !before ? legal(demo.intake) : null);
     if (!page && before) return Response.redirect(new URL(prefix || "/", req.url).toString(), 302);
     if (!page) return text("This page isn't available.", 404);
     html = assemble(kit, page, slug, creditFor(tenant));
     accent = kit.accent || demo.intake.primaryColor;
     current = path;
-    const names = ownFirst(await imageNames(env, slug, demo.liveVersion));
-    photos = names.filter((n) => /^(photo|own)-\d+\.jpg$/.test(n)).map((n) => `${prefix}/_img/${demo.liveVersion}/${n}`);
+    const names = ownFirst(await imageNames(env, slug, showing));
+    photos = names.filter((n) => /^(photo|own)-\d+\.jpg$/.test(n)).map((n) => `${prefix}/_img/${showing}/${n}`);
     ogImage = names.includes("og.jpg") ? "og.jpg" : names.includes("photo-1.jpg") ? "photo-1.jpg" : null;
-    if (ogImage) ogImage = new URL(`${prefix}/_img/${demo.liveVersion}/${ogImage}`, req.url).toString();
+    if (ogImage) ogImage = new URL(`${prefix}/_img/${showing}/${ogImage}`, req.url).toString();
     ogTitle = page.title;
     ogDesc = page.description;
     if (path === "/") {
       const library = await listLibrary(env, tenant.id);
-      hero = heroFor(kit, library, demo.intake, slug, demo.liveVersion, names, `${prefix}/_img/${demo.liveVersion}/`, clipOrigin(env));
+      hero = heroFor(kit, library, demo.intake, slug, showing, names, `${prefix}/_img/${showing}/`, clipOrigin(env));
     }
   } else {
     // A single-page design (or the template while the first design is built).
@@ -178,7 +183,8 @@ export async function serveSite(req: Request, env: Env, ctx: Ctx, slug: string, 
   });
   // The page is finished first and the cache gets its own copy, so a slow cache can never hold the visitor's copy back.
   let body = await res.text();
-  if (sample) body = sample.transform(body, demo.intake);
+  if (sample?.transform) body = sample.transform(body, demo.intake);
+  if (pinned) body = body.replace(/<body([^>]*)>/i, `<body$1><div style="position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:2147483000;background:#111;color:#fff;font:600 13px/1.3 system-ui,sans-serif;padding:8px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.3)">Preview of your changes, not live yet</div>`);
   ctx.waitUntil(cache.put(req, new Response(body, res)).catch(() => undefined));
   return new Response(body, res);
 }

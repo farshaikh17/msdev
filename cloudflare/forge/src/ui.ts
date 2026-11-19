@@ -654,6 +654,24 @@ export interface DemoExtra {
   domainAuto?: boolean;
   /** This site's design is in the design library (new builds may be designed on it). */
   base?: boolean;
+  /** The client portal: its link, whether it has a PIN, a draft waiting, and what the owner did lately. */
+  portal?: { url: string; pin: boolean; draft: boolean; log: { at: string; what: string; detail: string }[] } | null;
+}
+
+/** The rep's card for the client portal: make the link (with a PIN or not), see what the owner did, switch it off. */
+function portalCard(d: Stored, pt: DemoExtra["portal"]): string {
+  const asks = pt?.log.filter((e) => e.what === "request") ?? [];
+  return `<section class="card" id="portal"><h2>Client access ${pt ? `<span class="tag ok">On</span>` : ""}</h2>
+<p class="note" style="margin:0">A private page where ${esc(d.intake.businessName)} updates their own website: details, photos, logo, real reviews and a few AI changes a month. Nothing goes live until they press Publish, and they can undo it.</p>
+${
+  pt
+    ? `<div class="share"><div class="share-row"><div><b>Their link${pt.pin ? " (with a PIN)" : ""}</b><span>${esc(pt.url)}</span></div><div class="row"><a class="btn ghost" href="${esc(pt.url)}" target="_blank" rel="noopener">Open ↗</a><button class="btn" data-copy="${esc(pt.url)}">Copy</button></div></div></div>
+${pt.draft ? `<p class="note" style="margin:0">They have changes waiting in a draft (not live yet).</p>` : ""}
+${asks.length ? `<div class="flash bad" style="margin:0"><b>They asked you for ${asks.length === 1 ? "a change" : `${asks.length} changes`}:</b> ${asks.map((a) => `“${esc(a.detail.slice(0, 200))}”`).join(" · ")}</div>` : ""}
+${pt.log.length ? `<ul class="note" style="margin:0;padding-left:18px">${pt.log.map((e) => `<li>${esc(e.what)}${e.detail ? `: ${esc(e.detail.slice(0, 100))}` : ""} · ${esc(e.at.slice(0, 16).replace("T", " "))} UTC</li>`).join("")}</ul>` : ""}
+<div class="row"><form method="post" action="/demos/${esc(d.slug)}/portal"><input type="hidden" name="pin" value="1"><button class="btn ghost" type="submit">New link with a PIN</button></form><form method="post" action="/demos/${esc(d.slug)}/portal"><input type="hidden" name="do" value="close"><button class="btn danger" type="submit">Switch it off</button></form></div>`
+    : `<form method="post" action="/demos/${esc(d.slug)}/portal" class="row"><label class="choice"><input type="checkbox" name="pin" value="1" checked><span>Protect it with a 6-digit PIN</span></label><button class="btn" type="submit">Create their link</button></form>`
+}</section>`;
 }
 
 const checkList = (checks: { label: string; ok: boolean; detail?: string }[]) =>
@@ -856,6 +874,7 @@ ${sendStep(d, links, extra, improve ? 3 : 2)}
 ${busy ? "" : leadCard(d, extra.leadLog ?? [])}
 ${!busy && d.liveVersion && (d.leadStatus === "replied" || d.leadStatus === "won" || d.handover) ? handoverCard(d, pages) : ""}
 ${busy ? "" : expiryNote(d)}
+${!busy && d.liveVersion && (d.leadStatus === "won" || d.leadStatus === "replied" || extra.portal) ? portalCard(d, extra.portal) : ""}
 ${!busy && d.liveVersion && extra.domainTarget && (d.leadStatus === "won" || extra.domain) ? domainCard(d, extra.domain ?? null, extra.domainTarget ?? "", !!extra.domainAuto) : ""}
 <details class="card"><summary>More tools</summary><div style="display:grid;gap:16px;margin-top:12px">
 ${d.liveVersion && owner ? `<form method="post" action="/demos/${esc(d.slug)}/base" class="card"><h2>Design library ${extra.base ? `<span class="tag ok">In the library</span>` : ""}</h2><p class="note" style="margin:0">${extra.base ? "New sites may be designed on this one: its layout and components, with their own colours, type, words and photos." : "Like how this one came out? Add it to the design library, and new sites can be designed on it (with their own colours, type, words and photos). Best for sites that scored well."}</p><input type="hidden" name="on" value="${extra.base ? "" : "1"}"><div><button class="btn ${extra.base ? "ghost" : ""}" type="submit">${extra.base ? "Stop using it as a base" : "Use as a base for new sites"}</button></div></form>` : ""}

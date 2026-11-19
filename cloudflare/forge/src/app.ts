@@ -50,6 +50,9 @@ import { Invalid, NoCredits, asLink, checkWidget, createDemo, noCreditsText, raw
 import { pagesOf, sitemapFor } from "./designer";
 import { DEFAULT_FOLDER, FOLDER_KEY, folderId, syncFolder } from "./drive";
 import { fitImage } from "./media";
+import { takeHandover } from "./handover";
+import { handlePortal } from "./portal-app";
+import { closePortal, newPin, openPortal, portalForSlug, portalLog } from "./portal";
 import { checkDomain, domainForSlug, hostOf, removeDomain, setDomain } from "./domains";
 import type { Ctx, Env } from "./env";
 import { ghlLink, ghlSnippet, sitesBase } from "./ghl";
@@ -188,6 +191,9 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
   }
   if (path === "/logout" && post) return redirect("/login", { "set-cookie": signOutCookie });
 
+  // The client portal: the business owner's own page for their website (no sign-in; the link is the key).
+  m = path.match(/^\/p\/([A-Za-z0-9_-]{16,40})(\/pin|\/update|\/publish|\/discard|\/undo)?$/);
+  if (m) return handlePortal(req, env, ctx, m[1]!, m[2] ?? "", base);
   m = path.match(/^\/invite\/([A-Za-z0-9_-]{20,80})$/);
   if (m) {
     const token = m[1];
@@ -303,7 +309,7 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
     }
   }
 
-  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/fix|\/replace|\/review|\/pairs|\/lead|\/extend|\/base|\/handover|\/domain|\/domain-check|\/download)?$/);
+  m = path.match(/^\/demos\/([a-z0-9-]+)(\/rewrite|\/rebuild|\/archive|\/outreach|\/change|\/fix|\/replace|\/review|\/pairs|\/lead|\/extend|\/base|\/portal|\/handover|\/domain|\/domain-check|\/download)?$/);
   if (m) {
     const [, slug, action] = m;
     // Always scoped to this account: another account's demo is simply "not found".
@@ -340,6 +346,10 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
         domainTarget: env.FORGE_DOMAIN_TARGET ?? "",
         domainAuto: !!(env.CF_SAAS_ZONE && env.CF_SAAS_TOKEN),
         base: demo.liveVersion ? (await getSetting(env, `base:${slug}`).catch(() => null)) === demo.liveVersion : false,
+        portal: await (async () => {
+          const pt = await portalForSlug(env, slug).catch(() => null);
+          return pt && !pt.revoked ? { url: `${origin}/p/${pt.token}`, pin: !!pt.pinHash, draft: !!pt.draft, log: await portalLog(env, slug, 10) } : null;
+        })(),
       });
     }
     if (action === "/domain" && post) {
@@ -365,62 +375,19 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
       if (!demo.liveVersion) return redirect(withMsg(`/demos/${slug}`, "error", "Wait for the design to finish first."));
       if (demo.handover?.status === "working" && Date.now() - Date.parse(demo.handover.at) < 15 * 60_000)
         return redirect(withMsg(`/demos/${slug}`, "error", "Their photos and details are still going in. Give it a few minutes."));
+      const r = await takeHandover(env, demo, demo.liveVersion, await req.formData(), aiOn);
+      return redirect(withMsg(`/demos/${slug}`, r.ok ? "ok" : "error", r.message));
+    }
+    // The client portal for this site: a new private link (with or without a PIN), or switch it off.
+    if (action === "/portal" && post) {
       const f = await req.formData();
-      const text = (k: string, max = 600) => String(f.get(k) ?? "").trim().slice(0, max);
-      const problems: string[] = [];
-      // Their pictures: files first, then links (each at most 10 MB, and only real images).
-      const fetchImage = async (url: string): Promise<Uint8Array | null> => {
-        const link = asLink(url);
-        if (!/^https:\/\//i.test(link)) return null;
-        try {
-          const r = await fetch(link, { redirect: "follow", signal: AbortSignal.timeout(15_000) });
-          if (!r.ok || !/^image\//i.test(r.headers.get("content-type") ?? "") || Number(r.headers.get("content-length") ?? 0) > 10_000_000) return null;
-          const b = new Uint8Array(await r.arrayBuffer());
-          return b.length <= 10_000_000 ? b : null;
-        } catch {
-          return null;
-        }
-      };
-      const fileBytes = async (v: FormDataEntryValue): Promise<Uint8Array | null> =>
-        typeof v !== "string" && v.size > 0 && v.size <= 10_000_000 && /^image\//i.test(v.type) ? new Uint8Array(await v.arrayBuffer()) : null;
-      const photoSources: (Uint8Array | null)[] = [];
-      for (const v of f.getAll("photos")) if (photoSources.length < 8) photoSources.push(await fileBytes(v));
-      for (const l of text("photoLinks", 4000).split(/\s+/).filter(Boolean)) if (photoSources.length < 8) photoSources.push(await fetchImage(l));
-      const photos: Uint8Array[] = [];
-      for (const b of photoSources) {
-        const fit = b ? await fitImage(env, b, 1600) : null;
-        if (fit) photos.push(fit);
-        else problems.push("a photo couldn't be read");
+      if (String(f.get("do") ?? "") === "close") {
+        await closePortal(env, slug);
+        return redirect(withMsg(`/demos/${slug}`, "ok", "The client link is switched off."));
       }
-      const logoFile = f.get("logo");
-      const logoRaw = (logoFile ? await fileBytes(logoFile) : null) ?? (text("logoLink") ? await fetchImage(text("logoLink")) : null);
-      const logo = logoRaw ? await fitImage(env, logoRaw, 600, "webp") : null;
-      if ((logoFile && typeof logoFile !== "string" && logoFile.size) || text("logoLink")) if (!logo) problems.push("the logo couldn't be read");
-      // Save what came, then swap their photos in at once (no AI needed for that).
-      for (let k = 0; k < photos.length; k++) await saveImage(env, slug, demo.liveVersion, `own-${k + 1}.jpg`, "The business's own photo", photos[k]!);
-      if (photos.length) await useOwnPhotos(env, slug, demo.liveVersion, photos.length);
-      if (logo) await saveImage(env, slug, demo.liveVersion, "logo.webp", "The business's logo", logo);
-      // Their corrected details.
-      const intake = { ...demo.intake };
-      const facts: ("phone" | "address" | "hours" | "reviews")[] = [];
-      for (const k of ["phone", "address", "hours", "reviews"] as const) {
-        const v = text(k, k === "reviews" ? 4000 : 300);
-        if (v && v !== intake[k]) {
-          intake[k] = v;
-          facts.push(k);
-        }
-      }
-      if (facts.length) await updateIntake(env, slug, intake);
-      if (facts.length) await addToBrief(env, slug, demo.liveVersion, facts.map((k) => `${{ phone: "Phone", address: "Address", hours: "Opening hours", reviews: "Real reviews" }[k]}: ${intake[k]}`).join("\n"));
-      const edits = text("edits", 1500);
-      const editPath = text("editPath", 200) || "/";
-      const needsAi = !!(logo || facts.length || edits);
-      if (needsAi && !aiOn) return redirect(withMsg(`/demos/${slug}`, "error", "Their photos are in, but the logo, details and edits need Claude, which is switched off."));
-      if (!photos.length && !needsAi) return redirect(withMsg(`/demos/${slug}`, "error", problems.length ? `Nothing went in: ${problems.join("; ")}.` : "Add their photos, logo, details or what they want changed."));
-      await setHandover(env, slug, { at: new Date().toISOString(), status: needsAi ? "working" : "done", error: "", photos: photos.length, logo: !!logo, facts, edits, editPath });
-      if (needsAi) await env.BUILDS.send({ slug, version: demo.liveVersion, stage: "handover" });
-      const said = [photos.length ? `${photos.length === 1 ? "their photo is" : `${photos.length} of their photos are`} on the site now` : "", needsAi ? "their logo, details and edits are going in (usually 2–5 minutes)" : "", problems.length ? `not used: ${[...new Set(problems)].join("; ")}` : ""].filter(Boolean).join("; ");
-      return redirect(withMsg(`/demos/${slug}`, "ok", `${said.charAt(0).toUpperCase()}${said.slice(1)}.`));
+      const pin = String(f.get("pin") ?? "") === "1" ? newPin() : null;
+      const pt = await openPortal(env, slug, pin);
+      return redirect(withMsg(`/demos/${slug}`, "ok", `New client link ready${pin ? `. Their PIN is ${pin} (shown once: send it separately from the link)` : ""}. Any older link no longer works.`) + "#portal");
     }
     // A good site joins the design library: new builds may be designed on it (owners only).
     if (action === "/base" && post) {
