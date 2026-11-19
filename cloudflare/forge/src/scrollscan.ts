@@ -98,6 +98,9 @@ export const END_JS = `(() => {{
 const SETUP_JS = `(() => { window.__fill = []; window.__hd = []; const hd = document.querySelector("header"); if (hd) new MutationObserver(() => window.__hd.push(performance.now())).observe(hd, { attributes: true, attributeFilter: ["class"] }); return 1; })()`;
 const STEP_JS = `(async () => { for (let s = 0; s < 7; s++) { window.scrollBy(0, 100); await new Promise((r) => setTimeout(r, 25)); } return 1; })()`;
 
+/** Wait (up to 2 s) for the reveal and slide-in animations now running to finish; scroll-linked and endless ones are not waited for. */
+export const SETTLE_JS = `(async () => { const t0 = performance.now(); const busy = () => document.getAnimations().some((a) => a.playState === "running" && a.timeline instanceof DocumentTimeline && Number.isFinite(a.effect?.getComputedTiming().endTime)); while (busy() && performance.now() - t0 < 2000) await new Promise((r) => setTimeout(r, 100)); await new Promise((r) => setTimeout(r, 150)); return 1; })()`;
+
 const list = (x: unknown): string[] => (Array.isArray(x) ? x.filter((s): s is string => typeof s === "string") : []);
 
 /** Scroll the open page from top to bottom and return what was found (each finding once). */
@@ -111,8 +114,10 @@ export async function scrollScan(page: BrowserPage, sleep: (ms: number) => Promi
     await sleep(settle);
     const first = list(await page.evaluate<string[]>(STOP_JS));
     if (!first.length) continue;
-    // Look again a moment later: a finding mid-animation (words passing as they move in) is not one.
-    await sleep(settle * 2);
+    // Look again once the animations have finished: a finding mid-animation (a photo or words passing as they
+    // move in) is not one.
+    await sleep(settle);
+    await page.evaluate(SETTLE_JS);
     const again = new Set(list(await page.evaluate<string[]>(STOP_JS)));
     for (const m of first) if (again.has(m) || !/^text over text|^picture over text|^darkened/.test(m)) found.add(m);
   }

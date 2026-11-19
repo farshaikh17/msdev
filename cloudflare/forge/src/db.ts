@@ -655,8 +655,8 @@ export async function studioMasters(env: Env, tenantId: number, notSlug: string)
     `SELECT v.slug, v.version, json_extract(v.kit, '$.concept') concept, json_extract(v.kit, '$.hero') hero, json_extract(v.kit, '$.theme') theme
        FROM demos d JOIN site_versions v ON v.slug = d.slug AND v.version = d.live_version
       WHERE d.tenant_id = ? AND d.slug != ? AND json_extract(v.kit, '$.style') = 'studio'
-        AND json_extract(v.kit, '$.concept') IS NOT NULL AND json_extract(v.kit, '$.hero') IS NOT NULL
-        AND ((json_extract(v.kit, '$.reuse') IS NULL AND json_extract(v.kit, '$.dna') IS NULL
+        AND ((json_extract(v.kit, '$.concept') IS NOT NULL AND json_extract(v.kit, '$.hero') IS NOT NULL
+          AND json_extract(v.kit, '$.reuse') IS NULL AND json_extract(v.kit, '$.dna') IS NULL
           AND coalesce(json_extract(v.usage, '$.neurons'), 0) = 0 AND coalesce(json_extract(v.usage, '$.cost_usd'), 0) >= 0.5) OR ${PROMOTED})
       ORDER BY v.created_at`,
   )
@@ -671,7 +671,11 @@ export async function setBase(env: Env, slug: string, version: string | null): P
   else await env.DB.prepare("DELETE FROM settings WHERE key = ?").bind(`base:${slug}`).run();
 }
 
-/** Sites promoted to the design library by hand (their version is still the live one). */
+/**
+ * Sites promoted to the design library by hand (their version is still the live one). A promoted design
+ * counts whatever it was built with: an older one with no catalogue look or first screen is still a base
+ * (it keeps its own first screen; a rep's picked look or first screen just won't match it).
+ */
 const PROMOTED = `(v.slug IN (SELECT substr(key, 6) FROM settings WHERE key LIKE 'base:%' AND value = v.version))`;
 
 /**
@@ -683,8 +687,8 @@ export async function standardMasters(env: Env, tenantId: number, notSlug: strin
     `SELECT v.slug, v.version, json_extract(v.kit, '$.dna.look') concept, json_extract(v.kit, '$.dna.hero') hero, json_extract(v.kit, '$.theme') theme
        FROM demos d JOIN site_versions v ON v.slug = d.slug AND v.version = d.live_version
       WHERE d.tenant_id = ? AND d.slug != ? AND coalesce(json_extract(v.kit, '$.style'), 'standard') = 'standard'
-        AND json_extract(v.kit, '$.dna.hero') IN ('place-band', 'letterbox', 'split', 'subject-stage', 'calm-side', 'oversized', 'triptych')
-        AND ((json_extract(v.kit, '$.reuse') IS NULL AND coalesce(json_extract(v.usage, '$.neurons'), 0) = 0 AND coalesce(json_extract(v.usage, '$.cost_usd'), 0) >= 0.3) OR ${PROMOTED})
+        AND ((json_extract(v.kit, '$.dna.hero') IN ('place-band', 'letterbox', 'split', 'subject-stage', 'calm-side', 'oversized', 'triptych')
+          AND json_extract(v.kit, '$.reuse') IS NULL AND coalesce(json_extract(v.usage, '$.neurons'), 0) = 0 AND coalesce(json_extract(v.usage, '$.cost_usd'), 0) >= 0.3) OR ${PROMOTED})
       ORDER BY v.created_at`,
   )
     .bind(tenantId, notSlug)

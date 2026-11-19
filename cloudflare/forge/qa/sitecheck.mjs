@@ -139,6 +139,13 @@ const AT_END = () => {
 
 const VIEWS = { desktop: { viewport: { width: 1440, height: 900 } }, phone: { ...devices["iPhone 13"], deviceScaleFactor: 1 } };
 
+const SETTLE = async () => {
+  const t0 = performance.now();
+  const busy = () => document.getAnimations().some((a) => a.playState === "running" && a.timeline instanceof DocumentTimeline && Number.isFinite(a.effect?.getComputedTiming().endTime));
+  while (busy() && performance.now() - t0 < 2000) await new Promise((r) => setTimeout(r, 100));
+  await new Promise((r) => setTimeout(r, 150));
+};
+
 async function check(browser, u, view, slow) {
   const c = await browser.newContext(VIEWS[view]);
   const p = await c.newPage();
@@ -153,7 +160,15 @@ async function check(browser, u, view, slow) {
     for (let y = 0, k = 0; y < H + 900 && k < 45; y += 700, k++) {
       for (let s = 0; s < 7; s++) { await p.mouse.wheel(0, 100); await p.waitForTimeout(25); }
       await p.waitForTimeout(slow ? 700 : 450);
-      for (const msg of await p.evaluate(AT_EACH_STOP)) if (!issues.has(msg)) {
+      let seen = await p.evaluate(AT_EACH_STOP);
+      // Look again once the animations have finished: something caught mid-animation (a photo or words
+      // sliding in) is not a finding. Scroll-linked and endless animations are not waited for.
+      if (seen.some((m) => /^text over text|^picture over text|^darkened/.test(m))) {
+        await p.evaluate(SETTLE);
+        const again = new Set(await p.evaluate(AT_EACH_STOP));
+        seen = seen.filter((m) => again.has(m) || !/^text over text|^picture over text|^darkened/.test(m));
+      }
+      for (const msg of seen) if (!issues.has(msg)) {
         const shot = slow ? `${OUT}/${u.replace(/\//g, "_")}${view}-${issues.size}.png` : "";
         if (shot) await p.screenshot({ path: shot });
         issues.set(msg, shot);

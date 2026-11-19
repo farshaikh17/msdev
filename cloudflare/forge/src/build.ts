@@ -399,7 +399,8 @@ export async function build(env: Env, job: BuildJob, attempts: number): Promise<
       if (noPhotos && chosen.hero && PHOTO_HEROES.includes(chosen.hero) && chosen.hero !== intake.hero) chosen.hero = undefined;
       // With no photos the idea's own first screen (drawn in type, no picture needed) is the best stand-in.
       if (noPhotos && !chosen.hero && idea && firstScreenOf(idea, HERO_IDS) === "own" && ownScreen(idea).length > 40) chosen.hero = "own";
-      const picked = look ? (chosen.hero ?? pickHero(intake, slug, looks.map((l) => l.hero).filter(Boolean), clips, [...(noObject ? OBJECT_HEROES : []), ...(noPhotos ? PHOTO_HEROES : [])]).id) : undefined;
+      // An older base with no catalogue first screen keeps its own (none is picked for it).
+      const picked = look && !(master && !master.hero) ? (chosen.hero ?? pickHero(intake, slug, looks.map((l) => l.hero).filter(Boolean), clips, [...(noObject ? OBJECT_HEROES : []), ...(noPhotos ? PHOTO_HEROES : [])]).id) : undefined;
       // Still a photo-led first screen with no photo to show: our own type-led first screen instead.
       const heroId = picked && noPhotos && (PHOTO_HEROES.includes(picked) || (noObject && OBJECT_HEROES.includes(picked))) && picked !== intake.hero ? "own" : picked;
       const sig = heroById(heroId);
