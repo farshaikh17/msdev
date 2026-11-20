@@ -81,6 +81,8 @@ const AT_EACH_STOP = () => {
     }
     if (hit) { iss.push(`picture over text: "${(e.innerText || "").trim().slice(0, 40)}"`); break; }
   }
+  // Words over a photo that the page's own readability guard couldn't make readable.
+  for (const t of (window.__fgUnread || []).slice(0, 2)) iss.push(`hard to read over a picture: "${t}"`);
   // A big part of the screen darkened by a filter (the stacked-card black flash).
   for (const e of document.querySelectorAll("main *")) {
     const f = getComputedStyle(e).filter; const m = f.match(/brightness\(([\d.]+)/);

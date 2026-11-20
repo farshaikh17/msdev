@@ -333,11 +333,15 @@ function ratio(a,b){var x=lum(a),y=lum(b);return (Math.max(x,y)+0.05)/(Math.min(
 function behind(e){for(var n=e;n&&n!==document.documentElement;n=n.parentElement){var cs=getComputedStyle(n);if(cs.backgroundImage!=="none"&&!/gradient/.test(cs.backgroundImage))return null;if(/^(IMG|VIDEO|PICTURE)$/.test(n.tagName))return null;var c=rgb(cs.backgroundColor);if(c&&(c.length<4||c[3]>0.85))return c}return rgb(getComputedStyle(document.body).backgroundColor)||[255,255,255]}
 function solid(e){for(var n=e;n&&n!==document.documentElement;n=n.parentElement){var c=rgb(getComputedStyle(n).backgroundColor);if(c&&(c.length<4||c[3]>0.85))return c}return null}
 function overPicture(e){var r=e.getBoundingClientRect(),sec=e.closest("section,header,footer")||document.body;return [].some.call(sec.querySelectorAll("img,video,canvas,.hero-motion"),function(m){if(e.contains(m)||m.contains(e))return false;var q=m.getBoundingClientRect();if(q.width<120||q.height<80)return false;var cs=getComputedStyle(m);if(cs.visibility==="hidden"||+cs.opacity<.1)return false;return q.left<r.right&&q.right>r.left&&q.top<r.bottom&&q.bottom>r.top})}
-function run(){[].forEach.call(document.querySelectorAll("[data-fg-readable]"),function(e){e.style.removeProperty("color");e.style.removeProperty("-webkit-text-fill-color");e.removeAttribute("data-fg-readable")});
+// A photo painted between the words and their solid background (a hero picture under its headline): that is the
+// over-picture guard's to judge, from the picture itself.
+function underPicture(e){var h=e;for(;h&&h!==document.documentElement;h=h.parentElement){var c=rgb(getComputedStyle(h).backgroundColor);if(c&&(c.length<4||c[3]>0.85))break}if(!h||h===document.documentElement)h=document.body;
+var r=e.getBoundingClientRect();return [].some.call(h.querySelectorAll("img,video,canvas"),function(m){if(e.contains(m)||m.contains(e))return false;var q=m.getBoundingClientRect();if(q.width<120||q.height<80)return false;var cs=getComputedStyle(m);if(cs.visibility==="hidden"||+cs.opacity<.1)return false;return q.left<r.right&&q.right>r.left&&q.top<r.bottom&&q.bottom>r.top})}
+function run(){[].forEach.call(document.querySelectorAll("[data-fg-readable]:not([data-fg-pic])"),function(e){e.style.removeProperty("color");e.style.removeProperty("-webkit-text-fill-color");e.removeAttribute("data-fg-readable")});
 var light=[250,250,248],dark=[18,18,20];
 [].forEach.call(document.querySelectorAll("main h1,main h2,main h3,main h4,main p,main li,main a,main button,main label,main blockquote,main figcaption,main span,footer p,footer a,footer li,footer span,footer h2,footer h3"),function(e){
 if(![].some.call(e.childNodes,function(n){return n.nodeType===3&&n.textContent.trim().length>1}))return;
-if(e.closest(".sr-only,.visually-hidden,[data-fg-lit],[class*=marquee i],[class*=ticker i]"))return;
+if(e.closest(".sr-only,.visually-hidden,[data-fg-lit],[data-fg-pic],[class*=marquee i],[class*=ticker i]"))return;
 // Hidden from screen readers is skipped, except the word and line pieces of an animated heading (the heading reads them out).
 var ah=e.closest("[aria-hidden=true]");if(ah&&!ah.closest("h1,h2,h3,h4,p,[data-split]"))return;
 var cs=getComputedStyle(e),head=!!e.closest("h1,h2,h3");if(cs.display==="none"||(!head&&(cs.visibility==="hidden"||parseFloat(cs.opacity)<.3)))return;
@@ -346,11 +350,99 @@ var c=rgb(cs.webkitTextFillColor&&!/transparent|rgba\(0, 0, 0, 0\)/.test(cs.webk
 var bg=behind(e);
 // The same colour as the solid background (a heading set in var(--bg)): wrong whatever else is behind it.
 if(!bg){var sb=solid(e);if(!sb||ratio(c,sb)>=1.25)return;bg=sb}
-else{if(ratio(c,bg)>=1.9)return;if(ratio(c,bg)>=1.25&&overPicture(e))return}
+else{if(underPicture(e))return;if(ratio(c,bg)>=1.9)return;if(ratio(c,bg)>=1.25&&overPicture(e))return}
 var to=ratio(light,bg)>=ratio(dark,bg)?light:dark;var v="rgb("+to.join(",")+")";
 e.style.setProperty("color",v,"important");e.style.setProperty("-webkit-text-fill-color",v,"important");e.setAttribute("data-fg-readable","")})}
 function go(){setTimeout(run,700);setTimeout(run,2600);setTimeout(run,6000)}if(document.readyState==="complete")go();else addEventListener("load",go);
 new MutationObserver(function(){setTimeout(run,60)}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]})})();
+
+// Words over a photo or video read in light and dark mode alike. What is actually behind each line (the photo's own
+// pixels, sampled, under every overlay and tint painted between) is measured. Words that don't stand out enough are
+// fixed the gentlest way that works: the photo darkened a little (the designer's colour kept), else the words in white
+// or near-black, else white words on a photo darkened enough (never below 45% of its light). Patterns, icons and pictures it can't read are left alone.
+(function(){
+function rgba(v){var m=(v||"").match(/[0-9.]+/g);return m&&m.length>=3?[+m[0],+m[1],+m[2],m.length>3?+m[3]:1]:null}
+function lin(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)}
+function lum(c){return 0.2126*lin(c[0])+0.7152*lin(c[1])+0.0722*lin(c[2])}
+function ratio(a,b){return (Math.max(a,b)+0.05)/(Math.min(a,b)+0.05)}
+var grids=new Map(),bgImgs={};
+// A photo's light, as a small grid laid out the way it is drawn (cover, contain or stretched).
+function grid(m,src,nw,nh,fit,q){var key=Math.round(q.width)+"x"+Math.round(q.height)+src;var c=grids.get(m);if(c&&c.key===key&&m.tagName!=="VIDEO")return c;
+var W=64,H=Math.max(8,Math.round(64*q.height/q.width));var cv=document.createElement("canvas");cv.width=W;cv.height=H;var g=cv.getContext("2d");
+try{if(fit==="fill")g.drawImage(src,0,0,W,H);else{var sc=fit==="contain"?Math.min(q.width/nw,q.height/nh):Math.max(q.width/nw,q.height/nh);var dw=nw*sc*W/q.width,dh=nh*sc*H/q.height;g.drawImage(src,(W-dw)/2,(H-dh)/2,dw,dh)}
+var d=g.getImageData(0,0,W,H).data,L=new Float32Array(W*H);for(var i=0;i<W*H;i++)L[i]=lum([d[i*4],d[i*4+1],d[i*4+2]]);c={key:key,W:W,H:H,L:L};grids.set(m,c);return c}catch(err){return null}}
+function photoUrl(cs){if(cs.backgroundImage.indexOf("gradient")>=0&&cs.backgroundImage.indexOf("url(")<0)return null;var u=(cs.backgroundImage.match(/url[(]"?([^")]+)"?[)]/)||[])[1];
+if(!u||/^data:image[/]svg|[.]svg([?#]|$)/i.test(u)||/repeat/.test(cs.backgroundRepeat)&&!/no-repeat/.test(cs.backgroundRepeat)&&cs.backgroundSize!=="cover")return null;return u}
+// The photo element under a point, if it is one (an <img>, <video> or <canvas> big enough, or a box with a raster photo background).
+function isPhoto(n,cs){var q=n.getBoundingClientRect();if(q.width<120||q.height<80)return false;if(/^(IMG|VIDEO|CANVAS)$/.test(n.tagName))return !/[.]svg([?#]|$)/i.test(n.currentSrc||"");return !!photoUrl(cs)}
+function lightOf(m,box){var q=m.getBoundingClientRect(),g=null;
+if(/^(IMG|VIDEO|CANVAS)$/.test(m.tagName)){var nw=m.videoWidth||m.naturalWidth||m.width,nh=m.videoHeight||m.naturalHeight||m.height;if(nw&&nh)g=grid(m,m,nw,nh,m.tagName==="CANVAS"?"fill":getComputedStyle(m).objectFit,q)}
+else{var cs=getComputedStyle(m),u=photoUrl(cs);if(u){var im=bgImgs[u];if(!im){im=bgImgs[u]=new Image();im.onload=function(){setTimeout(run,50)};im.src=u}
+if(im.complete&&im.naturalWidth)g=grid(m,im,im.naturalWidth,im.naturalHeight,cs.backgroundSize==="contain"?"contain":"cover",q)}}
+if(!g)return null;var v=[];var x0=Math.floor((box.left-q.left)/q.width*g.W),x1=Math.ceil((box.right-q.left)/q.width*g.W),y0=Math.floor((box.top-q.top)/q.height*g.H),y1=Math.ceil((box.bottom-q.top)/q.height*g.H);
+for(var y=Math.max(0,y0);y<Math.min(g.H,y1);y++)for(var x=Math.max(0,x0);x<Math.min(g.W,x1);x++)v.push(g.L[y*g.W+x]);
+if(!v.length)return null;v.sort(function(a,b){return a-b});var lo=v[Math.floor(v.length*.25)],hi=v[Math.min(v.length-1,Math.floor(v.length*.75))];
+return m.tagName==="VIDEO"?[Math.max(0,lo-.08),Math.min(1,hi+.12)]:[lo,hi]}
+// A linear gradient's tint at a point (angle, stops, positions); null where it can't be read.
+function gradAt(n,cs,x,y){var s=cs.backgroundImage;if(s.indexOf("linear-gradient(")!==0||s.indexOf("gradient(",10)>=0)return null;
+var inner=s.slice(16,s.lastIndexOf(")")),parts=[],dep=0,cur="";for(var i=0;i<inner.length;i++){var ch=inner[i];if(ch==="(")dep++;if(ch===")")dep--;if(ch===","&&!dep){parts.push(cur.trim());cur=""}else cur+=ch}parts.push(cur.trim());
+var ang=180,m0=parts[0].match(/^(-?[0-9.]+)deg$/),to={"to top":0,"to right":90,"to bottom":180,"to left":270};if(m0){ang=+m0[1];parts.shift()}else if(parts[0] in to){ang=to[parts.shift()]}else if(/^to /.test(parts[0]))return null;
+var stops=parts.map(function(p){var c=rgba(p),pm=p.match(/[)] *([0-9.]+)%/);return {c:c,at:pm?+pm[1]/100:null}}).filter(function(o){return o.c});if(stops.length<2)return null;
+stops.forEach(function(o,k){if(o.at===null)o.at=k/(stops.length-1)});
+var q=n.getBoundingClientRect(),a=ang*Math.PI/180,L=Math.abs(q.width*Math.sin(a))+Math.abs(q.height*Math.cos(a));if(!L)return null;
+var t=((x-q.left-q.width/2)*Math.sin(a)-(y-q.top-q.height/2)*Math.cos(a))/L+.5;
+var A=stops[0],B=stops[stops.length-1];for(var k=0;k<stops.length-1;k++)if(t>=stops[k].at&&t<=stops[k+1].at){A=stops[k];B=stops[k+1];break}
+var f=B.at>A.at?Math.max(0,Math.min(1,(t-A.at)/(B.at-A.at))):0,al=(A.c[3]*(1-f)+B.c[3]*f)*+cs.opacity;
+return [lum(A.c)*(1-f)+lum(B.c)*f,al,al]}
+// What lies behind a point of the words: the photo's light range there and the tints over it; null for a solid colour or no photo.
+function backdrop(e,x,y){var stack=document.elementsFromPoint(x,y),i=-1;for(var k=0;k<stack.length;k++)if(stack[k]===e||e.contains(stack[k])){i=k;break}if(i<0)return null;
+var layers=[];for(var k=i;k<stack.length;k++){var n=stack[k];if(n!==e&&e.contains(n))continue;var cs=getComputedStyle(n);
+if(n!==e&&+cs.opacity<.5&&(/^(IMG|VIDEO|CANVAS)$/.test(n.tagName)||photoUrl(cs)))continue;
+if(n!==e&&isPhoto(n,cs)){var r=e.getBoundingClientRect(),h=Math.max(12,r.height/2),rg=lightOf(n,{left:x-h,right:x+h,top:r.top,bottom:r.bottom});return rg?{lo:rg[0],hi:rg[1],layers:layers,media:n}:{unknown:true}}
+var op=+cs.opacity,b=rgba(cs.backgroundColor);if(b&&b[3]*op>=.94)return null;if(b&&b[3]>0)layers.push([lum(b),b[3]*op,b[3]*op]);
+if(cs.backgroundImage!=="none"){var ga=gradAt(n,cs,x,y);if(ga)layers.push(ga);else if(cs.backgroundImage.indexOf("gradient")>=0){var cols=cs.backgroundImage.match(/rgba?[(][^)]*[)]/g)||[];
+if(cols.length){var ls=cols.map(rgba),al=ls.map(function(c){return c[3]*op});var mn=Math.min.apply(null,al);if(mn>0)layers.push([ls.reduce(function(s,c){return s+lum(c)},0)/ls.length,mn,mn])}}
+else if(cs.backgroundImage.indexOf("url(")>=0)return null}}
+return null}
+// The light behind the words with the photo darkened by k (a CSS brightness, so the light falls by about k^2.2).
+function under(p,k){var f=Math.pow(k,2.2),lo=p.lo*f,hi=p.hi*f;for(var j=p.layers.length-1;j>=0;j--){var l=p.layers[j],vals=[lo*(1-l[1])+l[0]*l[1],lo*(1-l[2])+l[0]*l[2],hi*(1-l[1])+l[0]*l[1],hi*(1-l[2])+l[0]*l[2]];lo=Math.min.apply(null,vals);hi=Math.max.apply(null,vals)}return [lo,hi]}
+function score(t,pts,k){var w=99;pts.forEach(function(p){var u=under(p,k),s=t>=u[0]&&t<=u[1]?1:Math.min(ratio(t,u[0]),ratio(t,u[1]));if(s<w)w=s});return w}
+var SEL="main h1,main h2,main h3,main h4,main p,main li,main a,main button,main label,main blockquote,main figcaption,main span,main small,main strong,main em,main div,main dt,main dd";
+var done=new WeakSet();window.__fgUnread=[];
+function reset(){[].forEach.call(document.querySelectorAll("[data-fg-pic]"),function(e){["color","-webkit-text-fill-color","text-shadow","border-color"].forEach(function(p){e.style.removeProperty(p)});e.removeAttribute("data-fg-pic")});
+[].forEach.call(document.querySelectorAll("[data-fg-dim]"),function(m){m.style.filter=m.getAttribute("data-fg-dim");m.removeAttribute("data-fg-dim")});window.__fgUnread=[];done=new WeakSet()}
+function dim(m,k){if(!/^(IMG|VIDEO|CANVAS)$/.test(m.tagName))return false;var cur=parseFloat(((m.style.filter||"").match(/brightness[(]([0-9.]+)/)||[])[1]||"1");if(k>=cur)return true;
+var was=m.hasAttribute("data-fg-dim")?m.getAttribute("data-fg-dim"):(m.style.filter||"");m.setAttribute("data-fg-dim",was);m.style.filter=(was&&was!=="none"?was+" ":"")+"brightness("+k.toFixed(2)+")";return true}
+function run(){var pe=document.createElement("style");pe.textContent="main *{pointer-events:auto!important}";document.head.appendChild(pe);
+try{[].forEach.call(document.querySelectorAll(SEL),function(e){if(done.has(e))return;
+if(![].some.call(e.childNodes,function(n){return n.nodeType===3&&n.textContent.trim().length>1}))return;
+if(e.closest(".sr-only,.visually-hidden,[data-fg-lit],[class*=marquee i],[class*=ticker i]"))return;
+var ah=e.closest("[aria-hidden=true]");if(ah&&!ah.closest("h1,h2,h3,h4,p"))return;
+var cs=getComputedStyle(e);if(cs.display==="none"||cs.visibility==="hidden"||+cs.opacity<.5)return;
+var r=e.getBoundingClientRect();if(r.width<8||r.height<8||r.top<0||r.bottom>innerHeight||r.left<0||r.right>innerWidth)return;
+var col=rgba(cs.webkitTextFillColor&&!/transparent|rgba[(]0, 0, 0, 0[)]/.test(cs.webkitTextFillColor)?cs.webkitTextFillColor:cs.color);if(!col||col[3]<.35)return;
+var pts=[],media=null,unknown=false,y=r.top+r.height/2;[r.left+Math.min(10,r.width/4),r.left+r.width*.3,r.left+r.width*.55,r.left+r.width*.8].forEach(function(x){var b=backdrop(e,x,y);if(!b)return;if(b.unknown){unknown=true;return}pts.push(b);media=b.media});
+if(unknown&&!pts.length)return;if(!pts.length){done.add(e);return}
+// A photo whose pixels aren't in yet (still loading) is looked at again later.
+done.add(e);var fs=parseFloat(cs.fontSize),big=fs>=24||(fs>=18.6&&+cs.fontWeight>=600),need=big?3:4.5,t=lum(col);
+if(score(t,pts,1)>=need)return;
+var set=function(c,sh){e.style.setProperty("color",c,"important");e.style.setProperty("-webkit-text-fill-color",c,"important");if(sh)e.style.setProperty("text-shadow",sh,"important");
+var bc=rgba(cs.borderTopColor);if(parseFloat(cs.borderTopWidth)>0&&bc&&Math.abs(lum(bc)-t)<.02)e.style.setProperty("border-color",c,"important");e.setAttribute("data-fg-pic","")};
+var canDim=/^(IMG|VIDEO|CANVAS)$/.test(media.tagName)&&!media.contains(e);
+// 1. Light words: the photo darkened a little keeps the designer's colour.
+if(canDim&&t>.18)for(var k=.95;k>=.6;k-=.05)if(score(t,pts,k)>=need){dim(media,k);e.setAttribute("data-fg-pic","");return}
+// 2. White or near-black words, whichever reads as the photo is.
+var W=1,D=lum([17,17,17]);if(score(W,pts,1)>=need){set("#ffffff","0 1px 3px rgba(0,0,0,.35)");return}if(score(D,pts,1)>=need){set("#111111","0 1px 3px rgba(255,255,255,.35)");return}
+// 3. White words, and the photo darkened as much as it takes (never below 45% of its light).
+set("#ffffff","0 1px 2px rgba(0,0,0,.6),0 2px 14px rgba(0,0,0,.45)");
+if(canDim){for(var k2=.95;k2>=.45;k2-=.05)if(score(W,pts,k2)>=need||k2<.5){dim(media,k2);if(score(W,pts,k2)>=need)return;break}}
+window.__fgUnread.push((e.innerText||"").trim().slice(0,40))})}finally{pe.remove()}}
+var tm=0;function soon(){if(tm)return;tm=setTimeout(function(){tm=0;run()},200)}
+function go(){run();setTimeout(run,600);setTimeout(run,2000);setTimeout(run,5000)}
+if(document.readyState==="complete")go();else addEventListener("load",go);
+addEventListener("scroll",soon,{passive:true});addEventListener("resize",function(){reset();soon()});
+new MutationObserver(function(){reset();setTimeout(run,30)}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",function(){reset();setTimeout(run,30)})}catch(err){}})();
 
 // The first screen's words sit above its pictures: a headline block that runs into the photo card beside it
 // (a breakout or split hero whose columns overlap) is lifted over the card, so no line is cut by it.
