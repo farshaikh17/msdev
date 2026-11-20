@@ -39,4 +39,9 @@ describe("sample review quotes", () => {
     expect(out).not.toMatch(/add your city|Sample text/);
     expect(out).toContain("great food.");
   });
+  it("drops a box that only holds a heading", () => {
+    const out = sampleQuotes('<div class="contact-block">\n  <h3>Phone</h3>\n  \n</div><div class="contact-block"><h3>Office</h3><address>1 Main St</address></div>');
+    expect(out).not.toContain(">Phone<");
+    expect(out).toContain("1 Main St");
+  });
 });

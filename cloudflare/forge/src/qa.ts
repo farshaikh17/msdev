@@ -203,7 +203,9 @@ const OWNER_NOTE = /[^<>.]*\bbelong here, in the owner's own words\.[^<>]*?(?=<)
 export function sampleQuotes(html: string): string {
   let k = 0;
   const out = html.replace(SAMPLE_QUOTE, (_m, open: string, close: string) => `${open}${SAMPLE_LINES[k++ % SAMPLE_LINES.length]}${close}`).replace(OWNER_NOTE, "We would rather show you than tell you: come in, ask anything, and judge us by how the visit feels.");
-  return PLACEHOLDERS.reduce((h, [re, to]) => h.replace(re, to), out);
+  // A box holding only a short heading and nothing under it (a "Phone" block with no number given) goes.
+  const bare = out.replace(/<div([^>]*)>\s*<h([2-4])[^>]*>[^<]{1,40}<\/h\2>\s*<\/div>/g, (m, attrs: string) => (/data-|id=/.test(attrs) ? m : ""));
+  return PLACEHOLDERS.reduce((h, [re, to]) => h.replace(re, to), bare);
 }
 
 export function qaFixHtml(html: string, footer: { hasPrivacy: boolean; hasTerms: boolean }): string {
