@@ -202,7 +202,7 @@ const OWNER_NOTE = /[^<>.]*\bbelong here, in the owner's own words\.[^<>]*?(?=<)
 /** Instruction-like sample reviews become short, plain sample quotes (still under their "Sample review" label); notes to the owner go. */
 export function sampleQuotes(html: string): string {
   let k = 0;
-  const out = html.replace(SAMPLE_QUOTE, (_m, open: string, close: string) => `${open}${SAMPLE_LINES[k++ % SAMPLE_LINES.length]}${close}`).replace(OWNER_NOTE, "");
+  const out = html.replace(SAMPLE_QUOTE, (_m, open: string, close: string) => `${open}${SAMPLE_LINES[k++ % SAMPLE_LINES.length]}${close}`).replace(OWNER_NOTE, "We would rather show you than tell you: come in, ask anything, and judge us by how the visit feels.");
   return PLACEHOLDERS.reduce((h, [re, to]) => h.replace(re, to), out);
 }
 
@@ -289,7 +289,7 @@ if([].some.call(sec.querySelectorAll("img"),function(i){return !i.closest("[data
 // A see-through header whose text can't be read against what is behind it (light text over a light
 // section, often in the other theme) gets a solid background and the page's ink colour until it can.
 (function(){var hd=document.querySelector("body>header,header");if(!hd)return;
-function rgb(v){var m=(v||"").match(/[0-9.]+/g);return m&&m.length>=3?m.map(Number):null}
+function rgb(v){v=v||"";var o=v.indexOf("("),m=(o>=0?v.slice(o+1,v.indexOf(")",o)>o?v.indexOf(")",o):v.length):v).match(/[0-9.]+/g);if(!m||m.length<3)return null;m=m.map(Number);if(v.indexOf("color(")>=0){m[0]*=255;m[1]*=255;m[2]*=255}return m}
 function lum(c){var a=[c[0],c[1],c[2]].map(function(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)});return 0.2126*a[0]+0.7152*a[1]+0.0722*a[2]}
 function behind(){var r=hd.getBoundingClientRect();var y=Math.min(innerHeight-1,Math.max(0,r.bottom+6));var els=document.elementsFromPoint(innerWidth/2,y);
 for(var i=0;i<els.length;i++){if(hd.contains(els[i]))continue;for(var n=els[i];n&&n!==document.documentElement;n=n.parentElement){var st=getComputedStyle(n);
@@ -330,13 +330,15 @@ if(document.readyState==="complete")setTimeout(fix,300);else addEventListener("l
 // within a whisker of its solid background (a writer setting text in the background colour, or one mode's ink
 // left on the other mode's paper) takes whichever of the page's two inks reads. Text over photos and big faded
 // watermark words are left as designed.
-(function(){function rgb(v){var m=(v||"").match(/[0-9.]+/g);return m&&m.length>=3?m.map(Number):null}
+(function(){function rgb(v){v=v||"";var o=v.indexOf("("),m=(o>=0?v.slice(o+1,v.indexOf(")",o)>o?v.indexOf(")",o):v.length):v).match(/[0-9.]+/g);if(!m||m.length<3)return null;m=m.map(Number);if(v.indexOf("color(")>=0){m[0]*=255;m[1]*=255;m[2]*=255}return m}
 function lum(c){var a=[c[0],c[1],c[2]].map(function(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)});return 0.2126*a[0]+0.7152*a[1]+0.0722*a[2]}
 function ratio(a,b){var x=lum(a),y=lum(b);return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05)}
 function gradColor(s){var cols=(s.match(/rgba?[(][^)]*[)]/g)||[]).map(rgb).filter(Boolean);if(!cols.length)return null;var al=cols.reduce(function(t,c){return t+(c.length>3?c[3]:1)},0)/cols.length;if(al<.85)return null;
 return [0,1,2].map(function(i){return Math.round(cols.reduce(function(t,c){return t+c[i]},0)/cols.length)})}
 // A band painted with a solid-enough gradient (a dark call-to-action band) is the colour behind its words, not the page under it.
-function behind(e){for(var n=e;n&&n!==document.documentElement;n=n.parentElement){var cs=getComputedStyle(n);if(cs.backgroundImage!=="none"&&!/gradient/.test(cs.backgroundImage))return null;if(/gradient/.test(cs.backgroundImage)&&cs.backgroundImage.indexOf("url(")<0){var gc=gradColor(cs.backgroundImage);if(gc)return gc}if(/^(IMG|VIDEO|PICTURE)$/.test(n.tagName))return null;var c=rgb(cs.backgroundColor);if(c&&(c.length<4||c[3]>0.85))return c}return rgb(getComputedStyle(document.body).backgroundColor)||[255,255,255]}
+// A card whose panel colour is drawn by a ::before/::after layer (absolutely placed, solid) has that colour behind its words.
+function pseudoBg(n){var out=null;["::before","::after"].forEach(function(ps){if(out)return;var c=getComputedStyle(n,ps);if(!c||c.content==="none"||c.content==="normal"||!/absolute|fixed/.test(c.position)||+c.opacity<.9)return;var b=rgb(c.backgroundColor);if(b&&(b.length<4||b[3]>.85)){var q2=n.getBoundingClientRect();if(q2.width>40&&q2.height>30)out=b}});return out}
+function behind(e){for(var n=e;n&&n!==document.documentElement;n=n.parentElement){var cs=getComputedStyle(n);var pb=pseudoBg(n);if(pb){var own=rgb(cs.backgroundColor);if(!(own&&(own.length<4||own[3]>0.85)))return pb}if(cs.backgroundImage!=="none"&&!/gradient/.test(cs.backgroundImage))return null;if(/gradient/.test(cs.backgroundImage)&&cs.backgroundImage.indexOf("url(")<0){var gc=gradColor(cs.backgroundImage);if(gc)return gc}if(/^(IMG|VIDEO|PICTURE)$/.test(n.tagName))return null;var c=rgb(cs.backgroundColor);if(c&&(c.length<4||c[3]>0.85))return c}return rgb(getComputedStyle(document.body).backgroundColor)||[255,255,255]}
 function solid(e){for(var n=e;n&&n!==document.documentElement;n=n.parentElement){var c=rgb(getComputedStyle(n).backgroundColor);if(c&&(c.length<4||c[3]>0.85))return c}return null}
 function overPicture(e){var r=e.getBoundingClientRect(),sec=e.closest("section,header,footer")||document.body;return [].some.call(sec.querySelectorAll("img,video,canvas,.hero-motion"),function(m){if(e.contains(m)||m.contains(e))return false;var q=m.getBoundingClientRect();if(q.width<120||q.height<80)return false;var cs=getComputedStyle(m);if(cs.visibility==="hidden"||+cs.opacity<.1)return false;return q.left<r.right&&q.right>r.left&&q.top<r.bottom&&q.bottom>r.top})}
 // A photo painted between the words and their solid background (a hero picture under its headline): that is the
@@ -352,12 +354,12 @@ if(e.closest(".sr-only,.visually-hidden,[data-fg-lit],[data-fg-pic],[class*=marq
 // Hidden from screen readers is skipped, except the word and line pieces of an animated heading (the heading reads them out).
 var ah=e.closest("[aria-hidden=true]");if(ah&&!ah.closest("h1,h2,h3,h4,p,[data-split]"))return;
 var cs=getComputedStyle(e),head=!!e.closest("h1,h2,h3");if(cs.display==="none"||(!head&&(cs.visibility==="hidden"||parseFloat(cs.opacity)<.3)))return;
-var fs=parseFloat(cs.fontSize);if(fs>180&&!e.closest("h1,h2"))return;
+var fs=parseFloat(cs.fontSize),deco=fs>180&&!e.closest("h1,h2");
 var c=rgb(cs.webkitTextFillColor&&!/transparent|rgba\(0, 0, 0, 0\)/.test(cs.webkitTextFillColor)?cs.webkitTextFillColor:cs.color);if(!c||(c.length>3&&c[3]<.35))return;
 var bg=behind(e);
 // The same colour as the solid background (a heading set in var(--bg)): wrong whatever else is behind it.
 if(!bg){var sb=solid(e);if(!sb)return;var fz=parseFloat(cs.fontSize),big2=fz>=24||(fz>=18.6&&+cs.fontWeight>=600);if(ratio(c,sb)>=1.25&&(underPicture(e)||ratio(c,sb)>=(big2?2.2:3)))return;bg=sb}
-else{if(underPicture(e))return;var fsz=parseFloat(cs.fontSize),lg=fsz>=24||(fsz>=18.6&&+cs.fontWeight>=600);if(ratio(c,bg)>=(lg?2.2:3))return}
+else{if(underPicture(e))return;var fsz=parseFloat(cs.fontSize),lg=fsz>=24||(fsz>=18.6&&+cs.fontWeight>=600);if(ratio(c,bg)>=(deco?1.5:lg?2.2:3))return}
 var to=ratio(light,bg)>=ratio(dark,bg)?light:dark;var v="rgb("+to.join(",")+")";
 e.style.setProperty("color",v,"important");e.style.setProperty("-webkit-text-fill-color",v,"important");e.setAttribute("data-fg-readable","")})}
 function go(){setTimeout(run,700);setTimeout(run,2600);setTimeout(run,6000)}if(document.readyState==="complete")go();else addEventListener("load",go);
@@ -397,7 +399,7 @@ addEventListener("scroll",soon,{passive:true})})();
 
 // Any screen: a paragraph squeezed into a sliver (one or two words a line: a column template or fixed width the layout
 // forgot to widen) gets room: the boxes holding it span their row and drop their narrow width, until it reads in lines.
-(function(){function room(){var W=document.documentElement.clientWidth,min=Math.min(220,W*.5);
+(function(){function room(){var W=document.documentElement.clientWidth,min=W<700?Math.min(200,W*.5):120;
 document.querySelectorAll("main p,main li,main blockquote,main dd,main div").forEach(function(e){
 if(![].some.call(e.childNodes,function(n){return n.nodeType===3&&n.textContent.trim().length>1}))return;
 var t=(e.textContent||"").trim();if(t.length<80)return;var r=e.getBoundingClientRect();if(!r.width||r.width>=min||r.height<60)return;
@@ -416,7 +418,7 @@ if(document.readyState==="complete")go();else addEventListener("load",go);addEve
 // box go (they describe the empty shape, not the photo).
 // Swatches, stat cards, buttons, forms, maps, decoration and anything with real words in it are left alone.
 (function(){
-function rgba(v){var m=(v||"").match(/[0-9.]+/g);return m&&m.length>=3?[+m[0],+m[1],+m[2],m.length>3?+m[3]:1]:null}
+function rgba(v){v=v||"";var o=v.indexOf("("),m=(o>=0?v.slice(o+1,v.indexOf(")",o)>o?v.indexOf(")",o):v.length):v).match(/[0-9.]+/g);if(!m||m.length<3)return null;var k=v.indexOf("color(")>=0?255:1;return [+m[0]*k,+m[1]*k,+m[2]*k,m.length>3?+m[3]:1]}
 var SKIP=/(swatch|chip|colou?r|palette|stat|count|number|badge|logo|map|chart|bar|line|divider|rule|marquee|track|ticker|blob|shape|deco|orb|glow|grain|noise|overlay|scrim|backdrop|cursor|dot|progress|skeleton)/i;
 function photos(){return [].map.call(document.querySelectorAll("img"),function(i){return i.currentSrc||i.src||""}).filter(function(s){return /[/]_img[/][a-z0-9]+[/](photo|own)-[0-9]+[.]jpg/.test(s)})}
 function run(){var used=photos(),list=window.__fgPhotos||[];if(!used.length&&!list.length)return;var base=(used[0]||list[0]||"").replace(/(photo|own)-[0-9]+[.]jpg.*$/,"");
@@ -660,6 +662,18 @@ var ls=kids.map(function(c){return c.getBoundingClientRect().left});if(Math.max.
 var bad=kids.some(function(c){var r=c.getBoundingClientRect(),words=(c.textContent||"").trim().length;return r.right>W+2||c.scrollWidth>c.clientWidth+4||(words>40&&r.width<W*0.45&&!c.matches("img,picture,video,figure"))});
 if(!bad)return;g.style.gridTemplateColumns="minmax(0,1fr)";g.style.gridTemplateAreas="none";kids.forEach(function(c){c.style.gridColumn="1 / -1";c.style.gridRow="auto";c.style.gridArea="auto";c.style.maxWidth="100%";c.style.minWidth="0"})})}
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(one,700)});else setTimeout(one,1000);addEventListener("orientationchange",function(){setTimeout(one,300)})})();
+
+// Any screen: big words wider than their own box (a large figure or word in a narrow column, running into its
+// neighbour) are set smaller until they fit, down to 55% of their size. Marquees, sideways tracks and giant
+// decorative words are left alone.
+(function(){function fit(){document.querySelectorAll("main p,main span,main strong,main b,main div,main h2,main h3,main dd,main dt").forEach(function(e){
+if(![].some.call(e.childNodes,function(n){return n.nodeType===3&&n.textContent.trim().length>1}))return;
+var cs=getComputedStyle(e),fs=parseFloat(cs.fontSize);if(fs<26||cs.display.indexOf("inline")===0)return;
+if(e.closest("[aria-hidden=true],[data-word],[class*=marquee i],[class*=ticker i],[class*=track i],[class*=carousel i],[class*=slider i],header,nav,footer"))return;
+var r=e.getBoundingClientRect();if(!r.width||r.width>innerWidth*.9)return;if(e.scrollWidth<=e.clientWidth+4)return;
+for(var k=0,f=fs;k<12&&e.scrollWidth>e.clientWidth+2&&f>fs*.55;k++){f=Math.max(fs*.55,f*.93);e.style.setProperty("font-size",f.toFixed(1)+"px","important")}
+e.setAttribute("data-fg-fit","")})}
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(fit,500);setTimeout(fit,2200)});else setTimeout(fit,1200);addEventListener("resize",function(){clearTimeout(fit.t);fit.t=setTimeout(fit,400)})})();
 
 // Any screen: the main headline's words never run past the edge of the screen (or are cut off by their box):
 // it is set smaller until its last line ends inside, down to 55% of its size.
