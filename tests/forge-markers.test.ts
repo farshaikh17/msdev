@@ -33,4 +33,10 @@ describe("sample review quotes", () => {
     const out = sampleQuotes("<p>We keep it simple. The specific ways we keep that promise belong here, in the owner's own words. We would rather leave the space open than fill it with guesses.</p>");
     expect(out).not.toMatch(/owner's own words/);
   });
+  it("replaces placeholder lines a visitor would see", () => {
+    const out = sampleQuotes("<p>Hours coming soon</p><p>Service area map — add your city to show it here</p><blockquote>Sample text: great food.</blockquote>");
+    expect(out).toContain("Call for today's hours");
+    expect(out).not.toMatch(/add your city|Sample text/);
+    expect(out).toContain("great food.");
+  });
 });
