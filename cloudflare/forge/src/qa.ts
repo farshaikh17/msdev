@@ -340,8 +340,9 @@ function gradColor(s){var parts=[],dep=0,cur="";for(var i=0;i<s.length;i++){var 
 for(var j=parts.length-1;j>=0;j--){if(parts[j].indexOf("gradient(")<0)continue;var cols=(parts[j].match(/(?:rgba?|color)[(][^)]*[)]/g)||[]).map(rgb).filter(Boolean);if(!cols.length)continue;var al=cols.reduce(function(t,c){return t+(c.length>3?c[3]:1)},0)/cols.length;if(al<.85)continue;
 return [0,1,2].map(function(k){return Math.round(cols.reduce(function(t,c){return t+c[k]},0)/cols.length)})}return null}
 // A band painted with a solid-enough gradient (a dark call-to-action band) is the colour behind its words, not the page under it.
-// A card whose panel colour is drawn by a ::before/::after layer (absolutely placed, solid) has that colour behind its words.
-function pseudoBg(n){var out=null;["::before","::after"].forEach(function(ps){if(out)return;var c=getComputedStyle(n,ps);if(!c||c.content==="none"||c.content==="normal"||!/absolute|fixed/.test(c.position)||+c.opacity<.9)return;var b=rgb(c.backgroundColor);if(b&&(b.length<4||b[3]>.85)){var q2=n.getBoundingClientRect();if(q2.width>40&&q2.height>30)out=b}});return out}
+// A card whose panel colour is drawn by a ::before/::after layer (absolutely placed, solid, covering most of the card) has
+// that colour behind its words. A small one (a dot, a line, a badge) is decoration, not the panel.
+function pseudoBg(n){var out=null;["::before","::after"].forEach(function(ps){if(out)return;var c=getComputedStyle(n,ps);if(!c||c.content==="none"||c.content==="normal"||!/absolute|fixed/.test(c.position)||+c.opacity<.9)return;var b=rgb(c.backgroundColor);if(b&&(b.length<4||b[3]>.85)){var q2=n.getBoundingClientRect(),pw=parseFloat(c.width),ph=parseFloat(c.height);if(q2.width>40&&q2.height>30&&pw>=q2.width*.6&&ph>=q2.height*.6)out=b}});return out}
 // A background image counts as a photo only on a big box, as a raster picture drawn once (not a texture, pattern or icon).
 function photoBg(n,cs){var u=(cs.backgroundImage.match(/url[(]"?([^")]+)"?[)]/)||[])[1];if(!u||/^data:image[/]svg|[.]svg([?#]|$)/i.test(u))return false;var q2=n.getBoundingClientRect();if(q2.width<120||q2.height<80)return false;return !(/repeat/.test(cs.backgroundRepeat)&&!/no-repeat/.test(cs.backgroundRepeat)&&cs.backgroundSize!=="cover")}
 // What is really painted under the words where they sit on screen (a panel can be a sibling layered behind them, not a
@@ -524,7 +525,7 @@ function backdrop(e,x,y){var stack=document.elementsFromPoint(x,y),i=-1;for(var 
 var layers=[];for(var k=i;k<stack.length;k++){var n=stack[k];if(n!==e&&e.contains(n))continue;var cs=getComputedStyle(n);
 if(n!==e&&+cs.opacity<.5&&(/^(IMG|VIDEO|CANVAS)$/.test(n.tagName)||photoUrl(cs)))continue;
 if(n!==e&&isPhoto(n,cs)){pseudoTints(n,e,x,y,layers);var r=e.getBoundingClientRect(),h=Math.max(12,r.height/2),rg=lightOf(n,{left:x-h,right:x+h,top:r.top,bottom:r.bottom});return rg?{lo:rg[0],hi:rg[1],layers:layers,media:n}:{unknown:true}}
-var op=+cs.opacity,b=rgba(cs.backgroundColor);if(b&&b[3]*op>=.94)return null;if(b&&b[3]>0)layers.push([lum(b),b[3]*op,b[3]*op]);
+var op=+cs.opacity,b=rgba(cs.backgroundColor);if(b&&b[3]*op>=.94)return {solid:true};if(b&&b[3]>0)layers.push([lum(b),b[3]*op,b[3]*op]);
 if(cs.backgroundImage!=="none"){var ga=gradAt(n,cs,x,y);if(ga)layers.push(ga);else if(cs.backgroundImage.indexOf("gradient")>=0){var cols=cs.backgroundImage.match(/(?:rgba?|color)[(][^)]*[)]/g)||[];
 if(cols.length){var ls=cols.map(rgba),al=ls.map(function(c){return c[3]*op});var mn=Math.min.apply(null,al);if(mn>0)layers.push([ls.reduce(function(s,c){return s+lum(c)},0)/ls.length,mn,mn])}}
 else if(cs.backgroundImage.indexOf("url(")>=0)return null}}
@@ -550,9 +551,13 @@ if(![].some.call(e.childNodes,function(n){return n.nodeType===3&&n.textContent.t
 if(e.closest(".sr-only,.visually-hidden,[data-fg-lit],[class*=marquee i],[class*=ticker i]"))return;
 var ah=e.closest("[aria-hidden=true]");if(ah&&!ah.closest("h1,h2,h3,h4,p"))return;
 var cs=getComputedStyle(e);if(cs.display==="none"||cs.visibility==="hidden"||+cs.opacity<.5)return;
+// Still fading or sliding in (it or a box holding it part-transparent): judged once it has settled, on a later look.
+for(var an=e,op2=1;an&&an.tagName!=="MAIN"&&an!==document.body;an=an.parentElement)op2*=+getComputedStyle(an).opacity;if(op2<.95)return;
 var r=e.getBoundingClientRect();if(r.width<8||r.height<8||r.top<0||r.bottom>innerHeight||r.left<0||r.right>innerWidth)return;
 var col=rgba(cs.webkitTextFillColor&&!/transparent|rgba[(]0, 0, 0, 0[)]/.test(cs.webkitTextFillColor)?cs.webkitTextFillColor:cs.color);if(!col||col[3]<.35)return;
-var pts=[],media=null,unknown=false,y=r.top+r.height/2;[r.left+Math.min(10,r.width/4),r.left+r.width*.3,r.left+r.width*.55,r.left+r.width*.8].forEach(function(x){var b=backdrop(e,x,y);if(!b)return;if(b.unknown){unknown=true;return}pts.push(b);media=b.media});
+var pts=[],media=null,unknown=false,solid=false,y=r.top+r.height/2;[r.left+Math.min(10,r.width/4),r.left+r.width*.3,r.left+r.width*.55,r.left+r.width*.8].forEach(function(x){var b=backdrop(e,x,y);if(!b)return;if(b.solid){solid=true;return}if(b.unknown){unknown=true;return}pts.push(b);media=b.media});
+// Any part of the line on a solid surface (a label pill or card over the photo): that surface is what it reads against.
+if(solid){done.add(e);return}
 if(unknown&&!pts.length)return;if(!pts.length){done.add(e);return}
 // A photo whose pixels aren't in yet (still loading) is looked at again later.
 done.add(e);var fs=parseFloat(cs.fontSize),big=fs>=24||(fs>=18.6&&+cs.fontWeight>=600),need=big?3:4.5,t=lum(col);
