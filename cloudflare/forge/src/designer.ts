@@ -1317,6 +1317,9 @@ export function parseEdits(text: string): PageEdit[] {
   return out;
 }
 
+/** A line that is only an edit block's marker. */
+export const EDIT_MARKER = /^[ \t]*(?:={7}|<{7}[^\n]*|>{7}[^\n]*)[ \t]*$/m;
+
 /** Apply edits to a page. Throws when an edit's FIND isn't in the page exactly once (the caller then rewrites the page whole). */
 export function applyEdits(page: PageDraft, edits: PageEdit[]): PageDraft {
   if (!edits.length) throw new Error("no edits came back");
@@ -1336,6 +1339,8 @@ export function applyEdits(page: PageDraft, edits: PageEdit[]): PageDraft {
     else css = next;
   }
   if (!/<main[\s>]/i.test(body) || !/<\/main>/i.test(body)) throw new Error("the edited page lost its <main>");
+  // A reply that nested or mangled its blocks leaves the markers themselves in the page ("=======" shown as text).
+  if (EDIT_MARKER.test(body) || EDIT_MARKER.test(css)) throw new Error("an edit left its block markers in the page");
   return { ...page, body, css };
 }
 

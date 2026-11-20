@@ -182,8 +182,26 @@ const tel = (digits: string) => (digits.length === 10 ? `+1${digits}` : digits.l
  * Repairs that need no judgement, applied to every page as it is put together: phone links carry
  * the country code, and the footer always has working Privacy Policy and Terms links.
  */
+/** Sample review quotes a writer left as instructions ("Sample review text appears here once your reviews are connected"). */
+const SAMPLE_QUOTE = /([“"]?)Sample review text\b[^<“”"]*([”"]?)/g;
+const SAMPLE_LINES = [
+  "Easy to deal with from the first call, and everything was exactly as they said it would be.",
+  "Friendly, quick and straight with us about what we needed. We'll be back.",
+  "Clear answers, fair treatment and no surprises. Exactly what we hoped for.",
+  "They took the time to explain everything and it showed in the result.",
+];
+/** Notes to the owner left in the copy ("…belong here, in the owner's own words…"). */
+const OWNER_NOTE = /[^<>.]*\bbelong here, in the owner's own words\.[^<>]*?(?=<)/g;
+
+/** Instruction-like sample reviews become short, plain sample quotes (still under their "Sample review" label); notes to the owner go. */
+export function sampleQuotes(html: string): string {
+  let k = 0;
+  return html.replace(SAMPLE_QUOTE, (_m, open: string, close: string) => `${open}${SAMPLE_LINES[k++ % SAMPLE_LINES.length]}${close}`).replace(OWNER_NOTE, "");
+}
+
 export function qaFixHtml(html: string, footer: { hasPrivacy: boolean; hasTerms: boolean }): string {
-  let out = html.replace(/href\s*=\s*(["'])tel:([^"']*)\1/gi, (m, q: string, v: string) => {
+  // Lines left by a mangled find-and-replace edit ("=======" showing as text on the page) go.
+  let out = sampleQuotes(html).replace(/^[ \t]*(?:={7}|<{7} (?:FIND|SEARCH)[^\n]*|>{7} REPLACE[^\n]*)[ \t]*$\n?/gm, "").replace(/href\s*=\s*(["'])tel:([^"']*)\1/gi, (m, q: string, v: string) => {
     if (v.trim().startsWith("+")) return m;
     const d = v.replace(/\D/g, "");
     return d.length === 10 || (d.length === 11 && d.startsWith("1")) ? `href=${q}tel:${tel(d)}${q}` : m;
@@ -299,29 +317,7 @@ var pr=prev.getBoundingClientRect(),ar=a.getBoundingClientRect();if(pr.height<12
 var gap=a.offsetParent&&a.offsetParent===prev.offsetParent?a.offsetTop-(prev.offsetTop+prev.offsetHeight):ar.top-pr.bottom;if(gap>-2&&gap<10){a.style.marginTop="clamp(40px,5vw,72px)";a.setAttribute("data-fg-gap","1")}})}
 if(document.readyState==="complete")setTimeout(fix,300);else addEventListener("load",function(){setTimeout(fix,300)});})();
 
-// Big display words laid over a photo (a giant name across the hero) must not vanish into it: the part of
-// the picture behind the word is sampled (the site's photos are its own, so the canvas can read them), and
-// dark lettering over a dark area, which no overlay can rescue, switches to the light ink.
-(function(){function L(r,g,b){return (0.2126*r+0.7152*g+0.0722*b)/255}
-function rgb(v){var m=(v||"").match(/[0-9.]+/g);return m&&m.length>=3?m.map(Number):null}
-function run(){var seen=[];[].forEach.call(document.querySelectorAll("main *"),function(e){
-if(seen.length>12)return;var own=[].some.call(e.childNodes,function(n){return n.nodeType===3&&n.textContent.trim().length>1});if(!own)return;
-var cs=getComputedStyle(e),fs=parseFloat(cs.fontSize);if(fs<(innerWidth<700?40:64)||cs.visibility==="hidden"||+cs.opacity<.05)return;
-var c=rgb(cs.color);if(!c||L(c[0],c[1],c[2])>.3)return;var r=e.getBoundingClientRect();if(r.width<60||r.height<40)return;
-var box=e.closest("section")||e.parentElement;if(!box)return;
-var media=[].filter.call(box.querySelectorAll("img,video"),function(m){if(e.contains(m))return false;var q=m.getBoundingClientRect();return q.width>200&&q.height>120&&q.left<r.right&&q.right>r.left&&q.top<r.bottom&&q.bottom>r.top})[0];if(!media)return;
-// The hero's own headline set in light ink over the same picture says the picture reads dark: a dark giant word there is the odd one out.
-var lightPeer=[].some.call(box.querySelectorAll("h1,h2,p"),function(o){if(o===e||e.contains(o)||o.contains(e))return false;var oc=rgb(getComputedStyle(o).color);return oc&&L(oc[0],oc[1],oc[2])>.75&&parseFloat(getComputedStyle(o).fontSize)>=28});
-var lit=function(){e.style.setProperty("color","#f6f3ee","important");e.style.setProperty("-webkit-text-fill-color","#f6f3ee","important");e.style.textShadow="0 2px 30px rgba(0,0,0,.35)";e.setAttribute("data-fg-lit","")};
-if(lightPeer){seen.push(e);lit();return}
-var nw=media.videoWidth||media.naturalWidth,nh=media.videoHeight||media.naturalHeight;if(!nw||!nh)return;seen.push(e);
-try{var q=media.getBoundingClientRect(),sc=Math.max(q.width/nw,q.height/nh),ox=(q.width-nw*sc)/2,oy=(q.height-nh*sc)/2;
-var x0=Math.max(r.left,q.left),y0=Math.max(r.top,q.top),x1=Math.min(r.right,q.right),y1=Math.min(r.bottom,q.bottom);
-var cv=document.createElement("canvas");cv.width=48;cv.height=24;var g=cv.getContext("2d");
-g.drawImage(media,(x0-q.left-ox)/sc,(y0-q.top-oy)/sc,(x1-x0)/sc,(y1-y0)/sc,0,0,48,24);
-var d=g.getImageData(0,0,48,24).data,t=0;for(var i=0;i<d.length;i+=4)t+=L(d[i],d[i+1],d[i+2]);
-if(t/(d.length/4)<.42)lit()}catch(err){}})}
-function go(){setTimeout(run,900);setTimeout(run,3000)}if(document.readyState==="complete")go();else addEventListener("load",go)})();
+// (Big display words over a photo are judged by the over-picture guard below, from what is really behind them.)
 
 // Words must be readable on the colour actually behind them: a heading, paragraph, link or label whose colour is
 // within a whisker of its solid background (a writer setting text in the background colour, or one mode's ink
@@ -335,8 +331,9 @@ function solid(e){for(var n=e;n&&n!==document.documentElement;n=n.parentElement)
 function overPicture(e){var r=e.getBoundingClientRect(),sec=e.closest("section,header,footer")||document.body;return [].some.call(sec.querySelectorAll("img,video,canvas,.hero-motion"),function(m){if(e.contains(m)||m.contains(e))return false;var q=m.getBoundingClientRect();if(q.width<120||q.height<80)return false;var cs=getComputedStyle(m);if(cs.visibility==="hidden"||+cs.opacity<.1)return false;return q.left<r.right&&q.right>r.left&&q.top<r.bottom&&q.bottom>r.top})}
 // A photo painted between the words and their solid background (a hero picture under its headline): that is the
 // over-picture guard's to judge, from the picture itself.
-function underPicture(e){var h=e;for(;h&&h!==document.documentElement;h=h.parentElement){var c=rgb(getComputedStyle(h).backgroundColor);if(c&&(c.length<4||c[3]>0.85))break}if(!h||h===document.documentElement)h=document.body;
-var r=e.getBoundingClientRect();return [].some.call(h.querySelectorAll("img,video,canvas"),function(m){if(e.contains(m)||m.contains(e))return false;var q=m.getBoundingClientRect();if(q.width<120||q.height<80)return false;var cs=getComputedStyle(m);if(cs.visibility==="hidden"||+cs.opacity<.1)return false;return q.left<r.right&&q.right>r.left&&q.top<r.bottom&&q.bottom>r.top})}
+function underPicture(e){var r=e.getBoundingClientRect();if(r.bottom<0||r.top>innerHeight)return false;var st=document.createElement("style");st.textContent="main *{pointer-events:auto!important}";document.head.appendChild(st);
+try{var y=r.top+r.height/2;return [r.left+Math.min(10,r.width/4),r.left+r.width/2].some(function(x){var s=document.elementsFromPoint(x,y),i=-1;for(var k=0;k<s.length;k++)if(s[k]===e||e.contains(s[k])){i=k;break}if(i<0)return false;
+for(var k2=i+1;k2<s.length;k2++){var n=s[k2];if(e.contains(n))continue;if(/^(IMG|VIDEO)$/.test(n.tagName))return +getComputedStyle(n).opacity>.3;var c=rgb(getComputedStyle(n).backgroundColor);if(c&&(c.length<4||c[3]>0.85))return false;if(getComputedStyle(n).backgroundImage.indexOf("url(")>=0)return true}return false})}finally{st.remove()}}
 function run(){[].forEach.call(document.querySelectorAll("[data-fg-readable]:not([data-fg-pic])"),function(e){e.style.removeProperty("color");e.style.removeProperty("-webkit-text-fill-color");e.removeAttribute("data-fg-readable")});
 var light=[250,250,248],dark=[18,18,20];
 [].forEach.call(document.querySelectorAll("main h1,main h2,main h3,main h4,main p,main li,main a,main button,main label,main blockquote,main figcaption,main span,footer p,footer a,footer li,footer span,footer h2,footer h3"),function(e){
@@ -345,12 +342,12 @@ if(e.closest(".sr-only,.visually-hidden,[data-fg-lit],[data-fg-pic],[class*=marq
 // Hidden from screen readers is skipped, except the word and line pieces of an animated heading (the heading reads them out).
 var ah=e.closest("[aria-hidden=true]");if(ah&&!ah.closest("h1,h2,h3,h4,p,[data-split]"))return;
 var cs=getComputedStyle(e),head=!!e.closest("h1,h2,h3");if(cs.display==="none"||(!head&&(cs.visibility==="hidden"||parseFloat(cs.opacity)<.3)))return;
-var fs=parseFloat(cs.fontSize);if(fs>110&&!e.closest("h1,h2"))return;
+var fs=parseFloat(cs.fontSize);if(fs>180&&!e.closest("h1,h2"))return;
 var c=rgb(cs.webkitTextFillColor&&!/transparent|rgba\(0, 0, 0, 0\)/.test(cs.webkitTextFillColor)?cs.webkitTextFillColor:cs.color);if(!c||(c.length>3&&c[3]<.35))return;
 var bg=behind(e);
 // The same colour as the solid background (a heading set in var(--bg)): wrong whatever else is behind it.
 if(!bg){var sb=solid(e);if(!sb||ratio(c,sb)>=1.25)return;bg=sb}
-else{if(underPicture(e))return;if(ratio(c,bg)>=1.9)return;if(ratio(c,bg)>=1.25&&overPicture(e))return}
+else{if(underPicture(e))return;var fsz=parseFloat(cs.fontSize),lg=fsz>=24||(fsz>=18.6&&+cs.fontWeight>=600);if(ratio(c,bg)>=(lg?2.2:3))return;if(ratio(c,bg)>=1.25&&overPicture(e))return}
 var to=ratio(light,bg)>=ratio(dark,bg)?light:dark;var v="rgb("+to.join(",")+")";
 e.style.setProperty("color",v,"important");e.style.setProperty("-webkit-text-fill-color",v,"important");e.setAttribute("data-fg-readable","")})}
 function go(){setTimeout(run,700);setTimeout(run,2600);setTimeout(run,6000)}if(document.readyState==="complete")go();else addEventListener("load",go);
@@ -436,8 +433,9 @@ try{if(fit==="fill")g.drawImage(src,0,0,W,H);else{var sc=fit==="contain"?Math.mi
 var d=g.getImageData(0,0,W,H).data,L=new Float32Array(W*H);for(var i=0;i<W*H;i++)L[i]=lum([d[i*4],d[i*4+1],d[i*4+2]]);c={key:key,W:W,H:H,L:L};grids.set(m,c);return c}catch(err){return null}}
 function photoUrl(cs){if(cs.backgroundImage.indexOf("gradient")>=0&&cs.backgroundImage.indexOf("url(")<0)return null;var u=(cs.backgroundImage.match(/url[(]"?([^")]+)"?[)]/)||[])[1];
 if(!u||/^data:image[/]svg|[.]svg([?#]|$)/i.test(u)||/repeat/.test(cs.backgroundRepeat)&&!/no-repeat/.test(cs.backgroundRepeat)&&cs.backgroundSize!=="cover")return null;return u}
-// The photo element under a point, if it is one (an <img>, <video> or <canvas> big enough, or a box with a raster photo background).
-function isPhoto(n,cs){var q=n.getBoundingClientRect();if(q.width<120||q.height<80)return false;if(/^(IMG|VIDEO|CANVAS)$/.test(n.tagName))return !/[.]svg([?#]|$)/i.test(n.currentSrc||"");return !!photoUrl(cs)}
+// The photo element under a point, if it is one (an <img> or <video> big enough, or a box with a raster photo background).
+// A <canvas> is an effect layer (a shader, particles); its pixels can't be read back, so it never counts as a photo.
+function isPhoto(n,cs){var q=n.getBoundingClientRect();if(q.width<120||q.height<80)return false;if(n.tagName==="CANVAS")return false;if(/^(IMG|VIDEO)$/.test(n.tagName))return !/[.]svg([?#]|$)/i.test(n.currentSrc||"");return !!photoUrl(cs)}
 function lightOf(m,box){var q=m.getBoundingClientRect(),g=null;
 if(/^(IMG|VIDEO|CANVAS)$/.test(m.tagName)){var nw=m.videoWidth||m.naturalWidth||m.width,nh=m.videoHeight||m.naturalHeight||m.height;if(nw&&nh)g=grid(m,m,nw,nh,m.tagName==="CANVAS"?"fill":getComputedStyle(m).objectFit,q)}
 else{var cs=getComputedStyle(m),u=photoUrl(cs);if(u){var im=bgImgs[u];if(!im){im=bgImgs[u]=new Image();im.onload=function(){setTimeout(run,50)};im.src=u}

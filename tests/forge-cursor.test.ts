@@ -37,7 +37,7 @@ describe("the pointer", () => {
     expect(QA_JS).toContain("measured with their padding inside");
     expect(QA_JS).toContain("pulled over their neighbours");
     expect(QA_JS).toContain("Words must be readable on the colour actually behind them");
-    expect(QA_JS).toContain("dark lettering over a dark area");
+    expect(QA_JS).toContain("Words over a photo or video read in light and dark mode alike");
     // The page script still parses.
     expect(() => new Function(QA_JS)).not.toThrow();
     expect(FACTS).toContain("cramped:");
