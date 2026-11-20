@@ -224,7 +224,7 @@ export function qaFixHtml(html: string, footer: { hasPrivacy: boolean; hasTerms:
 }
 
 export const QA_CSS = `.fg-ba-box{list-style:none;margin:0 auto;padding:0;width:100%;max-width:880px}.fg-ba{position:relative;overflow:hidden;width:100%;border-radius:inherit;user-select:none;-webkit-user-select:none;touch-action:pan-y}.fg-ba>img,.fg-ba-after img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;margin:0;max-width:none}.fg-ba-after{position:absolute;inset:0}.fg-ba-line{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.15);pointer-events:none}.fg-ba-line span{position:absolute;top:50%;left:50%;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.3)}.fg-ba-line span::before{content:"\\2039\\00a0\\203A";position:absolute;inset:0;display:grid;place-items:center;font:700 18px/1 system-ui,sans-serif;color:#222}.fg-ba-l,.fg-ba-r{position:absolute;top:12px;font:600 12px/1 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:6px 9px;border-radius:4px;pointer-events:none}.fg-ba-l{left:12px}.fg-ba-r{right:12px}.fg-ba input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize;-webkit-appearance:none;appearance:none}
-header.fg-solid{background:color-mix(in srgb,var(--bg,#fff) 94%,transparent)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-color:transparent!important;box-shadow:0 1px 0 rgba(0,0,0,.08)!important;transition:background-color .3s}
+header.fg-solid{background:color-mix(in srgb,var(--bg,#fff) 94%,transparent)!important;border-color:transparent!important;box-shadow:0 1px 0 rgba(0,0,0,.08)!important;transition:background-color .3s}
 header.fg-solid [data-fg-ink],header.fg-solid [data-fg-ink] svg{color:var(--ink,#111)!important}header.fg-solid [data-fg-ink][class*="icon" i],header.fg-solid [data-fg-ink][class*="toggle" i]{border-color:color-mix(in srgb,var(--ink,#111) 25%,transparent)!important}
 .fg-legal{text-align:center;font-size:.85rem;opacity:.85;margin:14px 0 0}.fg-legal a{color:inherit;text-decoration:underline;text-underline-offset:3px}
 main img[data-fg-zoom]{cursor:zoom-in}
@@ -335,20 +335,41 @@ if(document.readyState==="complete")setTimeout(fix,300);else addEventListener("l
 (function(){function rgb(v){v=v||"";var o=v.indexOf("("),m=(o>=0?v.slice(o+1,v.indexOf(")",o)>o?v.indexOf(")",o):v.length):v).match(/[0-9.]+/g);if(!m||m.length<3)return null;m=m.map(Number);if(v.indexOf("color(")>=0){m[0]*=255;m[1]*=255;m[2]*=255}return m}
 function lum(c){var a=[c[0],c[1],c[2]].map(function(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)});return 0.2126*a[0]+0.7152*a[1]+0.0722*a[2]}
 function ratio(a,b){var x=lum(a),y=lum(b);return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05)}
-function gradColor(s){var cols=(s.match(/rgba?[(][^)]*[)]/g)||[]).map(rgb).filter(Boolean);if(!cols.length)return null;var al=cols.reduce(function(t,c){return t+(c.length>3?c[3]:1)},0)/cols.length;if(al<.85)return null;
-return [0,1,2].map(function(i){return Math.round(cols.reduce(function(t,c){return t+c[i]},0)/cols.length)})}
+function gradColor(s){var parts=[],dep=0,cur="";for(var i=0;i<s.length;i++){var ch=s[i];if(ch==="(")dep++;if(ch===")")dep--;if(ch===","&&!dep){parts.push(cur);cur=""}else cur+=ch}parts.push(cur);
+// Several gradients in one background: the bottom-most one that is solid enough is the panel's colour.
+for(var j=parts.length-1;j>=0;j--){if(parts[j].indexOf("gradient(")<0)continue;var cols=(parts[j].match(/(?:rgba?|color)[(][^)]*[)]/g)||[]).map(rgb).filter(Boolean);if(!cols.length)continue;var al=cols.reduce(function(t,c){return t+(c.length>3?c[3]:1)},0)/cols.length;if(al<.85)continue;
+return [0,1,2].map(function(k){return Math.round(cols.reduce(function(t,c){return t+c[k]},0)/cols.length)})}return null}
 // A band painted with a solid-enough gradient (a dark call-to-action band) is the colour behind its words, not the page under it.
 // A card whose panel colour is drawn by a ::before/::after layer (absolutely placed, solid) has that colour behind its words.
 function pseudoBg(n){var out=null;["::before","::after"].forEach(function(ps){if(out)return;var c=getComputedStyle(n,ps);if(!c||c.content==="none"||c.content==="normal"||!/absolute|fixed/.test(c.position)||+c.opacity<.9)return;var b=rgb(c.backgroundColor);if(b&&(b.length<4||b[3]>.85)){var q2=n.getBoundingClientRect();if(q2.width>40&&q2.height>30)out=b}});return out}
-function behind(e){for(var n=e;n&&n!==document.documentElement;n=n.parentElement){var cs=getComputedStyle(n);var pb=pseudoBg(n);if(pb){var own=rgb(cs.backgroundColor);if(!(own&&(own.length<4||own[3]>0.85)))return pb}if(cs.backgroundImage!=="none"&&!/gradient/.test(cs.backgroundImage))return null;if(/gradient/.test(cs.backgroundImage)&&cs.backgroundImage.indexOf("url(")<0){var gc=gradColor(cs.backgroundImage);if(gc)return gc}if(/^(IMG|VIDEO|PICTURE)$/.test(n.tagName))return null;var c=rgb(cs.backgroundColor);if(c&&(c.length<4||c[3]>0.85))return c}return rgb(getComputedStyle(document.body).backgroundColor)||[255,255,255]}
+// A background image counts as a photo only on a big box, as a raster picture drawn once (not a texture, pattern or icon).
+function photoBg(n,cs){var u=(cs.backgroundImage.match(/url[(]"?([^")]+)"?[)]/)||[])[1];if(!u||/^data:image[/]svg|[.]svg([?#]|$)/i.test(u))return false;var q2=n.getBoundingClientRect();if(q2.width<120||q2.height<80)return false;return !(/repeat/.test(cs.backgroundRepeat)&&!/no-repeat/.test(cs.backgroundRepeat)&&cs.backgroundSize!=="cover")}
+// What is really painted under the words where they sit on screen (a panel can be a sibling layered behind them, not a
+// parent): the first solid colour under them, or null for a photo. Off screen, the boxes holding them are used instead.
+function hitBg(e){var r=e.getBoundingClientRect();if(r.bottom<4||r.top>innerHeight-4||r.right<4||r.left>innerWidth-4)return undefined;
+var x=Math.min(innerWidth-2,Math.max(2,r.left+Math.min(12,r.width/3))),y=Math.min(innerHeight-2,Math.max(2,r.top+r.height/2)),s=document.elementsFromPoint(x,y),i=-1;
+for(var k=0;k<s.length;k++)if(s[k]===e||e.contains(s[k])){i=k;break}if(i<0)return undefined;
+for(var k2=i;k2<s.length;k2++){var n=s[k2];if(n!==e&&e.contains(n))continue;var cs=getComputedStyle(n);if(n!==e&&/^(IMG|VIDEO)$/.test(n.tagName)&&+cs.opacity>.3)return null;
+// A drawing under the words (an inline illustration or a canvas scene): its colours can't be read, so the words are left as
+// designed. A shader canvas is only a light effect over the box's own colour, so it is looked past.
+if(n!==e&&n.tagName==="CANVAS"&&n.closest("[data-shader],[class*=shader i]"))continue;
+if(n!==e&&(/^(CANVAS|svg)$/i.test(n.tagName)||n.closest("svg"))&&+cs.opacity>.3){var dq=n.getBoundingClientRect();if(dq.width>160&&dq.height>100)return false}
+if(photoBg(n,cs))return null;var c=rgb(cs.backgroundColor);if(c&&(c.length<4||c[3]>0.85)&&+cs.opacity>.85)return c;var pb=pseudoBg(n);if(pb)return pb;
+if(/gradient/.test(cs.backgroundImage)){var gc=gradColor(cs.backgroundImage);if(gc)return gc}}return undefined}
+function behind(e){var h=hitBg(e);if(h!==undefined)return h;for(var n=e;n&&n!==document.documentElement;n=n.parentElement){var cs=getComputedStyle(n);var pb=pseudoBg(n);if(pb){var own=rgb(cs.backgroundColor);if(!(own&&(own.length<4||own[3]>0.85)))return pb}if(cs.backgroundImage!=="none"&&!/gradient/.test(cs.backgroundImage))return null;if(/gradient/.test(cs.backgroundImage)&&cs.backgroundImage.indexOf("url(")<0){var gc=gradColor(cs.backgroundImage);if(gc)return gc}if(/^(IMG|VIDEO|PICTURE)$/.test(n.tagName))return null;var c=rgb(cs.backgroundColor);if(c&&(c.length<4||c[3]>0.85))return c}return rgb(getComputedStyle(document.body).backgroundColor)||[255,255,255]}
 function solid(e){for(var n=e;n&&n!==document.documentElement;n=n.parentElement){var c=rgb(getComputedStyle(n).backgroundColor);if(c&&(c.length<4||c[3]>0.85))return c}return null}
 function overPicture(e){var r=e.getBoundingClientRect(),sec=e.closest("section,header,footer")||document.body;return [].some.call(sec.querySelectorAll("img,video,canvas,.hero-motion"),function(m){if(e.contains(m)||m.contains(e))return false;var q=m.getBoundingClientRect();if(q.width<120||q.height<80)return false;var cs=getComputedStyle(m);if(cs.visibility==="hidden"||+cs.opacity<.1)return false;return q.left<r.right&&q.right>r.left&&q.top<r.bottom&&q.bottom>r.top})}
 // A photo painted between the words and their solid background (a hero picture under its headline): that is the
 // over-picture guard's to judge, from the picture itself.
 function underPicture(e){var r=e.getBoundingClientRect();if(r.bottom<0||r.top>innerHeight)return false;var st=document.createElement("style");st.textContent="main *{pointer-events:auto!important}";document.head.appendChild(st);
 try{var y=r.top+r.height/2;return [r.left+Math.min(10,r.width/4),r.left+r.width/2].some(function(x){var s=document.elementsFromPoint(x,y),i=-1;for(var k=0;k<s.length;k++)if(s[k]===e||e.contains(s[k])){i=k;break}if(i<0)return false;
-for(var k2=i+1;k2<s.length;k2++){var n=s[k2];if(e.contains(n))continue;if(/^(IMG|VIDEO)$/.test(n.tagName))return +getComputedStyle(n).opacity>.3;var c=rgb(getComputedStyle(n).backgroundColor);if(c&&(c.length<4||c[3]>0.85))return false;if(getComputedStyle(n).backgroundImage.indexOf("url(")>=0)return true}return false})}finally{st.remove()}}
-function run(){[].forEach.call(document.querySelectorAll("[data-fg-readable]:not([data-fg-pic])"),function(e){e.style.removeProperty("color");e.style.removeProperty("-webkit-text-fill-color");e.removeAttribute("data-fg-readable")});
+for(var k2=i+1;k2<s.length;k2++){var n=s[k2];if(e.contains(n))continue;if(/^(IMG|VIDEO)$/.test(n.tagName))return +getComputedStyle(n).opacity>.3;var c=rgb(getComputedStyle(n).backgroundColor);if(c&&(c.length<4||c[3]>0.85))return false;if(photoBg(n,getComputedStyle(n)))return true}return false})}finally{st.remove()}}
+function run(){var st=document.createElement("style");st.textContent="main *,footer *{pointer-events:auto!important}";document.head.appendChild(st);try{look()}finally{st.remove()}}
+// Each pass judges a word by the colour it was designed with (kept when first changed): undoing the change first and
+// reading the colour at once would catch a colour transition mid-way and flip the fix off and on.
+function clearAll(){[].forEach.call(document.querySelectorAll("[data-fg-readable]:not([data-fg-pic])"),function(e){e.style.removeProperty("color");e.style.removeProperty("-webkit-text-fill-color");e.removeAttribute("data-fg-readable");e.removeAttribute("data-fg-orig")})}
+function undo(e){if(!e.hasAttribute("data-fg-readable"))return;e.style.removeProperty("color");e.style.removeProperty("-webkit-text-fill-color");e.removeAttribute("data-fg-readable");e.removeAttribute("data-fg-orig")}
+function look(){
 var light=[250,250,248],dark=[18,18,20];
 [].forEach.call(document.querySelectorAll("main h1,main h2,main h3,main h4,main p,main li,main a,main button,main label,main blockquote,main figcaption,main span,footer p,footer a,footer li,footer span,footer h2,footer h3"),function(e){
 if(![].some.call(e.childNodes,function(n){return n.nodeType===3&&n.textContent.trim().length>1}))return;
@@ -357,15 +378,15 @@ if(e.closest(".sr-only,.visually-hidden,[data-fg-lit],[data-fg-pic],[class*=marq
 var ah=e.closest("[aria-hidden=true]");if(ah&&!ah.closest("h1,h2,h3,h4,p,[data-split]"))return;
 var cs=getComputedStyle(e),head=!!e.closest("h1,h2,h3");if(cs.display==="none"||(!head&&(cs.visibility==="hidden"||parseFloat(cs.opacity)<.3)))return;
 var fs=parseFloat(cs.fontSize),deco=fs>180&&!e.closest("h1,h2");
-var c=rgb(cs.webkitTextFillColor&&!/transparent|rgba\(0, 0, 0, 0\)/.test(cs.webkitTextFillColor)?cs.webkitTextFillColor:cs.color);if(!c||(c.length>3&&c[3]<.35))return;
-var bg=behind(e);
+var c=rgb(e.getAttribute("data-fg-orig")||(cs.webkitTextFillColor&&!/transparent|rgba\(0, 0, 0, 0\)/.test(cs.webkitTextFillColor)?cs.webkitTextFillColor:cs.color));if(!c||(c.length>3&&c[3]<.35))return;
+var bg=behind(e);if(bg===false)return undo(e);
 // The same colour as the solid background (a heading set in var(--bg)): wrong whatever else is behind it.
-if(!bg){var sb=solid(e);if(!sb)return;var fz=parseFloat(cs.fontSize),big2=fz>=24||(fz>=18.6&&+cs.fontWeight>=600);if(ratio(c,sb)>=1.25&&(underPicture(e)||ratio(c,sb)>=(big2?2.2:3)))return;bg=sb}
-else{if(underPicture(e))return;var fsz=parseFloat(cs.fontSize),lg=fsz>=24||(fsz>=18.6&&+cs.fontWeight>=600);if(ratio(c,bg)>=(deco?1.5:lg?2.2:3))return}
-var to=ratio(light,bg)>=ratio(dark,bg)?light:dark;var v="rgb("+to.join(",")+")";
+if(!bg){var sb=solid(e);if(!sb)return undo(e);var fz=parseFloat(cs.fontSize),big2=fz>=24||(fz>=18.6&&+cs.fontWeight>=600);if(ratio(c,sb)>=1.25&&(underPicture(e)||ratio(c,sb)>=(big2?2.2:3)))return undo(e);bg=sb}
+else{if(underPicture(e))return undo(e);var fsz=parseFloat(cs.fontSize),lg=fsz>=24||(fsz>=18.6&&+cs.fontWeight>=600);if(ratio(c,bg)>=(deco?1.5:lg?2.2:3))return undo(e)}
+var to=ratio(light,bg)>=ratio(dark,bg)?light:dark;var v="rgb("+to.join(",")+")";if(!e.hasAttribute("data-fg-orig"))e.setAttribute("data-fg-orig","rgb("+c.slice(0,3).map(Math.round).join(",")+")");
 e.style.setProperty("color",v,"important");e.style.setProperty("-webkit-text-fill-color",v,"important");e.setAttribute("data-fg-readable","")})}
 function go(){setTimeout(run,700);setTimeout(run,2600);setTimeout(run,6000)}if(document.readyState==="complete")go();else addEventListener("load",go);
-new MutationObserver(function(){setTimeout(run,60);setTimeout(run,800)}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+new MutationObserver(function(){clearAll();setTimeout(run,60);setTimeout(function(){clearAll();run()},800)}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
 // Looked at again after scrolling: reveal animations rebuild headings (their words become new elements) as they come into view.
 var st=0;addEventListener("scroll",function(){clearTimeout(st);st=setTimeout(run,700)},{passive:true})})();
 
@@ -641,15 +662,18 @@ if(cs.display.indexOf("flex")>=0&&cs.flexDirection.indexOf("row")===0){n.style.f
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(stack,900)});else setTimeout(stack,1200)})();
 
 // Phones: a header whose name or tagline is too long pushes the menu button off the screen. Its smaller
-// tagline lines are hidden first, then the header's call-to-action and light/dark switch, then the name is cut
-// with an ellipsis (never below 45% of the screen), until the last button fits.
+// tagline lines are hidden first, then the header's call-to-action, then the name is set a little smaller, then the
+// light/dark switch goes, then the name is cut with an ellipsis (never below 45% of the screen), until the last button fits.
 (function(){function fit(){var hd=document.querySelector("body>header,header");if(!hd||innerWidth>=900)return;
-function over(){var W=document.documentElement.clientWidth,bs=hd.querySelectorAll("button,summary,a[class*=menu i],[class*=toggle i],[class*=burger i]");for(var i=0;i<bs.length;i++){var r=bs[i].getBoundingClientRect();if(r.width&&(r.right>W+1||r.left<-1))return true}return hd.scrollWidth>hd.clientWidth+2}
+function over(){var W=document.documentElement.clientWidth,bs=hd.querySelectorAll("button,summary,a[class*=menu i],[class*=toggle i],[class*=burger i]");for(var i=0;i<bs.length;i++){var r=bs[i].getBoundingClientRect();if(r.width&&(r.right>W+1||r.left<-1)&&!bs[i].closest("nav,[class*=drawer i],[aria-hidden=true]"))return true}return false}
 if(!over())return;var brand=hd.querySelector("a[href]");if(!brand)return;var big=parseFloat(getComputedStyle(brand).fontSize)||0;
 brand.querySelectorAll("*").forEach(function(e){var f=parseFloat(getComputedStyle(e).fontSize);if(f>big)big=f});
 hd.querySelectorAll("small,span,em,div,p").forEach(function(e){if(!over())return;if(e.querySelector("a,button,summary,svg,img")||e.closest("nav,button,summary"))return;var f=parseFloat(getComputedStyle(e).fontSize);if(f<big*0.8&&(e.textContent||"").trim())e.style.display="none"});
 // Then the header's own call-to-action button (the page has others), then the light/dark switch, before the name is ever cut.
 if(over())[].forEach.call(hd.querySelectorAll("a[class*=btn i],a[class*=cta i],a[class*=quote i],a[class*=button i]"),function(a){if(!over()||a.closest("nav,[class*=drawer i],[class*=menu i]")||/menu|burger|toggle/i.test(a.className))return;a.style.display="none"});
+// The name's words a little smaller (down to 80%) before the light/dark switch has to go.
+if(over()){var tx=[].filter.call(brand.querySelectorAll("*"),function(x){return [].some.call(x.childNodes,function(n){return n.nodeType===3&&n.textContent.trim()})});if(!tx.length)tx=[brand];
+var f0=tx.map(function(x){return parseFloat(getComputedStyle(x).fontSize)});for(var s=.95;s>=.8&&over();s-=.05)tx.forEach(function(x,i){x.style.setProperty("font-size",(f0[i]*s).toFixed(1)+"px","important")})}
 if(over())[].forEach.call(hd.querySelectorAll("[class*=theme i],[id*=theme i],[aria-label*=theme i],[aria-label*=dark i],[aria-label*=light i]"),function(t){if(!over()||t.closest("nav,[class*=drawer i]"))return;t.style.display="none"});
 if(over()){brand.style.minWidth="0";brand.style.overflow="hidden";brand.style.textOverflow="ellipsis";brand.style.whiteSpace="nowrap";brand.style.flex="1 1 auto";brand.style.maxWidth="60vw";brand.style.minWidth="45vw"}}
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(fit,200)});else setTimeout(fit,600);setTimeout(fit,1500);addEventListener("orientationchange",function(){setTimeout(fit,200)})})();
