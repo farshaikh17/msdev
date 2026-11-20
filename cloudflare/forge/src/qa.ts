@@ -460,8 +460,8 @@ var words=(e.textContent||"").replace(/[ ]+/g," ").trim();if(words.length>28)ret
 // Its words, if any, read as a caption (small), not a figure or a heading.
 if(words&&[].some.call(e.querySelectorAll("*"),function(c){return parseFloat(getComputedStyle(c).fontSize)>17&&(c.innerText||"").trim()}))return;
 var b=rgba(cs.backgroundColor),painted=(b&&b[3]>.6)||parseFloat(cs.borderTopWidth)>=1;if(!painted)return;
-// The innermost such box only, and only where a sibling or parent holds words beside it (a picture's place in a layout).
-if([].some.call(e.children,function(c){var q=c.getBoundingClientRect();return q.width>=220&&q.height>=160}))return;
+// The innermost such box only (plain shapes laid over it don't count as its content), where a picture belongs in the layout.
+if([].some.call(e.children,function(c){var q=c.getBoundingClientRect(),k=getComputedStyle(c);return q.width>=220&&q.height>=160&&!(/absolute|fixed/.test(k.position)&&!(c.textContent||"").trim()&&!c.querySelector("img,video,canvas,svg,picture"))}))return;
 var src=pool[k++%pool.length];if(!src)return;
 e.style.setProperty("background-image",'url("'+src+'")',"important");
 e.style.setProperty("background-size","cover","important");e.style.setProperty("background-position","center","important");
