@@ -52,7 +52,7 @@ import { DEFAULT_FOLDER, FOLDER_KEY, folderId, syncFolder } from "./drive";
 import { fitImage } from "./media";
 import { takeHandover } from "./handover";
 import { handlePortal } from "./portal-app";
-import { closePortal, newPin, openPortal, portalForSlug, portalLog } from "./portal";
+import { closePortal, isPortalDraft, newPin, openPortal, portalForSlug, portalLog } from "./portal";
 import { checkDomain, domainForSlug, hostOf, removeDomain, setDomain } from "./domains";
 import type { Ctx, Env } from "./env";
 import { ghlLink, ghlSnippet, sitesBase } from "./ghl";
@@ -142,6 +142,19 @@ export async function handleApp(req: Request, env: Env, ctx: Ctx): Promise<Respo
   if (m && req.method === "GET") return env.SITES_ORIGIN ? Response.redirect(`${site(m[1])}/_pitch`, 302) : servePitch(req, env, m[1], `/s/${m[1]}`);
   const im = path.replace(/^\/s/, "").match(IMAGE_PATH);
   if (im && path.startsWith("/s/") && req.method === "GET") return serveImage(req, env, ctx, im[1], im[2], im[3]);
+  // A client-portal draft's preview when the app serves the sites itself (no forge-sites address): the same
+  // route forge-sites has, under /s/.
+  m = path.match(/^\/s\/([a-z0-9-]{3,64})\/_preview\/([a-z0-9]{6,40})(\/_img\/.+|(?:\/[a-z0-9-]+){1,2})?$/);
+  if (m && req.method === "GET") {
+    const [, pslug, pver, rest = ""] = m;
+    if (env.SITES_ORIGIN) return Response.redirect(`${site(pslug!)}/_preview/${pver}${rest}`, 302);
+    if (rest.startsWith("/_img/")) {
+      const img = `/${pslug}${rest}`.match(IMAGE_PATH);
+      return img ? serveImage(req, env, ctx, img[1]!, img[2]!, img[3]!) : new Response("Not found", { status: 404 });
+    }
+    if (!(await isPortalDraft(env, pslug!, pver!))) return new Response("This preview has ended: the changes were published or discarded.", { status: 404 });
+    return serveSite(req, env, ctx, pslug!, rest, `/s/${pslug}/_preview/${pver}`, true, { version: pver! });
+  }
   m = path.match(/^\/s\/([a-z0-9-]+)((?:\/[a-z0-9-]+){1,2})?$/);
   if (m && req.method === "GET") {
     if (env.SITES_ORIGIN) return Response.redirect(`${site(m[1])}${m[2] ?? ""}`, 302);

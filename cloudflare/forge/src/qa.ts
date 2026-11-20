@@ -201,7 +201,7 @@ header.fg-solid{background:color-mix(in srgb,var(--bg,#fff) 94%,transparent)!imp
 header.fg-solid [data-fg-ink],header.fg-solid [data-fg-ink] svg{color:var(--ink,#111)!important}header.fg-solid [data-fg-ink][class*="icon" i],header.fg-solid [data-fg-ink][class*="toggle" i]{border-color:color-mix(in srgb,var(--ink,#111) 25%,transparent)!important}
 .fg-legal{text-align:center;font-size:.85rem;opacity:.85;margin:14px 0 0}.fg-legal a{color:inherit;text-decoration:underline;text-underline-offset:3px}
 main img[data-fg-zoom]{cursor:zoom-in}
-[data-fg-filled]{position:relative;overflow:hidden;padding:0!important}[data-fg-filled]>img{display:block;width:100%;height:100%;min-height:200px;object-fit:cover}
+[data-fg-photo]::before,[data-fg-photo]::after{display:none!important}[data-fg-photo]>*{visibility:hidden!important}[data-fg-filled]{position:relative;overflow:hidden;padding:0!important}[data-fg-filled]>img{display:block;width:100%;height:100%;min-height:200px;object-fit:cover}
 [data-fg-filled]>span{position:absolute;left:10px;bottom:10px;font:600 11px/1 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:5px 8px;border-radius:4px}
 .fg-zoom{position:fixed;inset:0;z-index:2147483640;background:rgba(8,10,14,.92);display:grid;place-items:center;padding:4vmin;cursor:zoom-out;opacity:0;transition:opacity .2s}
 .fg-zoom.on{opacity:1}.fg-zoom img{max-width:100%;max-height:92vh;border-radius:8px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
@@ -240,7 +240,7 @@ function close(){o.remove();document.removeEventListener("keydown",key)}function
 o.addEventListener("click",close);document.addEventListener("keydown",key)});
 }catch(x){}})();
 /* Any empty photo box left on a page ("Your photos appear here") is filled with one of the site's photos, or hidden when the site has none. */
-window.__fgFill=function(urls){try{urls=urls||[];
+window.__fgFill=function(urls){try{urls=urls||[];window.__fgPhotos=urls;
 var P=/(photos?|pictures?|images?)\\b[^.!?]{0,60}\\b(appears?|go|goes|added)\\b[^.!?]{0,20}\\bhere|space for (your|real|the)\\b[^.!?]{0,20}(photos?|pictures?)|(photos?|pictures?) coming soon|\\b(your|real) (own |real )?(photos?|pictures?|images?) (here|go here)\\b|\\badd your (own )?(photos?|pictures?)\\b/i;
 var abs=function(u){try{return new URL(u,location.href).href}catch(e){return u}},used={};
 [].forEach.call(document.images,function(i){used[i.currentSrc||i.src]=1});
@@ -355,6 +355,39 @@ var to=ratio(light,bg)>=ratio(dark,bg)?light:dark;var v="rgb("+to.join(",")+")";
 e.style.setProperty("color",v,"important");e.style.setProperty("-webkit-text-fill-color",v,"important");e.setAttribute("data-fg-readable","")})}
 function go(){setTimeout(run,700);setTimeout(run,2600);setTimeout(run,6000)}if(document.readyState==="complete")go();else addEventListener("load",go);
 new MutationObserver(function(){setTimeout(run,60)}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]})})();
+
+// A picture's place left empty (a big painted block or frame holding at most a short caption, where a photo belongs)
+// takes one of the site's own photos, the ones this page doesn't show yet first. A diagram's caption and any tint over the
+// box go (they describe the empty shape, not the photo).
+// Swatches, stat cards, buttons, forms, maps, decoration and anything with real words in it are left alone.
+(function(){
+function rgba(v){var m=(v||"").match(/[0-9.]+/g);return m&&m.length>=3?[+m[0],+m[1],+m[2],m.length>3?+m[3]:1]:null}
+var SKIP=/(swatch|chip|colou?r|palette|stat|count|number|badge|logo|map|chart|bar|line|divider|rule|marquee|track|ticker|blob|shape|deco|orb|glow|grain|noise|overlay|scrim|backdrop|cursor|dot|progress|skeleton)/i;
+function photos(){return [].map.call(document.querySelectorAll("img"),function(i){return i.currentSrc||i.src||""}).filter(function(s){return /[/]_img[/][a-z0-9]+[/](photo|own)-[0-9]+[.]jpg/.test(s)})}
+function run(){var used=photos(),list=window.__fgPhotos||[];if(!used.length&&!list.length)return;var base=(used[0]||list[0]||"").replace(/(photo|own)-[0-9]+[.]jpg.*$/,"");
+var have={};used.forEach(function(s){have[s.replace(/^.*[/]/,"").replace(/[?#].*$/,"")]=1});
+[].forEach.call(document.querySelectorAll("[data-fg-photo]"),function(e){var u=(e.style.backgroundImage.match(/(photo|own)-[0-9]+[.]jpg/)||[])[0];if(u)have[u]=1});
+var pool=list.length?list.filter(function(u){return !have[u.replace(/^.*[/]/,"")]}):[];if(!list.length)for(var n=1;n<=8;n++)if(!have["photo-"+n+".jpg"])pool.push(base+"photo-"+n+".jpg");(list.length?list:used).forEach(function(u){if(pool.indexOf(u)<0)pool.push(u)});
+var k=0;window.__fgFilled=window.__fgFilled||[];
+[].forEach.call(document.querySelectorAll("main div,main figure,main li,main a"),function(e){
+if(e.hasAttribute("data-fg-photo")||e.closest("[aria-hidden=true],form,nav,footer,header,[data-fg-filled],[data-fg-photo]"))return;
+var r=e.getBoundingClientRect();if(r.width<220||r.height<160||r.width>innerWidth*.9)return;
+if(e.querySelector("img,video,canvas,svg,picture,iframe,input,textarea,select,button,object,embed"))return;
+if(SKIP.test(e.className+" "+(e.id||"")))return;
+var cs=getComputedStyle(e);if(cs.backgroundImage!=="none"||+cs.opacity<.9||cs.position==="absolute"||cs.position==="fixed")return;
+var words=(e.textContent||"").replace(/[ ]+/g," ").trim();if(words.length>28)return;
+// Its words, if any, read as a caption (small), not a figure or a heading.
+if(words&&[].some.call(e.querySelectorAll("*"),function(c){return parseFloat(getComputedStyle(c).fontSize)>17&&(c.innerText||"").trim()}))return;
+var b=rgba(cs.backgroundColor),painted=(b&&b[3]>.6)||parseFloat(cs.borderTopWidth)>=1;if(!painted)return;
+// The innermost such box only, and only where a sibling or parent holds words beside it (a picture's place in a layout).
+if([].some.call(e.children,function(c){var q=c.getBoundingClientRect();return q.width>=220&&q.height>=160}))return;
+var src=pool[k++%pool.length];if(!src)return;
+e.style.setProperty("background-image",'url("'+src+'")',"important");
+e.style.setProperty("background-size","cover","important");e.style.setProperty("background-position","center","important");
+e.setAttribute("data-fg-photo","");window.__fgFilled.push((e.className+"").slice(0,30)+(words?" ("+words+")":""))})}
+function go(){run();setTimeout(run,1500);setTimeout(run,4000)}
+if(document.readyState==="complete")go();else addEventListener("load",go);
+var t=0;addEventListener("scroll",function(){if(t)return;t=setTimeout(function(){t=0;run()},300)},{passive:true})})();
 
 // Words over a photo or video read in light and dark mode alike. What is actually behind each line (the photo's own
 // pixels, sampled, under every overlay and tint painted between) is measured. Words that don't stand out enough are
