@@ -359,7 +359,7 @@ new MutationObserver(function(){setTimeout(run,60)}).observe(document.documentEl
 // Words over a photo or video read in light and dark mode alike. What is actually behind each line (the photo's own
 // pixels, sampled, under every overlay and tint painted between) is measured. Words that don't stand out enough are
 // fixed the gentlest way that works: the photo darkened a little (the designer's colour kept), else the words in white
-// or near-black, else white words on a photo darkened enough (never below 45% of its light). Patterns, icons and pictures it can't read are left alone.
+// or near-black, else white words on a photo darkened enough (never below 45% of its light, or 40% counting the page's own darkening). Patterns, icons and pictures it can't read are left alone.
 (function(){
 function rgba(v){var m=(v||"").match(/[0-9.]+/g);return m&&m.length>=3?[+m[0],+m[1],+m[2],m.length>3?+m[3]:1]:null}
 function lin(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)}
@@ -379,10 +379,13 @@ function lightOf(m,box){var q=m.getBoundingClientRect(),g=null;
 if(/^(IMG|VIDEO|CANVAS)$/.test(m.tagName)){var nw=m.videoWidth||m.naturalWidth||m.width,nh=m.videoHeight||m.naturalHeight||m.height;if(nw&&nh)g=grid(m,m,nw,nh,m.tagName==="CANVAS"?"fill":getComputedStyle(m).objectFit,q)}
 else{var cs=getComputedStyle(m),u=photoUrl(cs);if(u){var im=bgImgs[u];if(!im){im=bgImgs[u]=new Image();im.onload=function(){setTimeout(run,50)};im.src=u}
 if(im.complete&&im.naturalWidth)g=grid(m,im,im.naturalWidth,im.naturalHeight,cs.backgroundSize==="contain"?"contain":"cover",q)}}
-if(!g)return null;var v=[];var x0=Math.floor((box.left-q.left)/q.width*g.W),x1=Math.ceil((box.right-q.left)/q.width*g.W),y0=Math.floor((box.top-q.top)/q.height*g.H),y1=Math.ceil((box.bottom-q.top)/q.height*g.H);
+if(!g)return null;var bf=Math.pow(Math.min(1.5,baseBright(m)),2.2);var v=[];var x0=Math.floor((box.left-q.left)/q.width*g.W),x1=Math.ceil((box.right-q.left)/q.width*g.W),y0=Math.floor((box.top-q.top)/q.height*g.H),y1=Math.ceil((box.bottom-q.top)/q.height*g.H);
 for(var y=Math.max(0,y0);y<Math.min(g.H,y1);y++)for(var x=Math.max(0,x0);x<Math.min(g.W,x1);x++)v.push(g.L[y*g.W+x]);
 if(!v.length)return null;v.sort(function(a,b){return a-b});var lo=v[Math.floor(v.length*.25)],hi=v[Math.min(v.length-1,Math.floor(v.length*.75))];
-return m.tagName==="VIDEO"?[Math.max(0,lo-.08),Math.min(1,hi+.12)]:[lo,hi]}
+lo*=bf;hi=Math.min(1,hi*bf);return m.tagName==="VIDEO"?[Math.max(0,lo-.08),Math.min(1,hi+.12)]:[lo,hi]}
+// How bright the page draws a photo now (brightness filters on it and the boxes holding it, our own dimming included).
+function baseBright(m){var b=1;for(var n=m,d=0;n&&d<6&&n!==document.body;n=n.parentElement,d++){var f=getComputedStyle(n).filter;if(!f||f==="none")continue;(f.match(/brightness[(]([0-9.]+)/g)||[]).forEach(function(s){b*=parseFloat(s.slice(11))})}
+return b}
 // A linear gradient's tint at a point (angle, stops, positions); null where it can't be read.
 function gradAt(n,cs,x,y){var s=cs.backgroundImage;if(s.indexOf("linear-gradient(")!==0||s.indexOf("gradient(",10)>=0)return null;
 var inner=s.slice(16,s.lastIndexOf(")")),parts=[],dep=0,cur="";for(var i=0;i<inner.length;i++){var ch=inner[i];if(ch==="(")dep++;if(ch===")")dep--;if(ch===","&&!dep){parts.push(cur.trim());cur=""}else cur+=ch}parts.push(cur.trim());
@@ -410,10 +413,14 @@ function score(t,pts,k){var w=99;pts.forEach(function(p){var u=under(p,k),s=t>=u
 var SEL="main h1,main h2,main h3,main h4,main p,main li,main a,main button,main label,main blockquote,main figcaption,main span,main small,main strong,main em,main div,main dt,main dd";
 var done=new WeakSet();window.__fgUnread=[];
 function reset(){[].forEach.call(document.querySelectorAll("[data-fg-pic]"),function(e){["color","-webkit-text-fill-color","text-shadow","border-color"].forEach(function(p){e.style.removeProperty(p)});e.removeAttribute("data-fg-pic")});
-[].forEach.call(document.querySelectorAll("[data-fg-dim]"),function(m){m.style.filter=m.getAttribute("data-fg-dim");m.removeAttribute("data-fg-dim")});window.__fgUnread=[];done=new WeakSet()}
-function dim(m,k){if(!/^(IMG|VIDEO|CANVAS)$/.test(m.tagName))return false;var cur=parseFloat(((m.style.filter||"").match(/brightness[(]([0-9.]+)/)||[])[1]||"1");if(k>=cur)return true;
-var was=m.hasAttribute("data-fg-dim")?m.getAttribute("data-fg-dim"):(m.style.filter||"");m.setAttribute("data-fg-dim",was);m.style.filter=(was&&was!=="none"?was+" ":"")+"brightness("+k.toFixed(2)+")";return true}
-function run(){var pe=document.createElement("style");pe.textContent="main *{pointer-events:auto!important}";document.head.appendChild(pe);
+[].forEach.call(document.querySelectorAll("[data-fg-dim]"),function(m){m.style.filter=m.getAttribute("data-fg-dim");["data-fg-dim","data-fg-base","data-fg-k"].forEach(function(a){m.removeAttribute(a)})});window.__fgUnread=[];done=new WeakSet()}
+function dim(m,k){if(!/^(IMG|VIDEO|CANVAS)$/.test(m.tagName))return false;var cur=parseFloat(m.getAttribute("data-fg-k")||"1");if(k>=cur)return true;
+if(!m.hasAttribute("data-fg-dim")){m.setAttribute("data-fg-dim",m.style.filter||"");m.setAttribute("data-fg-base",getComputedStyle(m).filter)}
+var base=m.getAttribute("data-fg-base");m.style.filter=(base&&base!=="none"?base+" ":"")+"brightness("+k.toFixed(2)+")";m.setAttribute("data-fg-k",k.toFixed(2));dirty=true;return true}
+var dirty=false;
+// A photo darkened for one line changes what every other line over it sits on: they are all looked at again (twice at most).
+function run(){for(var pass=0;pass<3;pass++){dirty=false;look();if(!dirty)break;done=new WeakSet();window.__fgUnread=[]}}
+function look(){var pe=document.createElement("style");pe.textContent="main *{pointer-events:auto!important}";document.head.appendChild(pe);
 try{[].forEach.call(document.querySelectorAll(SEL),function(e){if(done.has(e))return;
 if(![].some.call(e.childNodes,function(n){return n.nodeType===3&&n.textContent.trim().length>1}))return;
 if(e.closest(".sr-only,.visually-hidden,[data-fg-lit],[class*=marquee i],[class*=ticker i]"))return;
@@ -428,17 +435,19 @@ done.add(e);var fs=parseFloat(cs.fontSize),big=fs>=24||(fs>=18.6&&+cs.fontWeight
 if(score(t,pts,1)>=need)return;
 var set=function(c,sh){e.style.setProperty("color",c,"important");e.style.setProperty("-webkit-text-fill-color",c,"important");if(sh)e.style.setProperty("text-shadow",sh,"important");
 var bc=rgba(cs.borderTopColor);if(parseFloat(cs.borderTopWidth)>0&&bc&&Math.abs(lum(bc)-t)<.02)e.style.setProperty("border-color",c,"important");e.setAttribute("data-fg-pic","")};
-var canDim=/^(IMG|VIDEO|CANVAS)$/.test(media.tagName)&&!media.contains(e);
+var canDim=/^(IMG|VIDEO|CANVAS)$/.test(media.tagName)&&!media.contains(e),ours=parseFloat(media.getAttribute("data-fg-k")||"1"),own=baseBright(media)/ours,kmin=Math.min(1,Math.max(.45,.4/Math.max(.01,own))/ours);
 // 1. Light words: the photo darkened a little keeps the designer's colour.
-if(canDim&&t>.18)for(var k=.95;k>=.6;k-=.05)if(score(t,pts,k)>=need){dim(media,k);e.setAttribute("data-fg-pic","");return}
+if(canDim&&t>.18)for(var k=.95;k>=Math.max(.6,kmin)-.001;k-=.05)if(score(t,pts,k)>=need){dim(media,ours*k);e.setAttribute("data-fg-pic","");return}
 // 2. White or near-black words, whichever reads as the photo is.
 var W=1,D=lum([17,17,17]);if(score(W,pts,1)>=need){set("#ffffff","0 1px 3px rgba(0,0,0,.35)");return}if(score(D,pts,1)>=need){set("#111111","0 1px 3px rgba(255,255,255,.35)");return}
-// 3. White words, and the photo darkened as much as it takes (never below 45% of its light).
+// 3. White words, and the photo darkened as much as it takes (never below 45% of its light, or 40% counting the page's own darkening).
 set("#ffffff","0 1px 2px rgba(0,0,0,.6),0 2px 14px rgba(0,0,0,.45)");
-if(canDim){for(var k2=.95;k2>=.45;k2-=.05)if(score(W,pts,k2)>=need||k2<.5){dim(media,k2);if(score(W,pts,k2)>=need)return;break}}
+if(canDim&&kmin<1){for(var k2=.95;k2>=kmin-.001;k2-=.05)if(score(W,pts,k2)>=need||k2<kmin+.05){dim(media,ours*k2);if(score(W,pts,k2)>=need)return;break}}
 window.__fgUnread.push((e.innerText||"").trim().slice(0,40))})}finally{pe.remove()}}
 var tm=0;function soon(){if(tm)return;tm=setTimeout(function(){tm=0;run()},200)}
-function go(){run();setTimeout(run,600);setTimeout(run,2000);setTimeout(run,5000)}
+// Looked at again from scratch once the first screen has settled (a photo fading or zooming in reads lighter or darker at first).
+function again(){reset();run()}
+function go(){run();setTimeout(run,600);setTimeout(again,2000);setTimeout(again,5000)}
 if(document.readyState==="complete")go();else addEventListener("load",go);
 addEventListener("scroll",soon,{passive:true});addEventListener("resize",function(){reset();soon()});
 new MutationObserver(function(){reset();setTimeout(run,30)}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
