@@ -354,7 +354,37 @@ else{if(underPicture(e))return;if(ratio(c,bg)>=1.9)return;if(ratio(c,bg)>=1.25&&
 var to=ratio(light,bg)>=ratio(dark,bg)?light:dark;var v="rgb("+to.join(",")+")";
 e.style.setProperty("color",v,"important");e.style.setProperty("-webkit-text-fill-color",v,"important");e.setAttribute("data-fg-readable","")})}
 function go(){setTimeout(run,700);setTimeout(run,2600);setTimeout(run,6000)}if(document.readyState==="complete")go();else addEventListener("load",go);
-new MutationObserver(function(){setTimeout(run,60)}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]})})();
+new MutationObserver(function(){setTimeout(run,60);setTimeout(run,800)}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]})})();
+
+// Words that stay faded or blurred once they are on screen (a reveal animation that never finished, a scroll-scrubbed
+// word-by-word paragraph left half-lit where the reader stopped) are shown in full after they have sat on screen for
+// a second. Slides waiting their turn, menus, marquees, decoration and anything fully hidden on purpose are left alone.
+(function(){
+var SEL="main h1,main h2,main h3,main h4,main p,main li,main a,main button,main span,main div,main blockquote,main figcaption,main small,main dt,main dd";
+var seen=new WeakMap();
+function faded(e){var o=1,b=false;for(var n=e;n&&n!==document.body;n=n.parentElement){var cs=getComputedStyle(n);o*=+cs.opacity;if(/blur[(][1-9]/.test(cs.filter))b=true;if(n.tagName==="MAIN")break}return {o:o,b:b}}
+function skip(e){return !!e.closest("[class*=slide i],[class*=carousel i],[class*=swiper i],[class*=marquee i],[class*=ticker i],[class*=track i],[class*=modal i],[class*=drawer i],[class*=menu i],[class*=tooltip i],[class*=popover i],nav,.sr-only,.visually-hidden,[hidden]")}
+var css=null;function rule(){if(css)return;css=document.createElement("style");css.textContent="[data-fg-shown]{opacity:1!important;filter:none!important}";document.head.appendChild(css)}
+// A stylesheet rule, not an inline style: a page script scrubbing the words writes their inline opacity on every frame.
+function show(e){rule();for(var n=e;n&&n.tagName!=="MAIN"&&n!==document.body;n=n.parentElement){var cs=getComputedStyle(n);if(+cs.opacity<.98||/blur/.test(cs.filter)){n.setAttribute("data-fg-shown","")}}
+// Word and letter pieces of a split line are shown together.
+[].forEach.call(e.querySelectorAll("*"),function(c){var cs=getComputedStyle(c);if(+cs.opacity<.98||/blur/.test(cs.filter)){c.setAttribute("data-fg-shown","")}})}
+function run(){var now=Date.now(),H=innerHeight,W=innerWidth;
+[].forEach.call(document.querySelectorAll(SEL),function(e){
+if(![].some.call(e.childNodes,function(n){return n.nodeType===3&&n.textContent.trim().length>1}))return;
+var r=e.getBoundingClientRect();if(r.width<4||r.height<4||r.bottom<12||r.top>H-12||r.right<0||r.left>W){seen.delete(e);return}
+var cs=getComputedStyle(e);if(cs.visibility==="hidden"||cs.display==="none")return;
+var f=faded(e);if(f.o>=.95&&!f.b){seen.delete(e);return}
+// Fully invisible text is usually waiting on purpose (a slide, a hover card); only part-faded or blurred words count,
+// and fully invisible pieces only when the line they belong to is showing others.
+if(f.o<.05&&!f.b){var line=e.closest("h1,h2,h3,h4,p,blockquote");if(!line||line===e)return;if(faded(line).o<.05)return}
+if(skip(e))return;
+var t=seen.get(e);if(!t){seen.set(e,now);return}
+if(now-t>=1000){show(e);seen.delete(e)}})}
+var tm=0;function soon(){clearTimeout(tm);tm=setTimeout(function(){run();setTimeout(run,1100)},250)}
+function go(){run();setTimeout(run,1200);setTimeout(run,2400);setTimeout(run,4000)}
+if(document.readyState==="complete")go();else addEventListener("load",go);
+addEventListener("scroll",soon,{passive:true})})();
 
 // A picture's place left empty (a big painted block or frame holding at most a short caption, where a photo belongs)
 // takes one of the site's own photos, the ones this page doesn't show yet first. A diagram's caption and any tint over the
@@ -430,11 +460,18 @@ var t=((x-q.left-q.width/2)*Math.sin(a)-(y-q.top-q.height/2)*Math.cos(a))/L+.5;
 var A=stops[0],B=stops[stops.length-1];for(var k=0;k<stops.length-1;k++)if(t>=stops[k].at&&t<=stops[k+1].at){A=stops[k];B=stops[k+1];break}
 var f=B.at>A.at?Math.max(0,Math.min(1,(t-A.at)/(B.at-A.at))):0,al=(A.c[3]*(1-f)+B.c[3]*f)*+cs.opacity;
 return [lum(A.c)*(1-f)+lum(B.c)*f,al,al]}
+// Tints drawn as ::before/::after layers (a hero's dark overlay is often one): the hit test can't see them. Those on the
+// photo itself and on the boxes holding it, up to the one that also holds the words, count as tints over the photo.
+function pseudoTints(m,e,x,y,layers){for(var n=m;n&&n!==document.body;n=n.parentElement){["::before","::after"].forEach(function(ps){var c=getComputedStyle(n,ps);
+if(!c||c.content==="none"||c.content==="normal"||c.display==="none"||!/absolute|fixed/.test(c.position))return;var op=+c.opacity;if(op<.02)return;
+var b=rgba(c.backgroundColor);if(b&&b[3]>0)layers.push([lum(b),b[3]*op,b[3]*op]);
+if(c.backgroundImage.indexOf("gradient")>=0){var ga=gradAt(n,c,x,y);if(ga)layers.push(ga);else{var cols=c.backgroundImage.match(/rgba?[(][^)]*[)]/g)||[];if(cols.length){var ls=cols.map(rgba),al=ls.map(function(k){return k[3]*op}),mn=Math.min.apply(null,al);if(mn>0)layers.push([ls.reduce(function(s,k){return s+lum(k)},0)/ls.length,mn,mn])}}}});
+if(n.contains(e))break}}
 // What lies behind a point of the words: the photo's light range there and the tints over it; null for a solid colour or no photo.
 function backdrop(e,x,y){var stack=document.elementsFromPoint(x,y),i=-1;for(var k=0;k<stack.length;k++)if(stack[k]===e||e.contains(stack[k])){i=k;break}if(i<0)return null;
 var layers=[];for(var k=i;k<stack.length;k++){var n=stack[k];if(n!==e&&e.contains(n))continue;var cs=getComputedStyle(n);
 if(n!==e&&+cs.opacity<.5&&(/^(IMG|VIDEO|CANVAS)$/.test(n.tagName)||photoUrl(cs)))continue;
-if(n!==e&&isPhoto(n,cs)){var r=e.getBoundingClientRect(),h=Math.max(12,r.height/2),rg=lightOf(n,{left:x-h,right:x+h,top:r.top,bottom:r.bottom});return rg?{lo:rg[0],hi:rg[1],layers:layers,media:n}:{unknown:true}}
+if(n!==e&&isPhoto(n,cs)){pseudoTints(n,e,x,y,layers);var r=e.getBoundingClientRect(),h=Math.max(12,r.height/2),rg=lightOf(n,{left:x-h,right:x+h,top:r.top,bottom:r.bottom});return rg?{lo:rg[0],hi:rg[1],layers:layers,media:n}:{unknown:true}}
 var op=+cs.opacity,b=rgba(cs.backgroundColor);if(b&&b[3]*op>=.94)return null;if(b&&b[3]>0)layers.push([lum(b),b[3]*op,b[3]*op]);
 if(cs.backgroundImage!=="none"){var ga=gradAt(n,cs,x,y);if(ga)layers.push(ga);else if(cs.backgroundImage.indexOf("gradient")>=0){var cols=cs.backgroundImage.match(/rgba?[(][^)]*[)]/g)||[];
 if(cols.length){var ls=cols.map(rgba),al=ls.map(function(c){return c[3]*op});var mn=Math.min.apply(null,al);if(mn>0)layers.push([ls.reduce(function(s,c){return s+lum(c)},0)/ls.length,mn,mn])}}
@@ -485,7 +522,7 @@ function again(){reset();run()}
 function go(){run();setTimeout(run,600);setTimeout(again,2000);setTimeout(again,5000)}
 if(document.readyState==="complete")go();else addEventListener("load",go);
 addEventListener("scroll",soon,{passive:true});addEventListener("resize",function(){reset();soon()});
-new MutationObserver(function(){reset();setTimeout(run,30)}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+new MutationObserver(function(){reset();setTimeout(run,30);setTimeout(again,900)}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
 try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",function(){reset();setTimeout(run,30)})}catch(err){}})();
 
 // The first screen's words sit above its pictures: a headline block that runs into the photo card beside it
@@ -573,14 +610,18 @@ if(cs.display.indexOf("flex")>=0&&cs.flexDirection.indexOf("row")===0){n.style.f
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(stack,900)});else setTimeout(stack,1200)})();
 
 // Phones: a header whose name or tagline is too long pushes the menu button off the screen. Its smaller
-// tagline lines are hidden first, then the name is cut with an ellipsis, until the last button fits.
+// tagline lines are hidden first, then the header's call-to-action and light/dark switch, then the name is cut
+// with an ellipsis (never below 45% of the screen), until the last button fits.
 (function(){function fit(){var hd=document.querySelector("body>header,header");if(!hd||innerWidth>=900)return;
 function over(){var W=document.documentElement.clientWidth,bs=hd.querySelectorAll("button,summary,a[class*=menu i],[class*=toggle i],[class*=burger i]");for(var i=0;i<bs.length;i++){var r=bs[i].getBoundingClientRect();if(r.width&&(r.right>W+1||r.left<-1))return true}return hd.scrollWidth>hd.clientWidth+2}
 if(!over())return;var brand=hd.querySelector("a[href]");if(!brand)return;var big=parseFloat(getComputedStyle(brand).fontSize)||0;
 brand.querySelectorAll("*").forEach(function(e){var f=parseFloat(getComputedStyle(e).fontSize);if(f>big)big=f});
 hd.querySelectorAll("small,span,em,div,p").forEach(function(e){if(!over())return;if(e.querySelector("a,button,summary,svg,img")||e.closest("nav,button,summary"))return;var f=parseFloat(getComputedStyle(e).fontSize);if(f<big*0.8&&(e.textContent||"").trim())e.style.display="none"});
-if(over()){brand.style.minWidth="0";brand.style.overflow="hidden";brand.style.textOverflow="ellipsis";brand.style.whiteSpace="nowrap";brand.style.flex="1 1 auto";brand.style.maxWidth="60vw"}}
-if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(fit,200)});else setTimeout(fit,600);addEventListener("orientationchange",function(){setTimeout(fit,200)})})();
+// Then the header's own call-to-action button (the page has others), then the light/dark switch, before the name is ever cut.
+if(over())[].forEach.call(hd.querySelectorAll("a[class*=btn i],a[class*=cta i],a[class*=quote i],a[class*=button i]"),function(a){if(!over()||a.closest("nav,[class*=drawer i],[class*=menu i]")||/menu|burger|toggle/i.test(a.className))return;a.style.display="none"});
+if(over())[].forEach.call(hd.querySelectorAll("[class*=theme i],[id*=theme i],[aria-label*=theme i],[aria-label*=dark i],[aria-label*=light i]"),function(t){if(!over()||t.closest("nav,[class*=drawer i]"))return;t.style.display="none"});
+if(over()){brand.style.minWidth="0";brand.style.overflow="hidden";brand.style.textOverflow="ellipsis";brand.style.whiteSpace="nowrap";brand.style.flex="1 1 auto";brand.style.maxWidth="60vw";brand.style.minWidth="45vw"}}
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){setTimeout(fit,200)});else setTimeout(fit,600);setTimeout(fit,1500);addEventListener("orientationchange",function(){setTimeout(fit,200)})})();
 
 // Phones: a grid of side-by-side columns that doesn't collapse (a column running off the screen, or words
 // crushed into a narrow one) is laid out as a single column instead. Sideways tracks and marquees are left alone.
